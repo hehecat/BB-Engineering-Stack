@@ -1,5 +1,7 @@
 # BB Engineering Stack
 
+[简体中文](README.zh-CN.md) | English
+
 Portable, headless-first Claude Code environment for CTF Web, Bug Bounty, VDP,
 authorized Web/API testing, Android static analysis, and reverse engineering.
 
