@@ -33,6 +33,8 @@ Android dynamic analysis remains device/emulator-dependent.
 - Real Claude Agent evaluation: Scope, HANDOFF, STATUS, next action, ordered
   `ctf-orchestrator` to `ctf-web` routing, artifact placement, schema, and
   process gates pass.
+- Real Claude Bug Bounty evaluation: ordered `bb-orchestrator` to
+  `bb-methodology` routing and all state/artifact gates pass.
 - Isolated Keysmith install/status/uninstall: pass.
 - Playwright MCP: connected, 24 tools.
 - Anastasis MCP: connected, 6 tools.

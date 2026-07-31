@@ -90,6 +90,7 @@ class EvaluationManager:
             orchestrator = self.skill_registry.profile(render.skill_profile)[
                 "orchestrator"
             ]
+            skill_route = self._skill_route(render.l5_profile)
             self._check(
                 checks,
                 f"{name}.orchestrator",
@@ -111,8 +112,8 @@ class EvaluationManager:
             self._check(
                 checks,
                 f"{name}.skill-routing",
-                "Skill" in content,
-                "Prompt includes profile Skill routing",
+                all(f"`{skill_name}`" in content for skill_name in skill_route),
+                f"Prompt includes route {' -> '.join(skill_route)}",
             )
             domain = definition.get("domain_prompt")
             domain_fragment = (
