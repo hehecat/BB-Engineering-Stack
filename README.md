@@ -71,6 +71,11 @@ bb-stack bootstrap --profile reverse
 bb-stack launch --profile ctf-reverse --engagement BINARY-SLUG
 ```
 
+Android static routing uses `android-reverse-engineering` for APK/XAPK/JAR/AAR
+fingerprinting, decompilation, Kotlin/R8 name recovery, API extraction, and call
+flows. `android-pentest` remains the security specialist for components, ADB,
+Frida, storage, TLS, and runtime validation.
+
 Run a real, isolated Claude behavior check after moving machines or changing
 Prompt routing:
 

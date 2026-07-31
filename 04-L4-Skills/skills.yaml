@@ -6,6 +6,13 @@ skills:
   reverse-orchestrator: {role: orchestrator, source: library/reverse-orchestrator, provenance: stack}
   account-takeover: {role: specialist, source: vendor/community/account-takeover, provenance: local-snapshot}
   android-pentest: {role: specialist, source: vendor/community/android-pentest, provenance: local-snapshot}
+  android-reverse-engineering:
+    role: specialist
+    source: vendor/community/android-reverse-engineering
+    provenance: simoneavogadro-snapshot
+    repository: https://github.com/SimoneAvogadro/android-reverse-engineering-skill
+    revision: e8dde9d058badbd5a62265d5d23e81f0ea8f04dd
+    license: Apache-2.0
   api-hacking: {role: specialist, source: vendor/community/api-hacking, provenance: local-snapshot}
   api-security: {role: specialist, source: vendor/community/api-security, provenance: local-snapshot}
   auth-hacking: {role: specialist, source: vendor/community/auth-hacking, provenance: local-snapshot}

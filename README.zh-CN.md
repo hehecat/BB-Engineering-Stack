@@ -178,8 +178,10 @@ bb-stack new apk-challenge ./challenge.apk --workflow ctf --platform standalone-
 bb-stack launch --profile ctf-android --engagement apk-challenge
 ```
 
-Android 静态分析安装 Java、ADB、Apktool 和固定版本 JADX。连接设备、Frida 和
-Objection 属于动态分析可选项。
+Android 静态分析安装 Java、ADB、Apktool、固定版本 JADX，并使用
+`android-reverse-engineering` 完成框架识别、反编译、Kotlin/R8 名称恢复、API
+提取和调用链分析。需要组件安全、设备、Frida、TLS 或运行时验证时切换到
+`android-pentest`；连接设备、Frida 和 Objection 属于动态分析可选项。
 
 二进制逆向：
 
@@ -356,7 +358,7 @@ Engagement 目录和本地凭据由使用者按自己的存储方式复制；por
 
 ## 项目状态
 
-当前版本：`0.5.0`
+当前版本：`0.6.0`
 
 CTF Web、Bug Bounty、Android 静态分析和 Reverse Profile 已通过严格状态检查。
 CTF Web 与 Bug Bounty 路由已通过隔离的真实 Claude 行为评测。

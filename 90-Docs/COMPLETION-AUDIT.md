@@ -10,7 +10,7 @@ Audited: 2026-07-31
 | L1 Global Prompt | append and replacement fragments are platform-neutral and budgeted | pass |
 | L2 Workflow Profiles | 7 runtime profiles, 3 domain prompts, and 5 platform overlays validate and render | pass |
 | L3 Engagement State | CTF/BB/Lab create, validate, lifecycle, checkpoint, migration preview | pass |
-| L4 Skills | 41 versioned Skills; Web, CTF, Android, and Reverse required profiles installed and validated | pass |
+| L4 Skills | 42 versioned Skills; Web, CTF, Android, and Reverse required profiles installed and validated | pass |
 | L5 MCP/CLI | CTF/Web/Android-static/Reverse strict Doctor; Playwright, Anastasis, and OSINT direct handshakes | pass |
 
 Primary delivered operating scope is CTF Web, authorized Bug Bounty/VDP
@@ -35,6 +35,8 @@ Android dynamic analysis remains device/emulator-dependent.
   process gates pass.
 - Real Claude Bug Bounty evaluation: ordered `bb-orchestrator` to
   `bb-methodology` routing and all state/artifact gates pass.
+- Real Claude Android evaluation: ordered `reverse-orchestrator` to
+  `android-reverse-engineering` routing and all state/artifact gates pass.
 - Isolated Keysmith install/status/uninstall: pass.
 - Playwright MCP: connected, 24 tools.
 - Anastasis MCP: connected, 6 tools.
@@ -44,7 +46,7 @@ Android dynamic analysis remains device/emulator-dependent.
 - Android static and Reverse required capability/Skill gaps: 0.
 - Credential-bearing assignments found in authored source review: 0.
 - Source excludes runtime, generated state, Engagements, and machine config.
-- Update inventory covers 41 Skills, 3 MCP packages, and 28 tool/runtime entries.
+- Update inventory covers 42 Skills, 3 MCP packages, and 28 tool/runtime entries.
 - Duplicate YAML keys and duplicate MCP server names fail validation.
 - Candidate updates are isolated, explicitly promoted, backed up, and rollback-capable.
 - A full proxied upstream audit completed for all 71 entries with no channel errors.

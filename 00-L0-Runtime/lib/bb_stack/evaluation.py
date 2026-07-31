@@ -31,7 +31,7 @@ ROUTE_TERMINALS = {
     "minimal": "ctf-orchestrator",
     "ctf-web": "ctf-web",
     "web": "bb-methodology",
-    "android": "android-pentest",
+    "android": "android-reverse-engineering",
     "reverse": "reverse-orchestrator",
 }
 SCENARIOS = {

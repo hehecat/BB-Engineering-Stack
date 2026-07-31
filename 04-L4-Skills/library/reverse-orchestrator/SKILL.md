@@ -9,8 +9,10 @@ description: Orchestrate first-pass reverse engineering of an authorized binary,
 2. Record architecture, format, protections, imports, strings, and entry points.
 3. Choose the smallest static or dynamic experiment that distinguishes the
    leading hypotheses.
-4. For APKs and Android devices, load `android-pentest`. For mixed Web surfaces,
-   route the HTTP component to `ctf-web`.
+4. For APK/XAPK/JAR/AAR static triage, load `android-reverse-engineering`.
+   For device, component, Frida, storage, TLS, or runtime security testing, load
+   `android-pentest`. For mixed Web surfaces, route the HTTP component to
+   `ctf-web`.
 5. Save extraction, patching, instrumentation, and reproduction scripts.
 6. Verify the recovered behavior, secret, flag, or security impact and checkpoint
    exact offsets, symbols, tool versions, and next actions.

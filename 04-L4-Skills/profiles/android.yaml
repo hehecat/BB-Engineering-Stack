@@ -1,5 +1,5 @@
 schema_version: 1
 name: android
 orchestrator: reverse-orchestrator
-required: [reverse-orchestrator, solve-challenge, android-pentest]
+required: [reverse-orchestrator, solve-challenge, android-reverse-engineering, android-pentest]
 optional: [api-hacking, auth-hacking, information-disclosure]

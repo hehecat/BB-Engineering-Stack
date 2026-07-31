@@ -55,8 +55,10 @@ bb-stack new reverse-challenge ./challenge.bin --workflow ctf --platform standal
 bb-stack launch --profile ctf-reverse --engagement reverse-challenge
 ```
 
-The Android profile installs Java, ADB, Apktool, and pinned JADX. ADB device and
-Frida/Objection capabilities remain optional until dynamic analysis is needed.
+The Android profile installs Java, ADB, Apktool, pinned JADX, the
+`android-reverse-engineering` static workflow, and `android-pentest` for security
+validation. ADB device and Frida/Objection capabilities remain optional until
+dynamic analysis is needed.
 The Reverse profile installs pinned Radare2; JADX and Apktool are optional mixed
 artifact providers.
 

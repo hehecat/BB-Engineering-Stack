@@ -170,10 +170,14 @@ class UpdateManager:
                     "category": "skills",
                     "target": name,
                     "checker": "stack-owned" if provenance == "stack" else "manual",
-                    "license": "NOASSERTION",
+                    "license": metadata.get("license", "NOASSERTION"),
                     "provenance": provenance,
                     "local_digest": registry.tree_digest(registry.source(name)),
                 }
+                if metadata.get("repository"):
+                    items[component_name]["repository"] = metadata["repository"]
+                if metadata.get("revision"):
+                    items[component_name]["current"] = metadata["revision"]
 
         if "mcp" in selected:
             package_json = load_json(
@@ -882,6 +886,7 @@ class UpdateManager:
             "checker",
             "license",
             "provenance",
+            "repository",
             "local_digest",
         )
         return {key: component[key] for key in keys if key in component}
