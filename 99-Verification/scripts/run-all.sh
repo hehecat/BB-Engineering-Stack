@@ -10,6 +10,7 @@ export PYTHONPATH="$ROOT/00-L0-Runtime/lib${PYTHONPATH:+:$PYTHONPATH}"
 "$PYTHON" -m py_compile "$ROOT"/00-L0-Runtime/lib/bb_stack/*.py
 "$PYTHON" "$ROOT/99-Verification/scripts/test_contracts.py"
 "$PYTHON" "$ROOT/99-Verification/scripts/test_lifecycle.py"
+"$PYTHON" "$ROOT/99-Verification/scripts/test_mail_otp.py"
 "$PYTHON" "$ROOT/99-Verification/scripts/test_status.py"
 "$ROOT/00-L0-Runtime/bin/bb-stack" validate --json >/dev/null
 

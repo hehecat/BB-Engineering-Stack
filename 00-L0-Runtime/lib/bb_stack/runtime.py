@@ -261,7 +261,14 @@ class RuntimeManager:
         archive.extractall(destination)
 
     def _install_wrappers(self, dry_run: bool) -> list[dict[str, Any]]:
-        wrappers = ["bb-stack", "bb-claude", "bootstrap"]
+        wrappers = [
+            "bb-stack",
+            "bb-claude",
+            "bootstrap",
+            "mail-otp",
+            "mail-otp-config",
+            "mail-otp-set-pass",
+        ]
         results = []
         local_bin = self.paths.home / ".local" / "bin"
         if not dry_run:

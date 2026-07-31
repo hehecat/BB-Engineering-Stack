@@ -83,26 +83,59 @@ not inherit HackerOne request-identification rules.
 
 ## OTP Mail Adapter
 
-OTP retrieval is an optional L5 provider. A compatible installation supplies:
-
-```text
-command: mail-otp
-config:  $HOME/.local/share/pentest-mail/config.env (mode 600)
-probe:   mail-otp --test
-```
-
-The stack does not define provider-specific mailbox credential fields because
-Gmail App Password, IMAP, and OAuth deployments differ. Install the adapter in
-`$HOME/.local/bin`, keep its credentials only in the config path above, and run:
+OTP retrieval is an optional first-party L5 provider installed by bootstrap.
+Configure Gmail with an App Password in a hidden terminal prompt:
 
 ```bash
-chmod 600 "$HOME/.local/share/pentest-mail/config.env"
-bb-stack status --profile web
-bb-stack status --profile web --check-external
+bb-stack mail configure --provider gmail --user operator@gmail.com
+bb-stack mail test
+bb-stack mail wait --timeout 120 --since 10
+bb-stack mail list --limit 5 --since 1440
 ```
 
-Status checks command presence and file mode locally. The external check calls
-only `mail-otp --test` and suppresses its output.
+The standalone compatibility commands remain available:
+
+```text
+mail-otp --test
+mail-otp --wait 120 --since 10
+mail-otp --list 5
+mail-otp-set-pass
+```
+
+`latest` and `wait` print only the extracted code unless `--json` is explicit.
+`list` prints sender, subject, timestamp, UID, and extracted code, never the
+message body. Use `--from`, `--subject`, or `--unseen` to narrow a mailbox.
+
+Generic IMAP and Outlook host presets are also supported:
+
+```bash
+bb-stack mail configure --provider generic --host imap.example.com \
+  --user operator@example.com
+bb-stack mail configure --provider outlook --user operator@outlook.com \
+  --auth oauth2 --token-stdin
+```
+
+Many Microsoft personal and organizational tenants disable password-based IMAP;
+use an access token with the `IMAP.AccessAsUser.All` permission in that case.
+The built-in XOAUTH2 mode consumes a supplied access token but does not own its
+refresh lifecycle.
+
+All provider settings and secrets live only at:
+
+```text
+$HOME/.local/share/pentest-mail/config.env
+```
+
+The file is atomically written with mode `600`; its parser treats values as
+literals and never executes shell substitutions. `mail-otp-set-pass` reads from
+a hidden prompt by default. For headless secret injection, use
+`--password-stdin` or `--token-stdin` and avoid placing secrets in command-line
+arguments.
+
+`bb-stack status --profile web` checks command presence, file mode, required
+fields, and the selected authentication secret locally without displaying
+their values. With `--check-external`, status runs only `mail-otp --test` and
+suppresses its output.
 
 ## File Delivery
 

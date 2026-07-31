@@ -73,6 +73,13 @@ The second command may contact configured mailbox and file-delivery services;
 the first remains local except for optional MCP handshakes when `--probe-mcp`
 is supplied. See `90-Docs/CONFIGURATION.md` for every personal setting.
 
+Optional OTP mailbox setup is available without a separate package:
+
+```bash
+bb-stack mail configure --provider gmail --user operator@gmail.com
+bb-stack mail test
+```
+
 ## Session Lifecycle
 
 ```bash

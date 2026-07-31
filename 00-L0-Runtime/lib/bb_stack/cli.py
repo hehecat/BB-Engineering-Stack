@@ -13,6 +13,7 @@ from .engagement import EngagementManager
 from .errors import StackError
 from .io import load_yaml
 from .keysmith import KeysmithAdapter
+from .mail_otp import add_mail_subcommands, run_mail_command
 from .paths import StackPaths
 from .profiles import ProfileRegistry
 from .runtime import RuntimeManager
@@ -62,6 +63,11 @@ def build_parser() -> argparse.ArgumentParser:
     status.add_argument("--engagement")
     status.add_argument("--strict", action="store_true")
     status.add_argument("--json", action="store_true")
+
+    mail = commands.add_parser(
+        "mail", help="configure and query the optional lab OTP mailbox"
+    )
+    add_mail_subcommands(mail)
 
     bootstrap = commands.add_parser("bootstrap", help="create the local runtime and install a profile")
     bootstrap.add_argument("--profile", default="ctf-web", choices=["minimal", "ctf-web", "web", "android", "reverse"])
@@ -237,6 +243,8 @@ def command(args: argparse.Namespace, paths: StackPaths) -> int:
         else:
             print(manager.render_text(report))
         return 1 if args.strict and not report["ready"] else 0
+    if args.command == "mail":
+        return run_mail_command(args, paths.home)
     if args.command == "bootstrap":
         result = RuntimeManager(paths).bootstrap(
             args.profile,

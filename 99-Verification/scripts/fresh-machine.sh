@@ -28,6 +28,8 @@ source "$BB_CONFIG_HOME/env.sh"
 bb-stack validate --json >/dev/null
 bb-stack doctor --profile minimal --strict --json >/dev/null
 bb-stack status --profile minimal --strict --json >/dev/null
+command -v mail-otp >/dev/null
+bb-stack mail --help >/dev/null
 bb-stack new fresh-lab ./fixture --workflow lab --platform local-lab --json >/dev/null
 bb-claude --profile lab-replacement --engagement fresh-lab --dry-run -- --print smoke >"$SANDBOX/launch.json"
 python3 - "$SANDBOX/launch.json" <<'PY'

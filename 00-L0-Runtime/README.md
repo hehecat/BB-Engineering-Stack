@@ -23,3 +23,7 @@ commands; see `90-Docs/UPDATES.md`.
 roots, runtime, Prompt, current Engagement, Skills, MCP/CLI, proxy environment,
 personal integrations, and optional Keysmith deployment without printing
 configured passwords or tokens.
+
+Bootstrap also installs the first-party `mail-otp` compatibility command. Use
+`bb-stack mail configure` and `bb-stack mail test`; mailbox credentials remain
+outside the repository in a mode-600 local config.

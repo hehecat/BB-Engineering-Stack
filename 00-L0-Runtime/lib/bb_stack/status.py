@@ -17,6 +17,7 @@ from .engagement import EngagementManager
 from .errors import StackError, ValidationError
 from .io import load_yaml
 from .keysmith import KeysmithAdapter
+from .mail_otp import MailOtpError, MailSettings, load_config as load_mail_config
 from .paths import StackPaths
 from .profiles import ProfileRegistry
 from .runtime import RuntimeManager
@@ -634,6 +635,25 @@ class StackStatus:
         )
         mail_config = self.paths.home / ".local" / "share" / "pentest-mail" / "config.env"
         mail_mode = stat.S_IMODE(mail_config.stat().st_mode) if mail_config.is_file() else None
+        mail_config_valid = False
+        mail_config_error = None
+        mail_provider = None
+        mail_auth = None
+        if mail_config.is_file() and mail_mode == 0o600:
+            try:
+                mail_values = load_mail_config(mail_config)
+                mail_settings = MailSettings.from_values(mail_values)
+                mail_config_valid = True
+                configured_provider = mail_values.get("MAIL_OTP_PROVIDER", "")
+                mail_provider = (
+                    configured_provider
+                    if configured_provider in {"gmail", "outlook", "generic"}
+                    else "custom"
+                )
+                mail_auth = mail_settings.auth
+            except MailOtpError as error:
+                mail_config_error = str(error)
+        mail_usable = bool(mail["present"] and mail_config_valid)
         username = config.get("BB_H1_USERNAME", "").strip()
         identity_required = platform == "hackerone"
         if identity_required and not username:
@@ -644,12 +664,28 @@ class StackStatus:
                 "Set BB_H1_USERNAME before using the HackerOne overlay",
                 None,
             )
-        if mail_relevant and not mail["usable"]:
+        if mail_config.is_file() and mail_mode == 0o600 and not mail_config_valid:
+            self._action(
+                actions,
+                "required",
+                "mail.configuration",
+                "Fix mailbox configuration: " + (mail_config_error or "invalid config"),
+                "bb-stack mail configure",
+            )
+        elif mail_relevant and not mail_usable:
+            message = (
+                "Configure the optional lab mailbox with bb-stack mail configure"
+                if mail["present"]
+                else (
+                    "Run bootstrap to install the mail-otp adapter, then configure "
+                    "the lab mailbox"
+                )
+            )
             self._action(
                 actions,
                 "optional",
                 "mail.otp",
-                "Install a mail-otp adapter and configure the optional lab mailbox",
+                message,
                 None,
             )
         if mail_mode is not None and mail_mode != 0o600:
@@ -681,11 +717,14 @@ class StackStatus:
             )
         external = {"mail": "not-run", "delivery": "not-run"}
         if check_external:
-            external["mail"] = (
-                "invalid-permissions"
-                if mail_mode is not None and mail_mode != 0o600
-                else self._check_mail(mail)
-            )
+            if mail_mode is not None and mail_mode != 0o600:
+                external["mail"] = "invalid-permissions"
+            elif mail_config.is_file() and not mail_config_valid:
+                external["mail"] = "invalid-config"
+            else:
+                external["mail"] = self._check_mail(
+                    {**mail, "usable": mail_usable}
+                )
             external["delivery"] = self._check_delivery(
                 config.get("BB_FILECODEBOX_URL", ""), config
             )
@@ -693,8 +732,12 @@ class StackStatus:
             (not identity_required or username)
             and delivery_url_valid
         )
+        mail_ready = bool(
+            mail_mode in {None, 0o600}
+            and (not mail_config.is_file() or mail_config_valid)
+        )
         return {
-            "ready": required_ready and (mail_mode in {None, 0o600}),
+            "ready": required_ready and mail_ready,
             "platform": platform,
             "hackerone": {
                 "required": identity_required,
@@ -706,7 +749,11 @@ class StackStatus:
                 "config": str(mail_config),
                 "configured": mail_config.is_file(),
                 "mode": f"{mail_mode:03o}" if mail_mode is not None else None,
-                "usable": mail["usable"] and mail_mode == 0o600,
+                "configuration_valid": mail_config_valid,
+                "provider": mail_provider,
+                "auth": mail_auth,
+                "error": mail_config_error,
+                "usable": mail_usable and mail_mode == 0o600,
             },
             "file_delivery": {
                 "configured": delivery["configuration"] == "ready",
@@ -862,7 +909,7 @@ class StackStatus:
                 "Personal Configuration",
                 f"  [{'OK' if proxy['ready'] else 'MISS'}] proxy mode={proxy['configured_mode']} applied={proxy['configuration_applied']} http_listener={proxy['http_listener']}",
                 f"  [{'OK' if personal['hackerone']['configured'] else 'OPT'}] HackerOne username={personal['hackerone']['username'] or 'unset'} required={personal['hackerone']['required']}",
-                f"  [{'OK' if personal['mail_otp']['usable'] else 'OPT'}] mail OTP configured={personal['mail_otp']['configured']} command={bool(personal['mail_otp']['command'])}",
+                f"  [{'OK' if personal['mail_otp']['usable'] else 'OPT'}] mail OTP configured={personal['mail_otp']['configured']} valid={personal['mail_otp']['configuration_valid']} command={bool(personal['mail_otp']['command'])}",
                 f"  [{'OK' if personal['file_delivery']['usable'] else 'OPT'}] file delivery={personal['file_delivery']['endpoint'] or 'unset'}",
                 f"  [{'OK' if report['keysmith']['deployed'] else 'OPT'}] Keysmith cached={report['keysmith']['source_cached']} deployed={report['keysmith']['deployed']} profile={report['keysmith']['profile'] or 'none'}",
             ]

@@ -1,0 +1,17 @@
+#!/usr/bin/env sh
+set -eu
+SCRIPT=$0
+while [ -L "$SCRIPT" ]; do
+  LINK=$(readlink "$SCRIPT")
+  case "$LINK" in
+    /*) SCRIPT=$LINK ;;
+    *) SCRIPT=$(dirname -- "$SCRIPT")/$LINK ;;
+  esac
+done
+ROOT=${BB_STACK_ROOT:-"$(CDPATH= cd -- "$(dirname -- "$SCRIPT")/../.." && pwd -P)"}
+PYTHON="$ROOT/.runtime/venv/bin/python"
+if [ ! -x "$PYTHON" ]; then
+  PYTHON=${PYTHON3:-python3}
+  export PYTHONPATH="$ROOT/00-L0-Runtime/lib${PYTHONPATH:+:$PYTHONPATH}"
+fi
+exec "$PYTHON" -m bb_stack.mail_otp "$@"

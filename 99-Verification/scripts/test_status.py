@@ -195,6 +195,32 @@ class StatusTests(unittest.TestCase):
         self.assertFalse(report["ready"])
         self.assertIn("mail.permissions", {item["id"] for item in actions})
 
+    def test_partial_mail_config_is_not_reported_usable(self) -> None:
+        mail_config = (
+            self.paths.home / ".local" / "share" / "pentest-mail" / "config.env"
+        )
+        mail_config.parent.mkdir(parents=True)
+        mail_config.write_text(
+            'MAIL_OTP_HOST="imap.example.test"\n', encoding="utf-8"
+        )
+        mail_config.chmod(0o600)
+        actions: list[dict[str, str]] = []
+        with patch.object(self.manager, "_check_mail") as check_mail:
+            report = self.manager._personal(
+                "web",
+                {},
+                None,
+                CapabilityRegistry(self.paths),
+                check_external=True,
+                actions=actions,
+            )
+        check_mail.assert_not_called()
+        self.assertFalse(report["mail_otp"]["configuration_valid"])
+        self.assertFalse(report["mail_otp"]["usable"])
+        self.assertEqual(report["external_checks"]["mail"], "invalid-config")
+        self.assertFalse(report["ready"])
+        self.assertIn("mail.configuration", {item["id"] for item in actions})
+
     def test_repair_commands_follow_selected_profile(self) -> None:
         actions: list[dict[str, str]] = []
         self.paths.work_root.rmdir()
