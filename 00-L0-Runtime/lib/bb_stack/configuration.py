@@ -19,6 +19,7 @@ MACHINE_CONFIG_DEFAULTS = {
     "BB_SOCKS_PROXY": "socks5://127.0.0.1:7891",
     "BB_H1_USERNAME": "",
     "BB_FILECODEBOX_URL": "",
+    "BB_AGENT_LANGUAGE": "zh-CN",
     "BB_EXTRA_PATH": "",
 }
 MACHINE_CONFIG_KEYS = tuple(MACHINE_CONFIG_DEFAULTS)
@@ -141,6 +142,7 @@ class ConfigurationManager:
                 "BB_FILECODEBOX_URL": url_origin(
                     values["BB_FILECODEBOX_URL"], {"http", "https"}
                 ),
+                "BB_AGENT_LANGUAGE": values["BB_AGENT_LANGUAGE"],
                 "BB_EXTRA_PATH": values["BB_EXTRA_PATH"],
             },
             "unknown_keys": sorted(set(self.read()) - set(MACHINE_CONFIG_KEYS)),
@@ -179,6 +181,8 @@ class ConfigurationManager:
             raise ValidationError("BB_H1_USERNAME must not contain whitespace or control characters")
         if len(username) > 100:
             raise ValidationError("BB_H1_USERNAME is too long")
+        if values.get("BB_AGENT_LANGUAGE") not in {"zh-CN", "en"}:
+            raise ValidationError("BB_AGENT_LANGUAGE must be zh-CN or en")
         extra_path = values.get("BB_EXTRA_PATH", "")
         for item in extra_path.split(os.pathsep):
             if item and not Path(item).expanduser().is_absolute():
@@ -214,5 +218,8 @@ class ConfigurationManager:
             "BB_SOCKS_PROXY": ask("SOCKS proxy origin", "BB_SOCKS_PROXY"),
             "BB_H1_USERNAME": ask("HackerOne username", "BB_H1_USERNAME"),
             "BB_FILECODEBOX_URL": ask("FileCodeBox origin", "BB_FILECODEBOX_URL"),
+            "BB_AGENT_LANGUAGE": ask(
+                "Agent language (zh-CN/en)", "BB_AGENT_LANGUAGE"
+            ),
             "BB_EXTRA_PATH": ask("Extra PATH entries", "BB_EXTRA_PATH"),
         }

@@ -39,6 +39,7 @@ class PortableTests(unittest.TestCase):
                 "BB_SOCKS_PROXY": "socks5://127.0.0.1:7891",
                 "BB_H1_USERNAME": "portable-user",
                 "BB_FILECODEBOX_URL": "https://files.example.test",
+                "BB_AGENT_LANGUAGE": "en",
                 "BB_EXTRA_PATH": str(self.source_home / "private-bin"),
             }
         )
@@ -71,6 +72,7 @@ class PortableTests(unittest.TestCase):
         self.assertNotIn(str(self.source_home), raw)
         document = json.loads(raw)
         self.assertNotIn("BB_EXTRA_PATH", document["machine_config"])
+        self.assertEqual(document["machine_config"]["BB_AGENT_LANGUAGE"], "en")
         inspected = manager.inspect(self.bundle)
         self.assertTrue(inspected["valid"])
         self.assertEqual(inspected["engagements"][0]["slug"], "portable-ctf")
@@ -107,6 +109,7 @@ class PortableTests(unittest.TestCase):
         self.assertIn("BB_PROXY_MODE", forced["changed"])
         self.assertEqual(target_config.effective()["BB_PROXY_MODE"], "mihomo")
         self.assertEqual(target_config.effective()["BB_H1_USERNAME"], "portable-user")
+        self.assertEqual(target_config.effective()["BB_AGENT_LANGUAGE"], "en")
         self.assertEqual(target.work_root, target_home / "destination-work")
 
     def test_rejects_unknown_or_mutated_document(self) -> None:

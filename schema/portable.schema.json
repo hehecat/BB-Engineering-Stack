@@ -45,14 +45,15 @@
       "additionalProperties": false,
       "required": [
         "BB_PROXY_MODE", "BB_HTTP_PROXY", "BB_SOCKS_PROXY",
-        "BB_H1_USERNAME", "BB_FILECODEBOX_URL"
+        "BB_H1_USERNAME", "BB_FILECODEBOX_URL", "BB_AGENT_LANGUAGE"
       ],
       "properties": {
         "BB_PROXY_MODE": {"enum": ["direct", "mihomo"]},
         "BB_HTTP_PROXY": {"type": "string", "pattern": "^https?://[^/?#@]+$"},
         "BB_SOCKS_PROXY": {"type": "string", "pattern": "^socks5h?://[^/?#@]+$"},
         "BB_H1_USERNAME": {"type": "string", "maxLength": 100, "pattern": "^\\S*$"},
-        "BB_FILECODEBOX_URL": {"type": "string", "pattern": "^(|https?://[^/?#@]+)$"}
+        "BB_FILECODEBOX_URL": {"type": "string", "pattern": "^(|https?://[^/?#@]+)$"},
+        "BB_AGENT_LANGUAGE": {"enum": ["zh-CN", "en"]}
       }
     },
     "profiles": {

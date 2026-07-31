@@ -30,6 +30,7 @@ MANAGED_ENV_KEYS = {
     "BB_SOCKS_PROXY",
     "BB_H1_USERNAME",
     "BB_FILECODEBOX_URL",
+    "BB_AGENT_LANGUAGE",
     "PATH",
     "HTTP_PROXY",
     "HTTPS_PROXY",
@@ -376,6 +377,15 @@ class WorkspaceManager:
             + "\n"
         )
         machine = ConfigurationManager(self.paths).effective()
+        language_path = (
+            self.paths.root
+            / "01-L1-Global-Prompt"
+            / "languages"
+            / f"{machine['BB_AGENT_LANGUAGE']}.md"
+        )
+        if not language_path.is_file():
+            raise ValidationError(f"missing Agent language Prompt: {language_path}")
+        router += "\n" + language_path.read_text(encoding="utf-8").strip() + "\n"
         settings_env = {
             "BB_STACK_ROOT": str(self.paths.root),
             "BB_WORK_ROOT": str(self.paths.work_root),
@@ -385,6 +395,7 @@ class WorkspaceManager:
             "BB_SOCKS_PROXY": machine["BB_SOCKS_PROXY"],
             "BB_H1_USERNAME": machine["BB_H1_USERNAME"],
             "BB_FILECODEBOX_URL": machine["BB_FILECODEBOX_URL"],
+            "BB_AGENT_LANGUAGE": machine["BB_AGENT_LANGUAGE"],
             "PATH": self.paths.runtime_path(
                 machine.get("BB_EXTRA_PATH", "")
             ),

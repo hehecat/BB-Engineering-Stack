@@ -54,6 +54,10 @@ class ContractTests(unittest.TestCase):
             expected = "system.md" if result.prompt_mode == "replacement" else "append.md"
             self.assertEqual(Path(result.output_file).name, expected)
             self.assertEqual(len(result.source_fragments), len(set(result.source_fragments)))
+            self.assertIn(
+                "01-L1-Global-Prompt/languages/zh-CN.md",
+                result.source_fragments,
+            )
 
     def test_layer_directories_exist(self) -> None:
         for name in (

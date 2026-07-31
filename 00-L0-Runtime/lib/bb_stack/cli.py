@@ -56,6 +56,7 @@ def build_parser() -> argparse.ArgumentParser:
     configure.add_argument("--socks-proxy")
     configure.add_argument("--h1-username")
     configure.add_argument("--filecodebox-url")
+    configure.add_argument("--agent-language", choices=["zh-CN", "en"])
     configure.add_argument("--extra-path")
     configure.add_argument("--show", action="store_true")
     configure.add_argument("--json", action="store_true")
@@ -123,6 +124,7 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         help="workspace root (recommended default: $HOME/BB-Workspaces)",
     )
+    bootstrap.add_argument("--agent-language", choices=["zh-CN", "en"])
     bootstrap.add_argument("--with-optional", action="store_true")
     bootstrap.add_argument("--skip-tools", action="store_true")
     bootstrap.add_argument("--skip-node", action="store_true")
@@ -136,6 +138,7 @@ def build_parser() -> argparse.ArgumentParser:
     workspace_sub = workspace.add_subparsers(dest="workspace_command", required=True)
     workspace_init = workspace_sub.add_parser("init")
     workspace_init.add_argument("--work-root", type=Path)
+    workspace_init.add_argument("--agent-language", choices=["zh-CN", "en"])
     workspace_init.add_argument("--force", action="store_true")
     workspace_init.add_argument("--dry-run", action="store_true")
     workspace_init.add_argument("--json", action="store_true")
@@ -314,6 +317,7 @@ def command(args: argparse.Namespace, paths: StackPaths) -> int:
             "BB_SOCKS_PROXY": args.socks_proxy,
             "BB_H1_USERNAME": args.h1_username,
             "BB_FILECODEBOX_URL": args.filecodebox_url,
+            "BB_AGENT_LANGUAGE": args.agent_language,
             "BB_EXTRA_PATH": args.extra_path,
         }
         updates = {key: value for key, value in option_map.items() if value is not None}
@@ -374,6 +378,10 @@ def command(args: argparse.Namespace, paths: StackPaths) -> int:
     if args.command == "mail":
         return run_mail_command(args, paths.home)
     if args.command == "bootstrap":
+        if args.agent_language:
+            ConfigurationManager(paths).configure(
+                {"BB_AGENT_LANGUAGE": args.agent_language}
+            )
         result = RuntimeManager(paths).bootstrap(
             args.profile,
             include_optional=args.with_optional,
@@ -387,6 +395,10 @@ def command(args: argparse.Namespace, paths: StackPaths) -> int:
     if args.command == "workspace":
         manager = WorkspaceManager(paths)
         if args.workspace_command == "init":
+            if args.agent_language:
+                ConfigurationManager(paths).configure(
+                    {"BB_AGENT_LANGUAGE": args.agent_language}
+                )
             result = manager.initialize(force=args.force, dry_run=args.dry_run)
             if not args.dry_run:
                 result["env_file"] = str(RuntimeManager(paths).write_environment())

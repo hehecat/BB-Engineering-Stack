@@ -22,6 +22,7 @@ PORTABLE_CONFIG_KEYS = (
     "BB_SOCKS_PROXY",
     "BB_H1_USERNAME",
     "BB_FILECODEBOX_URL",
+    "BB_AGENT_LANGUAGE",
 )
 
 
@@ -129,6 +130,7 @@ class PortableManager:
             "BB_FILECODEBOX_URL": url_origin(
                 config["BB_FILECODEBOX_URL"], {"http", "https"}
             ),
+            "BB_AGENT_LANGUAGE": config["BB_AGENT_LANGUAGE"],
         }
         if any(value is None for value in machine_config.values()):
             raise ValidationError("machine configuration contains an invalid portable URL")

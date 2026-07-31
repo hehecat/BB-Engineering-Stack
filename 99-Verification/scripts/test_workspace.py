@@ -51,9 +51,11 @@ class WorkspaceTests(unittest.TestCase):
             (self.paths.work_root / ".claude" / "settings.json").read_text()
         )
         self.assertEqual(settings["env"]["BB_WORK_ROOT"], str(self.paths.work_root))
+        self.assertEqual(settings["env"]["BB_AGENT_LANGUAGE"], "zh-CN")
         router = (self.paths.work_root / "CLAUDE.md").read_text()
         self.assertIn("bb-stack workspace route", router)
         self.assertIn("android", router)
+        self.assertIn("使用简体中文编写面向用户的回复", router)
         self.assertTrue(self.manager.status()["ready"])
 
     def test_claude_local_permissions_survive_workspace_refresh(self) -> None:

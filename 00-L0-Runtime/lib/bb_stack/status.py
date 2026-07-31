@@ -822,6 +822,7 @@ class StackStatus:
         return {
             "ready": required_ready and mail_ready,
             "platform": platform,
+            "agent_language": config.get("BB_AGENT_LANGUAGE", "zh-CN"),
             "hackerone": {
                 "required": identity_required,
                 "configured": bool(username),
@@ -1003,6 +1004,7 @@ class StackStatus:
                 "",
                 "Personal Configuration",
                 f"  [{'OK' if proxy['ready'] else 'MISS'}] proxy mode={proxy['configured_mode']} applied={proxy['configuration_applied']} http_listener={proxy['http_listener']}",
+                f"  [OK] Agent language={personal['agent_language']}",
                 f"  [{'OK' if personal['hackerone']['configured'] else 'OPT'}] HackerOne username={personal['hackerone']['username'] or 'unset'} required={personal['hackerone']['required']}",
                 f"  [{'OK' if personal['mail_otp']['usable'] else 'OPT'}] mail OTP configured={personal['mail_otp']['configured']} valid={personal['mail_otp']['configuration_valid']} command={bool(personal['mail_otp']['command'])}",
                 f"  [{'OK' if personal['file_delivery']['usable'] else 'OPT'}] file delivery={personal['file_delivery']['endpoint'] or 'unset'}",

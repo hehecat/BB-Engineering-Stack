@@ -41,12 +41,17 @@ class ConfigurationTests(unittest.TestCase):
             {
                 "BB_PROXY_MODE": "mihomo",
                 "BB_H1_USERNAME": "operator-name",
+                "BB_AGENT_LANGUAGE": "en",
             }
         )
-        self.assertEqual(result["changed"], ["BB_H1_USERNAME", "BB_PROXY_MODE"])
+        self.assertEqual(
+            result["changed"],
+            ["BB_AGENT_LANGUAGE", "BB_H1_USERNAME", "BB_PROXY_MODE"],
+        )
         values = self.manager.read()
         self.assertEqual(values["CUSTOM_EXTENSION"], "value")
         self.assertEqual(values["BB_PROXY_MODE"], "mihomo")
+        self.assertEqual(values["BB_AGENT_LANGUAGE"], "en")
         self.assertEqual(self.manager.path.stat().st_mode & 0o777, 0o600)
 
     def test_validation_rejects_credentials_and_relative_extra_path(self) -> None:
@@ -56,6 +61,8 @@ class ConfigurationTests(unittest.TestCase):
             )
         with self.assertRaises(ValidationError):
             self.manager.configure({"BB_EXTRA_PATH": "relative/bin"})
+        with self.assertRaises(ValidationError):
+            self.manager.configure({"BB_AGENT_LANGUAGE": "fr"})
 
     def test_generated_environment_does_not_execute_config_syntax(self) -> None:
         marker = self.home / "must-not-exist"

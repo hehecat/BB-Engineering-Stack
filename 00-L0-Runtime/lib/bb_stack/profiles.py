@@ -6,6 +6,7 @@ from pathlib import Path
 import re
 from typing import Any
 
+from .configuration import ConfigurationManager
 from .errors import ValidationError
 from .io import dump_json, load_yaml, read_fragments
 from .paths import StackPaths
@@ -165,6 +166,10 @@ class ProfileRegistry:
         fragments.extend(
             [
                 self.paths.root / "01-L1-Global-Prompt" / "personal-security.md",
+                self.paths.root
+                / "01-L1-Global-Prompt"
+                / "languages"
+                / f"{ConfigurationManager(self.paths).effective()['BB_AGENT_LANGUAGE']}.md",
                 self.workflow_dir / WORKFLOW_FILES[profile["workflow"]],
             ]
         )

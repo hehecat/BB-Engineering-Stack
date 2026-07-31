@@ -24,6 +24,7 @@ bb-stack configure --proxy-mode mihomo \
   --http-proxy http://127.0.0.1:7890 \
   --socks-proxy socks5://127.0.0.1:7891
 bb-stack configure --h1-username your-hackerone-username
+bb-stack configure --agent-language zh-CN
 bb-stack configure --show
 ```
 
@@ -85,6 +86,7 @@ preserved but are not loaded or included in portable exports.
 | `BB_SOCKS_PROXY` | mihomo SOCKS endpoint | `socks5://127.0.0.1:7891` |
 | `BB_H1_USERNAME` | HackerOne tester identity | empty |
 | `BB_FILECODEBOX_URL` | FileCodeBox base origin | empty |
+| `BB_AGENT_LANGUAGE` | Agent visible output language: `zh-CN` or `en` | `zh-CN` |
 | `BB_EXTRA_PATH` | uncommon global binary paths, colon-separated | empty |
 
 After each configuration command, reload the generated environment and run

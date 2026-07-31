@@ -95,6 +95,25 @@ bb-stack status --profile ctf-web --strict --probe-mcp
 bb-stack eval contracts
 ```
 
+默认 Agent 使用简体中文回复，并用中文编写进度、可见推理摘要、Plan/Todo、
+内部状态和会话交接。命令、代码、路径、协议字段、日志和原始错误保持原文。
+隐藏的内部推理不会显示；需要说明判断时，Agent 输出简洁、可核验的中文理由。
+
+可在 bootstrap 时选择语言，或之后随时切换：
+
+```bash
+./00-L0-Runtime/bin/bootstrap --profile ctf-web \
+  --work-root "$HOME/BB-Workspaces" --agent-language zh-CN
+
+bb-stack configure --agent-language en
+source "$BB_CONFIG_HOME/env.sh"
+bb-stack workspace init
+```
+
+切换后重新运行 `bb-stack workspace init` 会刷新工作根 `CLAUDE.md`；已有
+Engagement 数据和 `.claude/settings.local.json` 中的 Claude 权限不会被覆盖。
+HackerOne 报告仍由平台 Overlay 默认使用英文，补天报告默认使用中文。
+
 也可以选择其他专用目录：
 
 ```bash
@@ -404,7 +423,7 @@ Engagement 目录和本地凭据由使用者按自己的存储方式复制；por
 
 ## 项目状态
 
-当前版本：`0.7.1`
+当前版本：`0.8.0`
 
 CTF Web、Bug Bounty、Android 静态分析和 Reverse Profile 已通过严格状态检查。
 CTF Web、Bug Bounty、Android Profile 及普通 `claude` 的 Android 自动路由均已
