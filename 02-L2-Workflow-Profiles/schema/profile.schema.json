@@ -23,6 +23,10 @@
     "default_mode": {"enum": ["interactive", "continuous"]},
     "l5_profile": {"type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"},
     "skill_profile": {"type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"},
+    "domain_prompt": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+    },
     "max_custom_tokens": {"type": "integer", "minimum": 200, "maximum": 5000}
   }
 }

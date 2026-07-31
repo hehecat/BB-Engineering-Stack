@@ -33,6 +33,7 @@ class RenderResult:
     workflow: str
     platform: str
     mode: str
+    domain_prompt: str | None
     l5_profile: str
     skill_profile: str
     source_fragments: list[str]
@@ -70,6 +71,13 @@ class ProfileRegistry:
         workflow = profile["workflow"]
         if workflow not in WORKFLOW_FILES:
             raise ValidationError(f"unsupported workflow in {path}: {workflow}")
+        if profile.get("domain_prompt"):
+            self._require_named_file(
+                self.workflow_dir / "domains",
+                profile["domain_prompt"],
+                ".md",
+                "domain Prompt",
+            )
         self._require_named_file(self.platform_dir, profile["platform"], ".md", "platform")
         self._require_named_file(
             self.paths.root / "05-L5-MCP-CLI" / "profiles",
@@ -158,9 +166,13 @@ class ProfileRegistry:
             [
                 self.paths.root / "01-L1-Global-Prompt" / "personal-security.md",
                 self.workflow_dir / WORKFLOW_FILES[profile["workflow"]],
-                platform_path,
             ]
         )
+        if profile.get("domain_prompt"):
+            fragments.append(
+                self.workflow_dir / "domains" / f"{profile['domain_prompt']}.md"
+            )
+        fragments.append(platform_path)
         resolved = [path.resolve() for path in fragments]
         if len(resolved) != len(set(resolved)):
             raise ValidationError(f"duplicate prompt fragment in profile {name}")
@@ -193,6 +205,7 @@ class ProfileRegistry:
             workflow=str(profile["workflow"]),
             platform=platform,
             mode=str(profile["default_mode"]),
+            domain_prompt=profile.get("domain_prompt"),
             l5_profile=str(profile["l5_profile"]),
             skill_profile=str(profile["skill_profile"]),
             source_fragments=[str(path.relative_to(self.paths.root)) for path in fragments],

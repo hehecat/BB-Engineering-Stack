@@ -6,16 +6,16 @@ Audited: 2026-07-31
 
 | Layer | Acceptance evidence | Result |
 | --- | --- | --- |
-| L0 Runtime | clean bootstrap, safe machine configurator, portable export/import, deterministic PATH, unified status, first-party mail OTP, pinned Python/Node, tool profiles, launchers, Keysmith adapter, staged updates | pass |
+| L0 Runtime | clean bootstrap, safe machine configurator, portable export/import, deterministic PATH, unified status, Agent evaluation, first-party mail OTP, pinned Python/Node/JADX/Radare2, tool profiles, launchers, Keysmith adapter, staged updates | pass |
 | L1 Global Prompt | append and replacement fragments are platform-neutral and budgeted | pass |
-| L2 Workflow Profiles | 5 runtime profiles and 5 platform overlays validate and render | pass |
+| L2 Workflow Profiles | 7 runtime profiles, 3 domain prompts, and 5 platform overlays validate and render | pass |
 | L3 Engagement State | CTF/BB/Lab create, validate, lifecycle, checkpoint, migration preview | pass |
-| L4 Skills | 41 versioned Skills; Web and CTF required profiles installed and validated | pass |
-| L5 MCP/CLI | CTF/Web strict Doctor; Playwright, Anastasis, and OSINT direct handshakes | pass |
+| L4 Skills | 41 versioned Skills; Web, CTF, Android, and Reverse required profiles installed and validated | pass |
+| L5 MCP/CLI | CTF/Web/Android-static/Reverse strict Doctor; Playwright, Anastasis, and OSINT direct handshakes | pass |
 
-Primary delivered operating scope is CTF Web and authorized Bug Bounty/VDP
-Web/API work. Android and reverse profiles define extension contracts and
-install routes; device-specific provisioning remains machine-dependent.
+Primary delivered operating scope is CTF Web, authorized Bug Bounty/VDP
+Web/API work, headless Android static analysis, and native reverse engineering.
+Android dynamic analysis remains device/emulator-dependent.
 
 ## Verified Results
 
@@ -29,15 +29,20 @@ install routes; device-specific provisioning remains machine-dependent.
 - Fresh HOME/non-default clone bootstrap: pass.
 - Fresh HOME strict unified status: pass.
 - Real Claude Code Engagement smoke: pass.
+- Static Agent evaluation: 7 profiles / 42 routing and behavior contracts pass.
+- Real Claude Agent evaluation: Scope, HANDOFF, STATUS, next action, ordered
+  `ctf-orchestrator` to `ctf-web` routing, artifact placement, schema, and
+  process gates pass.
 - Isolated Keysmith install/status/uninstall: pass.
 - Playwright MCP: connected, 24 tools.
 - Anastasis MCP: connected, 6 tools.
 - OSINT MCP: connected, 37 tools.
 - CTF Web required capability/Skill gaps: 0.
 - Web required capability/Skill gaps: 0.
-- Verified secrets in source/runtime scan: 0.
+- Android static and Reverse required capability/Skill gaps: 0.
+- Credential-bearing assignments found in authored source review: 0.
 - Source excludes runtime, generated state, Engagements, and machine config.
-- Update inventory covers 41 Skills, 3 MCP packages, and 27 tool/runtime entries.
+- Update inventory covers 41 Skills, 3 MCP packages, and 28 tool/runtime entries.
 - Duplicate YAML keys and duplicate MCP server names fail validation.
 - Candidate updates are isolated, explicitly promoted, backed up, and rollback-capable.
 - A full proxied upstream audit completed for all 71 entries with no channel errors.

@@ -14,11 +14,17 @@ export PYTHONPATH="$ROOT/00-L0-Runtime/lib${PYTHONPATH:+:$PYTHONPATH}"
 "$PYTHON" "$ROOT/99-Verification/scripts/test_status.py"
 "$PYTHON" "$ROOT/99-Verification/scripts/test_configuration.py"
 "$PYTHON" "$ROOT/99-Verification/scripts/test_portable.py"
+"$PYTHON" "$ROOT/99-Verification/scripts/test_evaluation.py"
+"$PYTHON" "$ROOT/99-Verification/scripts/test_runtime_installers.py"
 "$ROOT/00-L0-Runtime/bin/bb-stack" validate --json >/dev/null
 
 if [[ -x "$ROOT/.runtime/venv/bin/python" && -d "$ROOT/.runtime/node_modules" ]]; then
   "$ROOT/00-L0-Runtime/bin/bb-stack" doctor --profile ctf-web --strict --probe-mcp --json >/dev/null
   "$ROOT/00-L0-Runtime/bin/bb-stack" doctor --profile web --strict --json >/dev/null
+  if [[ -x "$ROOT/.runtime/bin/jadx" ]] && command -v r2 >/dev/null 2>&1; then
+    "$ROOT/00-L0-Runtime/bin/bb-stack" doctor --profile android --strict --json >/dev/null
+    "$ROOT/00-L0-Runtime/bin/bb-stack" doctor --profile reverse --strict --json >/dev/null
+  fi
 fi
 
 printf '%s\n' 'BB_STACK_VERIFICATION_OK'

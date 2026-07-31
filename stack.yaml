@@ -22,6 +22,12 @@ defaults:
     bug-bounty: bb-interactive
     ctf: ctf-quick
     lab: lab-replacement
+  capability_profiles:
+    minimal: lab-replacement
+    ctf-web: ctf-quick
+    web: bb-interactive
+    android: ctf-android
+    reverse: ctf-reverse
   work_root: "${HOME}/BB-Workspaces"
   config_home: "${HOME}/.config/bb-stack"
   claude_config_dir: "${HOME}/.claude"

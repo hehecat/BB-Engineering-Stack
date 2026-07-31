@@ -26,11 +26,18 @@
         "type": "object",
         "required": ["kind", "checks"],
         "properties": {
-          "kind": {"enum": ["apt", "go", "pipx", "git-data", "archive-binary", "service"]},
+          "kind": {"enum": ["apt", "go", "pipx", "git-data", "archive-binary", "archive-tree", "deb", "service"]},
           "checks": {"type": "array", "items": {"type": "string"}},
           "packages": {"type": "array", "items": {"type": "string"}},
           "package": {"type": "string"},
           "binary": {"type": "string"},
+          "format": {"enum": ["zip", "tar"]},
+          "executables": {
+            "type": "object",
+            "minProperties": 1,
+            "additionalProperties": {"type": "string"}
+          },
+          "top_directory": {"type": "string"},
           "files": {
             "type": "object",
             "additionalProperties": {

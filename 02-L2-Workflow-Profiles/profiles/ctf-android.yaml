@@ -1,0 +1,10 @@
+schema_version: 1
+name: ctf-android
+prompt_mode: append
+workflow: ctf
+platform: standalone-ctf
+default_mode: interactive
+domain_prompt: android
+l5_profile: android
+skill_profile: android
+max_custom_tokens: 1800

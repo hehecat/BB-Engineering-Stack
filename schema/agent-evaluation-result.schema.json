@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:bb-engineering-stack:schema:agent-evaluation-result:v1",
+  "title": "BB Engineering Stack Agent Evaluation Result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "scope_marker",
+    "handoff_marker",
+    "status_marker",
+    "next_action",
+    "selected_skill_route",
+    "artifact_policy"
+  ],
+  "properties": {
+    "scope_marker": {"type": "string", "minLength": 1},
+    "handoff_marker": {"type": "string", "minLength": 1},
+    "status_marker": {"type": "string", "minLength": 1},
+    "next_action": {"type": "string", "minLength": 1},
+    "selected_skill_route": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 2,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+      }
+    },
+    "artifact_policy": {"type": "string", "minLength": 1}
+  }
+}

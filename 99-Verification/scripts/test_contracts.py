@@ -40,7 +40,7 @@ class ContractTests(unittest.TestCase):
         self.temporary.cleanup()
 
     def test_all_registries_validate(self) -> None:
-        self.assertEqual(len(ProfileRegistry(self.paths).validate_all()), 5)
+        self.assertEqual(len(ProfileRegistry(self.paths).validate_all()), 7)
         self.assertGreaterEqual(len(SkillRegistry(self.paths).validate_all()), 40)
         self.assertEqual(len(CapabilityRegistry(self.paths).validate_all()), 5)
         runtime = RuntimeManager(self.paths).validate_config()

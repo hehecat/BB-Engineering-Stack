@@ -53,6 +53,20 @@ file delivery, Codex Skills, or Keysmith deployment remains visible without
 blocking an unrelated CTF workflow. `--check-external` is opt-in because it
 contacts configured external services.
 
+## Agent Evaluation
+
+```bash
+bb-stack eval contracts
+bb-stack eval agent --profile ctf-quick
+bb-stack status --profile ctf-web --require-agent-eval --strict
+```
+
+The contract suite makes no model call. The Agent suite creates a synthetic
+Engagement under `$BB_CONFIG_HOME/evaluations`, allows only local read/write,
+and stores a scored report without target data. Status marks a report stale
+when the stack version, rendered Prompt digest, or evaluation contract changes. Without
+`--require-agent-eval`, missing or stale evaluation is visible but optional.
+
 ## Machine Configuration And Handoff
 
 ```bash

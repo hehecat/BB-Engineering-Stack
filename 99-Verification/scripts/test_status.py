@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -13,7 +14,9 @@ ROOT = Path(__file__).resolve().parents[2]
 os.environ["BB_STACK_ROOT"] = str(ROOT)
 
 from bb_stack.capabilities import CapabilityRegistry
+from bb_stack import __version__
 from bb_stack.engagement import EngagementManager
+from bb_stack.evaluation import EvaluationManager
 from bb_stack.paths import StackPaths
 from bb_stack.status import StackStatus, load_machine_config
 
@@ -91,6 +94,7 @@ class StatusTests(unittest.TestCase):
             "proxy",
             "runtime",
             "prompt",
+            "evaluation",
             "engagement",
             "skills",
             "capabilities",
@@ -261,6 +265,73 @@ class StatusTests(unittest.TestCase):
             "engagement.profile",
             {item["id"] for item in mismatch["actions"]},
         )
+
+    def test_ctf_domain_profiles_are_compatible_and_mode_selects_prompt(self) -> None:
+        self.write_config('BB_PROXY_MODE="direct"\n')
+        EngagementManager(self.paths).create(
+            "apk-ctf",
+            "./challenge.apk",
+            workflow="ctf",
+            platform="standalone-ctf",
+            mode="interactive",
+        )
+        actions: list[dict[str, str]] = []
+        engagement = self.manager._engagement("android", "apk-ctf", actions)
+        self.assertTrue(engagement["profile_matches"])
+        self.assertIn("android", engagement["selected"]["compatible_profiles"])
+        self.assertIn("reverse", engagement["selected"]["compatible_profiles"])
+
+        EngagementManager(self.paths).create(
+            "continuous-ctf",
+            "https://challenge.invalid",
+            workflow="ctf",
+            platform="standalone-ctf",
+            mode="continuous",
+        )
+        with patch.dict(
+            os.environ,
+            {
+                "HTTP_PROXY": "",
+                "HTTPS_PROXY": "",
+                "ALL_PROXY": "",
+                "http_proxy": "",
+                "https_proxy": "",
+                "all_proxy": "",
+            },
+            clear=False,
+        ):
+            report = self.manager.collect("ctf-web", engagement="continuous-ctf")
+        self.assertEqual(report["prompt"]["selected"], "ctf-replacement")
+
+    def test_agent_evaluation_is_stale_when_contract_changes(self) -> None:
+        prompt = Path(self.temporary.name) / "rendered-prompt.md"
+        prompt.write_text("evaluation prompt\n", encoding="utf-8")
+        latest = {
+            "passed": True,
+            "profile": "ctf-quick",
+            "stack_version": __version__,
+            "prompt_sha256": hashlib.sha256(prompt.read_bytes()).hexdigest(),
+            "contract_sha256": "old-contract",
+        }
+        actions: list[dict[str, str]] = []
+        with (
+            patch.object(EvaluationManager, "latest", return_value=latest),
+            patch.object(
+                EvaluationManager,
+                "contract_sha256",
+                return_value="current-contract",
+            ),
+        ):
+            report = self.manager._evaluation(
+                "ctf-quick", str(prompt), False, actions
+            )
+
+        self.assertEqual(report["state"], "stale")
+        self.assertTrue(report["prompt_matches"])
+        self.assertTrue(report["version_matches"])
+        self.assertFalse(report["contract_matches"])
+        self.assertEqual(actions[0]["id"], "evaluation.agent")
+        self.assertEqual(actions[0]["level"], "optional")
 
 
 if __name__ == "__main__":

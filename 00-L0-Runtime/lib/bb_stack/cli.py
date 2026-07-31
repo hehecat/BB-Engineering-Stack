@@ -12,6 +12,7 @@ from .capabilities import CapabilityRegistry
 from .configuration import ConfigurationManager
 from .engagement import EngagementManager
 from .errors import StackError
+from .evaluation import EvaluationManager
 from .io import load_yaml
 from .keysmith import KeysmithAdapter
 from .mail_otp import add_mail_subcommands, run_mail_command
@@ -75,6 +76,19 @@ def build_parser() -> argparse.ArgumentParser:
     portable_import.add_argument("--force", action="store_true")
     portable_import.add_argument("--json", action="store_true")
 
+    evaluation = commands.add_parser(
+        "eval", help="run static contracts or an isolated real-Agent behavior evaluation"
+    )
+    evaluation_sub = evaluation.add_subparsers(dest="eval_command", required=True)
+    evaluation_contracts = evaluation_sub.add_parser("contracts")
+    evaluation_contracts.add_argument("--json", action="store_true")
+    evaluation_agent = evaluation_sub.add_parser("agent")
+    evaluation_agent.add_argument("--profile", default="ctf-quick")
+    evaluation_agent.add_argument("--timeout", type=int, default=180)
+    evaluation_agent.add_argument("--model", default="sonnet")
+    evaluation_agent.add_argument("--max-budget-usd", type=float, default=1.0)
+    evaluation_agent.add_argument("--json", action="store_true")
+
     status = commands.add_parser(
         "status", help="show unified paths, Prompt, Skills, MCP, runtime, and personal configuration"
     )
@@ -92,6 +106,7 @@ def build_parser() -> argparse.ArgumentParser:
     status.add_argument("--include-high-context-mcp", action="store_true")
     status.add_argument("--check-external", action="store_true")
     status.add_argument("--engagement")
+    status.add_argument("--require-agent-eval", action="store_true")
     status.add_argument("--strict", action="store_true")
     status.add_argument("--json", action="store_true")
 
@@ -294,6 +309,19 @@ def command(args: argparse.Namespace, paths: StackPaths) -> int:
                 result["reload"] = f"source {paths.env_file}"
             emit(result, args.json)
         return 0
+    if args.command == "eval":
+        manager = EvaluationManager(paths)
+        if args.eval_command == "contracts":
+            result = manager.contracts()
+        else:
+            result = manager.agent(
+                args.profile,
+                timeout=args.timeout,
+                model=args.model,
+                max_budget_usd=args.max_budget_usd,
+            )
+        emit(result, args.json)
+        return 0 if result["passed"] else 1
     if args.command == "status":
         manager = StackStatus(paths)
         report = manager.collect(
@@ -304,6 +332,7 @@ def command(args: argparse.Namespace, paths: StackPaths) -> int:
             include_high_context_mcp=args.include_high_context_mcp,
             check_external=args.check_external,
             engagement=args.engagement,
+            require_agent_eval=args.require_agent_eval,
         )
         if args.json:
             emit(report, True)

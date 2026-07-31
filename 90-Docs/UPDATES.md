@@ -60,7 +60,7 @@ Automatic stage, validation, promotion, and rollback currently cover:
 - npm MCP packages: lockfile integrity, isolated `npm ci`, real MCP initialize
   handshake, source contract validation, runtime rebuild, and backup.
 
-Go, PyPI, Git data, release binaries, apt packages, services, and Keysmith are
+Go, PyPI, Git data, release binaries/trees, pinned Debian packages, apt packages, services, and Keysmith are
 checked but require a reviewed installer change before promotion. Checksums,
 sparse data sets, system packages, and persistent Prompt deployment have
 different rollback semantics.

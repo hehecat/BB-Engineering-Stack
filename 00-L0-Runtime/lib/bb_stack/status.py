@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import os
 from pathlib import Path
 import shlex
@@ -11,10 +12,12 @@ from typing import Any
 from urllib.parse import urlparse
 from urllib.request import ProxyHandler, Request, build_opener
 
+from . import __version__
 from .capabilities import CapabilityRegistry
 from .configuration import MACHINE_CONFIG_KEYS, load_machine_config
 from .engagement import EngagementManager
 from .errors import StackError, ValidationError
+from .evaluation import EvaluationManager
 from .io import load_yaml
 from .keysmith import KeysmithAdapter
 from .mail_otp import MailOtpError, MailSettings, load_config as load_mail_config
@@ -38,6 +41,7 @@ class StackStatus:
         include_high_context_mcp: bool = False,
         check_external: bool = False,
         engagement: str | None = None,
+        require_agent_eval: bool = False,
     ) -> dict[str, Any]:
         skill_registry = SkillRegistry(self.paths)
         capability_registry = CapabilityRegistry(self.paths)
@@ -74,12 +78,20 @@ class StackStatus:
         selected_workflow_profile = workflow_profile
         if selected_engagement and engagement_report["profile_matches"]:
             selected_platform = selected_platform or selected_engagement["platform"]
-            if not selected_workflow_profile and profile == "web":
+            if not selected_workflow_profile:
                 selected_workflow_profile = self._workflow_profile_for_mode(
-                    "bug-bounty", profile, selected_engagement["mode"]
+                    selected_engagement["workflow"],
+                    profile,
+                    selected_engagement["mode"],
                 )
         prompt_report = self._prompt(
             profile, selected_workflow_profile, selected_platform, actions
+        )
+        evaluation_report = self._evaluation(
+            prompt_report.get("selected"),
+            prompt_report.get("output_file"),
+            require_agent_eval,
+            actions,
         )
         skills_report = self._skills(profile, actions)
         capabilities_report = self._capabilities(
@@ -109,6 +121,7 @@ class StackStatus:
             and proxy_report["ready"]
             and runtime_report["ready"]
             and prompt_report["ready"]
+            and evaluation_report["ready"]
             and engagement_report["ready"]
             and skills_report["ready"]
             and capabilities_report["ready"]
@@ -123,6 +136,7 @@ class StackStatus:
             "proxy": proxy_report,
             "runtime": runtime_report,
             "prompt": prompt_report,
+            "evaluation": evaluation_report,
             "engagement": engagement_report,
             "skills": skills_report,
             "capabilities": capabilities_report,
@@ -381,6 +395,88 @@ class StackStatus:
             "available": registry.names(),
         }
 
+    def _evaluation(
+        self,
+        workflow_profile: str | None,
+        prompt_file: str | None,
+        required: bool,
+        actions: list[dict[str, str]],
+    ) -> dict[str, Any]:
+        if not workflow_profile:
+            return {
+                "ready": not required,
+                "required": required,
+                "profile": None,
+                "state": "unavailable",
+                "prompt_matches": False,
+                "version_matches": False,
+                "contract_matches": False,
+                "latest": None,
+            }
+        manager = EvaluationManager(self.paths)
+        current_contract: str | None = None
+        try:
+            latest = manager.latest(workflow_profile)
+            current_contract = manager.contract_sha256(workflow_profile)
+        except (ValidationError, OSError, ValueError) as error:
+            latest = {
+                "passed": False,
+                "profile": workflow_profile,
+                "error": error.__class__.__name__,
+            }
+        prompt_matches = False
+        if latest and prompt_file and Path(prompt_file).is_file():
+            digest = hashlib.sha256(Path(prompt_file).read_bytes()).hexdigest()
+            prompt_matches = latest.get("prompt_sha256") == digest
+        version_matches = bool(
+            latest and latest.get("stack_version") == __version__
+        )
+        contract_matches = bool(
+            latest
+            and current_contract
+            and latest.get("contract_sha256") == current_contract
+        )
+        passed = bool(
+            latest
+            and latest.get("passed")
+            and prompt_matches
+            and version_matches
+            and contract_matches
+        )
+        if latest is None:
+            state = "not-run"
+            message = f"Run the isolated Agent behavior evaluation for {workflow_profile}"
+        elif not latest.get("passed"):
+            state = "failed"
+            message = f"Re-run the failed Agent behavior evaluation for {workflow_profile}"
+        elif not prompt_matches or not version_matches or not contract_matches:
+            state = "stale"
+            message = (
+                "Re-run Agent evaluation after stack, Prompt, or evaluation contract "
+                f"changes for {workflow_profile}"
+            )
+        else:
+            state = "passed"
+            message = ""
+        if not passed:
+            self._action(
+                actions,
+                "required" if required else "optional",
+                "evaluation.agent",
+                message,
+                f"bb-stack eval agent --profile {workflow_profile}",
+            )
+        return {
+            "ready": passed if required else True,
+            "required": required,
+            "profile": workflow_profile,
+            "state": state,
+            "prompt_matches": prompt_matches,
+            "version_matches": version_matches,
+            "contract_matches": contract_matches,
+            "latest": latest,
+        }
+
     def _skills(self, profile: str, actions: list[dict[str, str]]) -> dict[str, Any]:
         registry = SkillRegistry(self.paths)
         definition = registry.profile(profile)
@@ -444,10 +540,11 @@ class StackStatus:
         profile_matches = True
         if selected_path:
             state = manager.validate(selected_path)
-            expected_profile = self._capability_profile_for_workflow(
+            compatible_profiles = self._capability_profiles_for_workflow(
                 state["workflow"]
             )
-            profile_matches = profile == expected_profile
+            expected_profile = self._capability_profile_for_workflow(state["workflow"])
+            profile_matches = profile in compatible_profiles
             selected = {
                 "slug": state["slug"],
                 "path": str(selected_path),
@@ -459,6 +556,7 @@ class StackStatus:
                 "next_action": state["current"]["next_action"],
                 "checkpoint_updated_at": state["checkpoint"]["updated_at"],
                 "expected_profile": expected_profile,
+                "compatible_profiles": compatible_profiles,
             }
             if not profile_matches:
                 self._action(
@@ -485,16 +583,21 @@ class StackStatus:
 
     def _default_workflow_profile(self, capability_profile: str) -> str | None:
         stack = load_yaml(self.paths.root / "stack.yaml")
-        registry = ProfileRegistry(self.paths)
-        for profile_name in stack["defaults"]["workflow_profiles"].values():
-            if registry.load(profile_name)["l5_profile"] == capability_profile:
-                return profile_name
-        return None
+        return stack["defaults"]["capability_profiles"].get(capability_profile)
 
     def _capability_profile_for_workflow(self, workflow: str) -> str:
         stack = load_yaml(self.paths.root / "stack.yaml")
         profile_name = stack["defaults"]["workflow_profiles"][workflow]
         return ProfileRegistry(self.paths).load(profile_name)["l5_profile"]
+
+    def _capability_profiles_for_workflow(self, workflow: str) -> list[str]:
+        stack = load_yaml(self.paths.root / "stack.yaml")
+        registry = ProfileRegistry(self.paths)
+        return sorted(
+            capability
+            for capability, profile_name in stack["defaults"]["capability_profiles"].items()
+            if registry.load(profile_name)["workflow"] == workflow
+        )
 
     def _workflow_profile_for_mode(
         self, workflow: str, capability_profile: str, mode: str
@@ -825,6 +928,16 @@ class StackStatus:
                 f"mode={prompt.get('prompt_mode', 'n/a')} platform={prompt.get('platform', 'n/a')} "
                 f"tokens={prompt.get('token_estimate', 0)}/{prompt.get('budget', 0)}",
             ]
+        )
+        evaluation = report["evaluation"]
+        evaluation_mark = (
+            "OK"
+            if evaluation["state"] == "passed"
+            else "MISS" if evaluation["required"] else "OPT"
+        )
+        lines.append(
+            f"  [{evaluation_mark}] agent-eval={evaluation['state']} "
+            f"profile={evaluation['profile'] or 'none'}"
         )
         engagement = report["engagement"]
         selected_engagement = engagement["selected"]

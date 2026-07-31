@@ -9,5 +9,6 @@ side-effect limits. Resume from `engagement.yaml`, `notes/SCOPE.md`,
 - `SHIP`: validate, redact, and package only on request.
 
 For material progress record surface, changed input, identity context, baseline
-versus test delta, primitive or impact, evidence path, and exact next action.
+versus test delta, primitive or impact, evidence path under `artifacts/`, and
+exact next action.
 Specialist Skills may rotate a lead but do not terminate the engagement.

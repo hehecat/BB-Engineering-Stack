@@ -35,15 +35,25 @@ dependencies live under `.runtime`. Neither is committed.
 Append profile:
 
 ```text
-Claude native system Prompt + L1 personal + L2 workflow + platform + mode
+Claude native system Prompt + L1 personal + L2 workflow + optional domain + platform + mode
 ```
 
 Replacement profile:
 
 ```text
-L1 replacement runtime + L1 personal + L2 workflow + platform + mode
+L1 replacement runtime + L1 personal + L2 workflow + optional domain + platform + mode
 ```
 
 Fragments are unique and token-budgeted. `bb-claude` passes exactly one Prompt
 flag. Persistent Keysmith deployment is restricted to replacement profiles to
 avoid silently converting append behavior into replacement behavior.
+
+## Evaluation Boundary
+
+Static evaluation verifies all Prompt fragments, state-resume names, token
+budgets, orchestrator requirements, domain routing, and L4/L5 references.
+Real-Agent evaluation uses a generated local Engagement with unique markers,
+allows only Claude read/write tools, prohibits network work, and scores Scope,
+HANDOFF, STATUS, next-action, the complete Skill route, and artifact placement.
+Prompt and evaluation-contract SHA256 values prevent a prior pass from
+validating changed behavior.

@@ -15,6 +15,7 @@ import tarfile
 import tempfile
 from typing import Any
 from urllib.request import urlopen
+import zipfile
 
 from .capabilities import CapabilityRegistry
 from .configuration import ConfigurationManager, load_machine_config
@@ -261,6 +262,25 @@ class RuntimeManager:
                     raise CommandError(f"archive link escapes destination: {member.name}")
         archive.extractall(destination)
 
+    @staticmethod
+    def _safe_extract_zip(archive: zipfile.ZipFile, destination: Path) -> None:
+        base = destination.resolve()
+        for member in archive.infolist():
+            member_path = Path(member.filename)
+            if member_path.is_absolute() or ".." in member_path.parts:
+                raise CommandError(f"archive path escapes destination: {member.filename}")
+            target = (destination / member.filename).resolve()
+            try:
+                target.relative_to(base)
+            except ValueError as error:
+                raise CommandError(
+                    f"archive path escapes destination: {member.filename}"
+                ) from error
+            unix_mode = member.external_attr >> 16
+            if unix_mode and (unix_mode & 0o170000) == 0o120000:
+                raise CommandError(f"archive contains a symbolic link: {member.filename}")
+        archive.extractall(destination)
+
     def _install_wrappers(self, dry_run: bool) -> list[dict[str, Any]]:
         wrappers = [
             "bb-stack",
@@ -491,6 +511,18 @@ class RuntimeManager:
                     return True
             except OSError:
                 return False
+        if spec["kind"] == "archive-tree":
+            destination = Path(spec["destination"])
+            for command, relative in spec["executables"].items():
+                wrapper = self.paths.runtime_bin / command
+                target = destination / relative
+                if (
+                    not target.is_file()
+                    or not wrapper.is_symlink()
+                    or wrapper.resolve() != target.resolve()
+                ):
+                    return False
+            return True
         commands_ready = all(shutil.which(item, path=env["PATH"]) for item in spec.get("checks", []))
         post_check = spec.get("post_check")
         return commands_ready and (not post_check or Path(post_check).exists())
@@ -561,12 +593,79 @@ class RuntimeManager:
                 destination = self.paths.runtime_bin / spec["binary"]
                 shutil.copy2(candidates[0], destination)
                 destination.chmod(0o755)
+        elif kind == "archive-tree":
+            archive = self._download_tool_archive(name, spec)
+            destination = Path(spec["destination"]).resolve()
+            try:
+                destination.relative_to(self.paths.runtime.resolve())
+            except ValueError as error:
+                raise CommandError(
+                    f"archive-tree destination for {name} must stay under runtime"
+                ) from error
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            with tempfile.TemporaryDirectory(
+                prefix=f"{name}-extract-", dir=self.paths.runtime
+            ) as temporary_dir:
+                temporary_path = Path(temporary_dir)
+                if spec["format"] == "zip":
+                    with zipfile.ZipFile(archive) as handle:
+                        self._safe_extract_zip(handle, temporary_path)
+                else:
+                    with tarfile.open(archive) as handle:
+                        self._safe_extract(handle, temporary_path)
+                payload = temporary_path / spec.get("top_directory", "")
+                if not payload.is_dir():
+                    raise CommandError(f"archive layout mismatch for {name}")
+                if destination.exists():
+                    shutil.rmtree(destination)
+                shutil.copytree(payload, destination)
+            for command, relative in spec["executables"].items():
+                target = destination / relative
+                if not target.is_file():
+                    raise CommandError(
+                        f"archive for {name} is missing executable {relative}"
+                    )
+                target.chmod(target.stat().st_mode | 0o755)
+                wrapper = self.paths.runtime_bin / command
+                replacement = wrapper.with_name(f".{wrapper.name}.{os.getpid()}")
+                replacement.symlink_to(target)
+                os.replace(replacement, wrapper)
+        elif kind == "deb":
+            archive = self._download_tool_archive(name, spec)
+            apt = shutil.which("apt-get", path=env["PATH"])
+            if not apt:
+                raise CommandError(f"apt-get is required to install {name}")
+            prefix = [] if os.geteuid() == 0 else ["sudo"]
+            self._run([*prefix, apt, "install", "-y", str(archive)], env=env)
         elif kind == "service":
             raise CommandError(f"service {name} is not running; configure it outside bootstrap")
         else:
             raise CommandError(f"unsupported installer kind for {name}: {kind}")
         if spec.get("post_install") and not Path(str(spec.get("post_check", ""))).exists():
             self._run(list(spec["post_install"]), env=env)
+
+    def _download_tool_archive(self, name: str, spec: dict[str, Any]) -> Path:
+        if platform.system() != "Linux" or platform.machine() not in spec["files"]:
+            raise CommandError(f"archive installer for {name} supports Linux x86_64/aarch64")
+        file_spec = spec["files"][platform.machine()]
+        cache = self.paths.runtime / "cache"
+        cache.mkdir(parents=True, exist_ok=True)
+        archive = cache / file_spec["archive"]
+        if archive.is_file() and self._sha256(archive) == file_spec["sha256"]:
+            return archive
+        temporary = archive.with_suffix(archive.suffix + ".part")
+        try:
+            with urlopen(file_spec["url"], timeout=600) as response, temporary.open(
+                "wb"
+            ) as handle:
+                shutil.copyfileobj(response, handle)
+            if self._sha256(temporary) != file_spec["sha256"]:
+                raise CommandError(f"checksum mismatch for {file_spec['archive']}")
+            os.replace(temporary, archive)
+        finally:
+            if temporary.exists():
+                temporary.unlink()
+        return archive
 
     def launch(
         self,

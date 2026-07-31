@@ -4,6 +4,7 @@ prompt_mode: replacement
 workflow: ctf
 platform: standalone-ctf
 default_mode: continuous
+domain_prompt: web
 l5_profile: ctf-web
 skill_profile: ctf-web
 max_custom_tokens: 2200

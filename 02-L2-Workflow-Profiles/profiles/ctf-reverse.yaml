@@ -1,0 +1,10 @@
+schema_version: 1
+name: ctf-reverse
+prompt_mode: append
+workflow: ctf
+platform: standalone-ctf
+default_mode: interactive
+domain_prompt: reverse
+l5_profile: reverse
+skill_profile: reverse
+max_custom_tokens: 1750

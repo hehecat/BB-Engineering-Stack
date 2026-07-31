@@ -226,7 +226,7 @@ class UpdateManager:
                 branch="HEAD",
                 current=spec["revision"],
             )
-        elif kind == "archive-binary":
+        elif kind in {"archive-binary", "archive-tree", "deb"}:
             urls = [entry["url"] for entry in spec["files"].values()]
             match = re.search(r"github\.com/([^/]+/[^/]+)/releases/download/([^/]+)", urls[0])
             if match:

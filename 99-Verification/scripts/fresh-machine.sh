@@ -26,6 +26,7 @@ export CLAUDE_CONFIG_DIR="$HOME_TEST/.claude"
 "$ROOT/00-L0-Runtime/bin/bootstrap" --profile minimal --skip-tools --json >/dev/null
 source "$BB_CONFIG_HOME/env.sh"
 bb-stack validate --json >/dev/null
+bb-stack eval contracts --json >/dev/null
 bb-stack doctor --profile minimal --strict --json >/dev/null
 bb-stack status --profile minimal --strict --json >/dev/null
 command -v mail-otp >/dev/null

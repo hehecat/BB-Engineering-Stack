@@ -30,6 +30,12 @@ regenerates `env.sh`; generated shell code never sources the editable config
 file. `bb-stack portable` exports and restores the safe subset without old
 absolute paths or credentials.
 
+`bb-stack eval contracts` checks every L2/L4/L5 route without a model call.
+`bb-stack eval agent` runs a bounded Sonnet startup fixture in an isolated work
+unit and records its Prompt digest and scored result under `$BB_CONFIG_HOME`.
+Pinned archive-tree and Debian-package installers provide JADX and Radare2 when
+the distribution repository does not.
+
 Bootstrap also installs the first-party `mail-otp` compatibility command. Use
 `bb-stack mail configure` and `bb-stack mail test`; mailbox credentials remain
 outside the repository in a mode-600 local config.

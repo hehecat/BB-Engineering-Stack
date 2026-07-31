@@ -17,11 +17,48 @@ source "$HOME/.config/bb-stack/env.sh"
 bb-stack configure
 source "$HOME/.config/bb-stack/env.sh"
 bb-stack status --profile ctf-web --strict --probe-mcp
+bb-stack eval contracts
 
 bb-stack new ctf-demo https://challenge.example \
   --workflow ctf --platform standalone-ctf
 bb-stack launch --profile ctf-quick --engagement ctf-demo
 ```
+
+After a new-machine restore or Prompt change, run the bounded real-Agent gate:
+
+```bash
+bb-stack eval agent --profile ctf-quick
+bb-stack status --profile ctf-web --require-agent-eval --strict
+```
+
+The evaluation uses Sonnet with low effort and a 1 USD ceiling by default. It
+does not contact a target and keeps the synthetic workspace under
+`$BB_CONFIG_HOME/evaluations/`.
+
+## Android And Reverse CTF
+
+Static APK analysis is headless and does not require a connected device:
+
+```bash
+./00-L0-Runtime/bin/bootstrap --profile android
+bb-stack status --profile android --strict
+bb-stack new apk-challenge ./challenge.apk --workflow ctf --platform standalone-ctf
+bb-stack launch --profile ctf-android --engagement apk-challenge
+```
+
+For a native binary or unknown reverse artifact:
+
+```bash
+./00-L0-Runtime/bin/bootstrap --profile reverse
+bb-stack status --profile reverse --strict
+bb-stack new reverse-challenge ./challenge.bin --workflow ctf --platform standalone-ctf
+bb-stack launch --profile ctf-reverse --engagement reverse-challenge
+```
+
+The Android profile installs Java, ADB, Apktool, and pinned JADX. ADB device and
+Frida/Objection capabilities remain optional until dynamic analysis is needed.
+The Reverse profile installs pinned Radare2; JADX and Apktool are optional mixed
+artifact providers.
 
 ## Bug Bounty Or VDP
 

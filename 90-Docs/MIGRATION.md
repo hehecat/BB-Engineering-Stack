@@ -43,6 +43,9 @@ bb-stack portable import "$HOME/bb-stack-portable.json"
 bb-stack portable import "$HOME/bb-stack-portable.json" --yes
 source "$BB_CONFIG_HOME/env.sh"
 bb-stack status --profile ctf-web --strict --probe-mcp
+bb-stack eval contracts
+bb-stack eval agent --profile ctf-quick
+bb-stack status --profile ctf-web --require-agent-eval --strict
 ```
 
 Import preserves every existing non-empty destination setting. Use

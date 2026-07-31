@@ -11,7 +11,7 @@ profiles:
     required: [system-base, subfinder, dnsx, httpx, katana, ffuf, nuclei, chromium, seclists]
     optional: [assetfinder, amass, gau, waybackurls, interactsh-client, dalfox, naabu, sqlmap, semgrep, trufflehog]
   android:
-    required: [system-base, adb, apktool, jadx]
+    required: [system-base, java-runtime, adb, apktool, jadx]
     optional: [frida, objection]
   reverse:
     required: [system-base, radare2]
@@ -26,6 +26,10 @@ installers:
     kind: apt
     checks: [chromium]
     packages: [chromium]
+  java-runtime:
+    kind: apt
+    checks: [java]
+    packages: [default-jre-headless]
   adb:
     kind: apt
     checks: [adb]
@@ -35,13 +39,32 @@ installers:
     checks: [apktool]
     packages: [apktool]
   jadx:
-    kind: apt
+    kind: archive-tree
     checks: [jadx]
-    packages: [jadx]
+    format: zip
+    destination: "${BB_STACK_ROOT}/.runtime/tools/jadx-1.5.6"
+    executables: {jadx: bin/jadx}
+    files:
+      x86_64:
+        archive: jadx-1.5.6.zip
+        url: https://github.com/skylot/jadx/releases/download/v1.5.6/jadx-1.5.6.zip
+        sha256: 545ea2be9c242511bc145755cf4bda2485ade42966e096f8b4d3da2a230e8974
+      aarch64:
+        archive: jadx-1.5.6.zip
+        url: https://github.com/skylot/jadx/releases/download/v1.5.6/jadx-1.5.6.zip
+        sha256: 545ea2be9c242511bc145755cf4bda2485ade42966e096f8b4d3da2a230e8974
   radare2:
-    kind: apt
+    kind: deb
     checks: [r2]
-    packages: [radare2]
+    files:
+      x86_64:
+        archive: radare2_6.1.8_amd64.deb
+        url: https://github.com/radareorg/radare2/releases/download/6.1.8/radare2_6.1.8_amd64.deb
+        sha256: 91e64c672e65521758c0deb0f70d98ac90f0a78eb654d8bd0d894dd5735130e3
+      aarch64:
+        archive: radare2_6.1.8_arm64.deb
+        url: https://github.com/radareorg/radare2/releases/download/6.1.8/radare2_6.1.8_arm64.deb
+        sha256: fc6717579be2ad2aaa5364aff8b134e9dd8fc0c1414a58c96659f413a2a2b750
   sqlmap:
     kind: apt
     checks: [sqlmap]

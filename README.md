@@ -1,7 +1,7 @@
 # BB Engineering Stack
 
 Portable, headless-first Claude Code environment for CTF Web, Bug Bounty, VDP,
-and authorized Web/API testing.
+authorized Web/API testing, Android static analysis, and reverse engineering.
 
 ## Boundaries
 
@@ -40,6 +40,7 @@ source "$HOME/.config/bb-stack/env.sh"
 bb-stack configure
 source "$HOME/.config/bb-stack/env.sh"
 bb-stack status --profile ctf-web --strict --probe-mcp
+bb-stack eval contracts
 bb-stack new --workflow ctf --platform standalone-ctf challenge-name TARGET
 bb-stack launch --profile ctf-quick --engagement challenge-name
 ```
@@ -50,7 +51,7 @@ No engagement data belongs in this source repository.
 a convenience wrapper around `bb-stack launch`.
 
 ```text
-bootstrap -> configure -> status -> new -> launch -> checkpoint -> portable export
+bootstrap -> configure -> status -> eval -> new -> launch -> checkpoint -> portable export
 ```
 
 For Bug Bounty use `bootstrap --profile web`, create a `bug-bounty` Engagement,
@@ -58,6 +59,23 @@ then launch `bb-interactive` or `bb-continuous`. The unified status view reports
 resolved roots, Prompt composition, Engagement state, Claude/Codex Skills,
 MCP/CLI providers, proxy application, personal integrations, and exact repair
 actions.
+
+Android and native reverse profiles use the same CTF Engagement lifecycle:
+
+```bash
+bb-stack bootstrap --profile android
+bb-stack launch --profile ctf-android --engagement APK-SLUG
+bb-stack bootstrap --profile reverse
+bb-stack launch --profile ctf-reverse --engagement BINARY-SLUG
+```
+
+Run a real, isolated Claude behavior check after moving machines or changing
+Prompt routing:
+
+```bash
+bb-stack eval agent --profile ctf-quick
+bb-stack status --profile ctf-web --require-agent-eval --strict
+```
 
 See [`90-Docs/QUICKSTART.md`](90-Docs/QUICKSTART.md) for the end-to-end flow and
 [`90-Docs/CONFIGURATION.md`](90-Docs/CONFIGURATION.md) for machine-local roots,

@@ -42,7 +42,7 @@
     "defaults": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["profile", "workflow_profiles", "work_root", "config_home", "claude_config_dir"],
+      "required": ["profile", "workflow_profiles", "capability_profiles", "work_root", "config_home", "claude_config_dir"],
       "properties": {
         "profile": {"type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"},
         "workflow_profiles": {
@@ -53,6 +53,18 @@
             "bug-bounty": {"type": "string"},
             "ctf": {"type": "string"},
             "lab": {"type": "string"}
+          }
+        },
+        "capability_profiles": {
+          "type": "object",
+          "required": ["minimal", "ctf-web", "web", "android", "reverse"],
+          "additionalProperties": false,
+          "properties": {
+            "minimal": {"type": "string"},
+            "ctf-web": {"type": "string"},
+            "web": {"type": "string"},
+            "android": {"type": "string"},
+            "reverse": {"type": "string"}
           }
         },
         "work_root": {"type": "string", "minLength": 1},

@@ -7,6 +7,8 @@ profile, L5 capability profile, and Prompt mode.
 | --- | --- | --- | --- |
 | `ctf-quick` | append | CTF | normal short challenge |
 | `ctf-replacement` | replacement | CTF | explicit full replacement session |
+| `ctf-android` | append | CTF + Android | APK static/dynamic analysis |
+| `ctf-reverse` | append | CTF + Reverse | binary/artifact reverse engineering |
 | `bb-interactive` | append | Bug Bounty | bounded operator task |
 | `bb-continuous` | append | Bug Bounty | continuous hunt loop |
 | `lab-replacement` | replacement | Lab | isolated fixture behavior |
