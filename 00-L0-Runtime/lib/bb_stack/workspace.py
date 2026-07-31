@@ -21,6 +21,23 @@ from .skills import SkillRegistry
 
 
 WORKSPACE_SCHEMA_VERSION = 1
+MANAGED_ENV_KEYS = {
+    "BB_STACK_ROOT",
+    "BB_WORK_ROOT",
+    "BB_CONFIG_HOME",
+    "BB_PROXY_MODE",
+    "BB_HTTP_PROXY",
+    "BB_SOCKS_PROXY",
+    "BB_H1_USERNAME",
+    "BB_FILECODEBOX_URL",
+    "PATH",
+    "HTTP_PROXY",
+    "HTTPS_PROXY",
+    "ALL_PROXY",
+    "http_proxy",
+    "https_proxy",
+    "all_proxy",
+}
 ROUTES: dict[str, dict[str, Any]] = {
     "ctf-web": {
         "workflow": "ctf",
@@ -83,8 +100,8 @@ class WorkspaceManager:
         return {
             "CLAUDE.md": self.paths.work_root / "CLAUDE.md",
             ".mcp.json": self.paths.work_root / ".mcp.json",
-            ".claude/settings.local.json": (
-                self.paths.work_root / ".claude" / "settings.local.json"
+            ".claude/settings.json": (
+                self.paths.work_root / ".claude" / "settings.json"
             ),
         }
 
@@ -122,9 +139,11 @@ class WorkspaceManager:
             "machine_config_digest": self._machine_config_digest(),
             "managed_files": digests,
         }
+        local_settings_migrated = self._local_settings_needs_migration()
         if not dry_run:
             for directory in directories:
                 directory.mkdir(parents=True, exist_ok=True)
+            self._migrate_local_settings()
             for relative, value in content.items():
                 atomic_write(self.paths.work_root / relative, value)
             dump_json(self.marker, marker)
@@ -135,6 +154,7 @@ class WorkspaceManager:
             "root": str(self.paths.work_root),
             "engagements_root": str(self.paths.engagements_root),
             "managed_files": sorted(content),
+            "local_settings_migrated": local_settings_migrated,
             "mcp_servers": sorted(json.loads(content[".mcp.json"])["mcpServers"]),
             "default_entry": f"cd {shlex.quote(str(self.paths.work_root))} && claude",
         }
@@ -408,10 +428,39 @@ class WorkspaceManager:
         return {
             "CLAUDE.md": router,
             ".mcp.json": json.dumps(mcp, indent=2, ensure_ascii=True) + "\n",
-            ".claude/settings.local.json": (
+            ".claude/settings.json": (
                 json.dumps(settings, indent=2, ensure_ascii=True) + "\n"
             ),
         }
+
+    def _local_settings_needs_migration(self) -> bool:
+        path = self.paths.work_root / ".claude" / "settings.local.json"
+        if not path.is_file():
+            return False
+        try:
+            document = load_json(path)
+        except ValidationError:
+            return False
+        env = document.get("env")
+        return isinstance(env, dict) and bool(MANAGED_ENV_KEYS & set(env))
+
+    def _migrate_local_settings(self) -> None:
+        path = self.paths.work_root / ".claude" / "settings.local.json"
+        if not path.is_file():
+            return
+        try:
+            document = load_json(path)
+        except ValidationError:
+            return
+        env = document.get("env")
+        if not isinstance(env, dict):
+            return
+        preserved = {key: value for key, value in env.items() if key not in MANAGED_ENV_KEYS}
+        if preserved:
+            document["env"] = preserved
+        else:
+            document.pop("env", None)
+        atomic_write(path, json.dumps(document, indent=2, ensure_ascii=True) + "\n")
 
     def _read_marker(self) -> dict[str, Any]:
         if not self.marker.is_file():

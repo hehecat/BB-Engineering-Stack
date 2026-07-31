@@ -65,8 +65,11 @@ source "$BB_CONFIG_HOME/env.sh"
 ```
 
 The selected root contains `CLAUDE.md`, `.mcp.json`, project-local Claude
-environment settings, `inbox/`, and `engagements/`. Existing managed files with
-local edits are not overwritten unless `--force` is supplied.
+environment settings, `inbox/`, and `engagements/`. bb-stack owns
+`.claude/settings.json`; Claude Code and the user own
+`.claude/settings.local.json` for MCP approvals and local permissions. Existing
+bb-stack-managed files with local edits are not overwritten unless `--force`
+is supplied.
 
 ## Machine Options
 

@@ -43,18 +43,47 @@ class WorkspaceTests(unittest.TestCase):
         self.assertTrue((self.paths.work_root / "CLAUDE.md").is_file())
         self.assertTrue((self.paths.work_root / ".mcp.json").is_file())
         self.assertTrue(
-            (self.paths.work_root / ".claude" / "settings.local.json").is_file()
+            (self.paths.work_root / ".claude" / "settings.json").is_file()
         )
         self.assertTrue(self.paths.engagements_root.is_dir())
         self.assertTrue((self.paths.work_root / "inbox").is_dir())
         settings = json.loads(
-            (self.paths.work_root / ".claude" / "settings.local.json").read_text()
+            (self.paths.work_root / ".claude" / "settings.json").read_text()
         )
         self.assertEqual(settings["env"]["BB_WORK_ROOT"], str(self.paths.work_root))
         router = (self.paths.work_root / "CLAUDE.md").read_text()
         self.assertIn("bb-stack workspace route", router)
         self.assertIn("android", router)
         self.assertTrue(self.manager.status()["ready"])
+
+    def test_claude_local_permissions_survive_workspace_refresh(self) -> None:
+        self.manager.initialize()
+        local = self.paths.work_root / ".claude" / "settings.local.json"
+        local.write_text(
+            json.dumps(
+                {
+                    "$schema": "https://json.schemastore.org/claude-code-settings.json",
+                    "env": {
+                        "BB_WORK_ROOT": "/old/workspace",
+                        "USER_EXTENSION": "keep-me",
+                    },
+                    "enableAllProjectMcpServers": True,
+                    "permissions": {"allow": ["Bash(bb-stack workspace *)"]},
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+        result = self.manager.initialize()
+        migrated = json.loads(local.read_text())
+        self.assertTrue(result["local_settings_migrated"])
+        self.assertEqual(migrated["env"], {"USER_EXTENSION": "keep-me"})
+        self.assertTrue(migrated["enableAllProjectMcpServers"])
+        self.assertEqual(
+            migrated["permissions"]["allow"], ["Bash(bb-stack workspace *)"]
+        )
 
     def test_route_creates_nested_android_engagement_and_reuses_it(self) -> None:
         self.manager.initialize()

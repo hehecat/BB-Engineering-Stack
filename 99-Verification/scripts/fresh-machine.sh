@@ -28,7 +28,7 @@ source "$BB_CONFIG_HOME/env.sh"
 [[ "$BB_WORK_ROOT" == "$HOME_TEST/chosen-workspace" ]]
 [[ -f "$BB_WORK_ROOT/CLAUDE.md" ]]
 [[ -f "$BB_WORK_ROOT/.mcp.json" ]]
-[[ -f "$BB_WORK_ROOT/.claude/settings.local.json" ]]
+[[ -f "$BB_WORK_ROOT/.claude/settings.json" ]]
 [[ -d "$BB_WORK_ROOT/engagements" ]]
 bb-stack validate --json >/dev/null
 bb-stack eval contracts --json >/dev/null
