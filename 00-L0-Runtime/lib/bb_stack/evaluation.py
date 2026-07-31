@@ -159,10 +159,7 @@ class EvaluationManager:
             )
         definition = self.profile_registry.load(profile)
         capability_profile = str(definition["l5_profile"])
-        if capability_profile not in ROUTE_TERMINALS:
-            raise ValidationError(
-                f"agent evaluation has no route contract for {capability_profile}"
-            )
+        self._skill_route(capability_profile)
         self.root.mkdir(parents=True, exist_ok=True)
         workspace = self.root / "runs" / f"{profile}-latest"
         self._reset_workspace(workspace)
@@ -318,12 +315,7 @@ class EvaluationManager:
         self, engagement: Path, capability_profile: str, *, profile: str
     ) -> dict[str, Any]:
         nonce = uuid4().hex[:12]
-        skill_profile = self.skill_registry.profile(capability_profile)
-        orchestrator = str(skill_profile["orchestrator"])
-        terminal = ROUTE_TERMINALS[capability_profile]
-        skill_route = [orchestrator]
-        if terminal != orchestrator:
-            skill_route.append(terminal)
+        skill_route = self._skill_route(capability_profile)
         expected = {
             "scope_marker": f"scope-{nonce}",
             "handoff_marker": f"handoff-{nonce}",
@@ -405,8 +397,10 @@ class EvaluationManager:
     @staticmethod
     def _agent_prompt() -> str:
         return (
-            "Run only the normal startup and routing step for this work unit. "
-            "Do not solve the scenario, execute commands, or access any network. Read "
+            "Run the normal startup and complete route selection for this already "
+            "classified work unit. Report the complete policy route without invoking "
+            "either Skill. Do not solve the scenario, execute commands, or access any "
+            "network. Read "
             "engagement.yaml, notes/SCOPE.md, SESSION-HANDOFF.md, STATUS.md, and the "
             "evaluation scenario under challenge/, notes/, or fixture/. Create "
             "artifacts/evaluation/agent-result.json as one JSON object with exactly "
@@ -416,7 +410,8 @@ class EvaluationManager:
             "current.next_action. selected_skill_route is an ordered JSON array naming "
             "the initial orchestrator/router and then the terminal profile Skill selected "
             "for this scenario; omit a duplicate terminal when the orchestrator is the "
-            "terminal profile Skill. "
+            "terminal profile Skill. Do not stop the reported route at the orchestrator "
+            "when the active domain Prompt names a terminal specialist. "
             "artifact_policy is the literal top-level workflow artifact "
             "root named by the active Prompt, not this evaluation subdirectory, and must "
             "include its trailing slash. After writing valid JSON, print exactly "
@@ -426,21 +421,36 @@ class EvaluationManager:
     def contract_sha256(self, profile: str) -> str:
         definition = self.profile_registry.load(profile)
         capability_profile = str(definition["l5_profile"])
+        skill_route = self._skill_route(capability_profile)
+        digest = hashlib.sha256()
+        values = [
+            self.result_schema.read_text(encoding="utf-8"),
+            self._agent_prompt(),
+            SCENARIOS[capability_profile],
+        ]
+        for name in skill_route:
+            values.extend(
+                [name, self.skill_registry.tree_digest(self.skill_registry.source(name))]
+            )
+        for value in values:
+            digest.update(value.encode("utf-8"))
+            digest.update(b"\0")
+        return digest.hexdigest()
+
+    def _skill_route(self, capability_profile: str) -> list[str]:
         if capability_profile not in ROUTE_TERMINALS:
             raise ValidationError(
                 f"agent evaluation has no route contract for {capability_profile}"
             )
-        digest = hashlib.sha256()
-        for value in (
-            self.result_schema.read_text(encoding="utf-8"),
-            self._agent_prompt(),
-            self.skill_registry.profile(capability_profile)["orchestrator"],
-            ROUTE_TERMINALS[capability_profile],
-            SCENARIOS[capability_profile],
-        ):
-            digest.update(value.encode("utf-8"))
-            digest.update(b"\0")
-        return digest.hexdigest()
+        skill_profile = self.skill_registry.profile(capability_profile)
+        orchestrator = str(skill_profile["orchestrator"])
+        terminal = ROUTE_TERMINALS[capability_profile]
+        route = [orchestrator]
+        if terminal != orchestrator:
+            route.append(terminal)
+        for name in route:
+            self.skill_registry.source(name)
+        return route
 
     def _reset_workspace(self, workspace: Path) -> None:
         runs = (self.root / "runs").resolve()

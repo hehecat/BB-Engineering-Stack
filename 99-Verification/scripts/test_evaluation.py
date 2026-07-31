@@ -95,6 +95,14 @@ class EvaluationTests(unittest.TestCase):
         failed = {item["id"] for item in report["checks"] if not item["passed"]}
         self.assertEqual(failed, {"artifact.exists"})
 
+    def test_contract_digest_changes_with_routed_skill_content(self) -> None:
+        manager = EvaluationManager(self.paths)
+        with patch.object(SkillRegistry, "tree_digest", return_value="digest-a"):
+            first = manager.contract_sha256("ctf-quick")
+        with patch.object(SkillRegistry, "tree_digest", return_value="digest-b"):
+            second = manager.contract_sha256("ctf-quick")
+        self.assertNotEqual(first, second)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -56,4 +56,6 @@ Real-Agent evaluation uses a generated local Engagement with unique markers,
 allows only Claude read/write tools, prohibits network work, and scores Scope,
 HANDOFF, STATUS, next-action, the complete Skill route, and artifact placement.
 Prompt and evaluation-contract SHA256 values prevent a prior pass from
-validating changed behavior.
+validating changed behavior. The contract digest includes the routed Skill
+trees, so updating an orchestrator or terminal profile Skill invalidates the
+prior result.
