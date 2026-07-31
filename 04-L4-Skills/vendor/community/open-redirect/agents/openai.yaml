@@ -1,0 +1,4 @@
+interface:
+  display_name: "Open Redirect"
+  short_description: "Redirect abuse and OAuth-chain testing"
+  default_prompt: "Use $open-redirect to map redirect abuse risk across the provided links, flows, or HTTP traffic."

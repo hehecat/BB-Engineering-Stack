@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:bb-engineering-stack:schema:tools:v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "profiles", "installers"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "profiles": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["required", "optional"],
+        "properties": {
+          "required": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},
+          "optional": {"type": "array", "uniqueItems": true, "items": {"type": "string"}}
+        }
+      }
+    },
+    "installers": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "object",
+        "required": ["kind", "checks"],
+        "properties": {
+          "kind": {"enum": ["apt", "go", "pipx", "git-data", "archive-binary", "service"]},
+          "checks": {"type": "array", "items": {"type": "string"}},
+          "packages": {"type": "array", "items": {"type": "string"}},
+          "package": {"type": "string"},
+          "binary": {"type": "string"},
+          "files": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["archive", "url", "sha256"],
+              "properties": {
+                "archive": {"type": "string"},
+                "url": {"type": "string", "format": "uri"},
+                "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+              }
+            }
+          },
+          "repository": {"type": "string"},
+          "revision": {"type": "string"},
+          "destination": {"type": "string"},
+          "sparse_paths": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},
+          "post_install": {"type": "array", "items": {"type": "string"}},
+          "post_check": {"type": "string"},
+          "host": {"type": "string"},
+          "port": {"type": "integer", "minimum": 1, "maximum": 65535}
+        }
+      }
+    }
+  }
+}

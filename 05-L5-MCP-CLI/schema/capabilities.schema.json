@@ -1,0 +1,146 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:bb-engineering-stack:schema:l5-capabilities:v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "providers", "capabilities"],
+  "$defs": {
+    "name": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:[.-][a-z0-9]+)*$"
+    },
+    "envName": {
+      "type": "string",
+      "pattern": "^[A-Z_][A-Z0-9_]*$"
+    },
+    "locator": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "value"],
+          "properties": {
+            "type": {"const": "command"},
+            "value": {"type": "string", "minLength": 1}
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "value"],
+          "properties": {
+            "type": {"const": "path"},
+            "value": {"type": "string", "minLength": 1},
+            "interpreter": {"type": "string", "minLength": 1}
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "host", "port"],
+          "properties": {
+            "type": {"const": "tcp"},
+            "host": {"type": "string", "minLength": 1},
+            "port": {"type": "integer", "minimum": 1, "maximum": 65535}
+          }
+        }
+      ]
+    },
+    "configuration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["required"],
+      "properties": {
+        "required": {"type": "boolean"},
+        "files_all": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1}
+        },
+        "files_any": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1}
+        },
+        "env_all": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/envName"}
+        },
+        "python_modules": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/name"}
+        },
+        "python_from": {"type": "string", "minLength": 1}
+      }
+    },
+    "mcp": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "transport", "command", "args"],
+      "properties": {
+        "name": {"$ref": "#/$defs/name"},
+        "transport": {"const": "stdio"},
+        "command": {"type": "string", "minLength": 1},
+        "args": {
+          "type": "array",
+          "items": {"type": "string"}
+        }
+      }
+    },
+    "provider": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "locator", "placement", "stateful", "context_cost", "side_effects"],
+      "properties": {
+        "kind": {"enum": ["cli", "runtime", "mcp", "service", "data"]},
+        "locator": {"$ref": "#/$defs/locator"},
+        "placement": {
+          "enum": ["main", "bounded-worker", "shared-main", "subagent-inline", "mcp-runtime", "runtime"]
+        },
+        "stateful": {"type": "boolean"},
+        "context_cost": {"enum": ["none", "low", "medium", "high"]},
+        "side_effects": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/name"}
+        },
+        "configuration": {"$ref": "#/$defs/configuration"},
+        "mcp": {"$ref": "#/$defs/mcp"}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"kind": {"const": "mcp"}}},
+          "then": {"required": ["mcp"]},
+          "else": {"not": {"required": ["mcp"]}}
+        }
+      ]
+    },
+    "capability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["strategy", "providers"],
+      "properties": {
+        "strategy": {"enum": ["any", "all"]},
+        "providers": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/name"}
+        }
+      }
+    }
+  },
+  "properties": {
+    "schema_version": {"const": 1},
+    "providers": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {"$ref": "#/$defs/name"},
+      "additionalProperties": {"$ref": "#/$defs/provider"}
+    },
+    "capabilities": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {"$ref": "#/$defs/name"},
+      "additionalProperties": {"$ref": "#/$defs/capability"}
+    }
+  }
+}

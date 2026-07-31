@@ -1,0 +1,26 @@
+schema_version: 1
+name: web
+required:
+  - http.raw
+  - data.json
+  - runtime.python
+  - recon.subdomains
+  - recon.resolve
+  - web.probe
+  - web.crawl
+  - web.fuzz
+  - web.templates
+  - browser.stateful
+  - data.wordlists
+optional:
+  - tls.inspect
+  - network.scan
+  - web.sqli-assist
+  - web.xss-assist
+  - source.audit
+  - analysis.javascript
+  - osint.correlation
+  - oob.callback
+  - proxy.http
+  - otp.mail
+  - delivery.file-share

@@ -1,0 +1,4 @@
+interface:
+  display_name: "File Upload"
+  short_description: "Upload, processing, and storage testing"
+  default_prompt: "Use $file-upload to map file upload risk across the provided upload flows, storage paths, or artifacts."

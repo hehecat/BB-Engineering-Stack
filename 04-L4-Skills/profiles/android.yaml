@@ -1,0 +1,5 @@
+schema_version: 1
+name: android
+orchestrator: reverse-orchestrator
+required: [reverse-orchestrator, solve-challenge, android-pentest]
+optional: [api-hacking, auth-hacking, information-disclosure]

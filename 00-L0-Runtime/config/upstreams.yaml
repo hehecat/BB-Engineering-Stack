@@ -1,0 +1,54 @@
+schema_version: 1
+
+policy:
+  candidate_root: "${BB_STACK_ROOT}/.runtime/update-candidates"
+  backup_root: "${BB_STACK_ROOT}/.runtime/update-backups"
+  network_timeout_seconds: 20
+  auto_promote: false
+
+inventory:
+  skills: 04-L4-Skills/skills.yaml
+  mcp_packages: 00-L0-Runtime/config/node-runtime/package.json
+  tools: 00-L0-Runtime/config/tools.yaml
+
+components:
+  skill.ctf-web:
+    category: skills
+    target: ctf-web
+    checker: github-tree
+    repository: https://github.com/ljagiello/ctf-skills
+    branch: main
+    subpath: ctf-web
+    current_revision: d19f35fd3dd2e126108752aee84c657c888126d3
+    current_digest: 116ad26f7deb2fde82b3d90cb9f5b6f791496a1ff1f79b739e831e90b123845c
+    license: MIT
+
+  mcp.playwright:
+    category: mcp
+    target: "@playwright/mcp"
+    checker: npm
+    provider: playwright-mcp
+    license: Apache-2.0
+
+  mcp.anastasis:
+    category: mcp
+    target: anastasis-mcp-server
+    checker: npm
+    provider: anastasis-mcp
+    license: MIT
+
+  mcp.osint:
+    category: mcp
+    target: osint-mcp-server
+    checker: npm
+    provider: osint-mcp
+    license: MIT
+
+  tool.keysmith:
+    category: tools
+    target: keysmith
+    checker: github-commit
+    repository: https://github.com/Jia-Ethan/claude-keysmith
+    branch: main
+    current_revision: acb9d0b7ade07415c5e50117d2a55cc50a0be64e
+    license: NOASSERTION

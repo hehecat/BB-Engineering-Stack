@@ -1,0 +1,4 @@
+interface:
+  display_name: "Authorization Bypass"
+  short_description: "Privilege escalation and access control testing"
+  default_prompt: "Use $authorization-bypass to map authorization bypass and privilege escalation risk across the provided app context, roles, endpoints, or HTTP/API traffic."

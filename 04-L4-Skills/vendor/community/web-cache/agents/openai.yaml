@@ -1,0 +1,4 @@
+interface:
+  display_name: "Web Cache"
+  short_description: "Cache poisoning and deception testing"
+  default_prompt: "Use $web-cache to map cache poisoning and cache deception risk across the provided hosts, paths, or responses."

@@ -1,0 +1,392 @@
+schema_version: 1
+
+providers:
+  curl:
+    kind: cli
+    locator: {type: command, value: curl}
+    placement: main
+    stateful: false
+    context_cost: none
+    side_effects: [network-request]
+
+  jq:
+    kind: cli
+    locator: {type: command, value: jq}
+    placement: main
+    stateful: false
+    context_cost: none
+    side_effects: [local-read]
+
+  openssl:
+    kind: cli
+    locator: {type: command, value: openssl}
+    placement: main
+    stateful: false
+    context_cost: low
+    side_effects: [network-request, local-read]
+
+  project-python:
+    kind: runtime
+    locator: {type: path, value: "${BB_STACK_ROOT}/.runtime/venv/bin/python"}
+    placement: main
+    stateful: false
+    context_cost: none
+    side_effects: [local-read, local-write]
+
+  pentest-python:
+    kind: cli
+    locator: {type: path, value: "${BB_STACK_ROOT}/.runtime/bin/pentest-python"}
+    placement: main
+    stateful: false
+    context_cost: none
+    side_effects: [local-read, local-write, network-request]
+    configuration:
+      required: true
+      python_modules: [jwt, requests, yaml]
+      python_from: "${BB_STACK_ROOT}/.runtime/venv/bin/python"
+
+  subfinder:
+    kind: cli
+    locator: {type: command, value: subfinder}
+    placement: bounded-worker
+    stateful: false
+    context_cost: none
+    side_effects: [passive-network]
+    configuration:
+      required: false
+      files_any: ["${HOME}/.config/subfinder/config.yaml"]
+
+  assetfinder:
+    kind: cli
+    locator: {type: command, value: assetfinder}
+    placement: bounded-worker
+    stateful: false
+    context_cost: none
+    side_effects: [passive-network]
+
+  amass:
+    kind: cli
+    locator: {type: command, value: amass}
+    placement: bounded-worker
+    stateful: false
+    context_cost: none
+    side_effects: [passive-network]
+
+  dnsx:
+    kind: cli
+    locator: {type: command, value: dnsx}
+    placement: bounded-worker
+    stateful: false
+    context_cost: none
+    side_effects: [network-request]
+
+  httpx:
+    kind: cli
+    locator: {type: command, value: httpx}
+    placement: bounded-worker
+    stateful: false
+    context_cost: none
+    side_effects: [network-request]
+
+  katana:
+    kind: cli
+    locator: {type: command, value: katana}
+    placement: bounded-worker
+    stateful: false
+    context_cost: none
+    side_effects: [network-request]
+
+  gau:
+    kind: cli
+    locator: {type: command, value: gau}
+    placement: bounded-worker
+    stateful: false
+    context_cost: none
+    side_effects: [passive-network]
+
+  waybackurls:
+    kind: cli
+    locator: {type: command, value: waybackurls}
+    placement: bounded-worker
+    stateful: false
+    context_cost: none
+    side_effects: [passive-network]
+
+  ffuf:
+    kind: cli
+    locator: {type: command, value: ffuf}
+    placement: bounded-worker
+    stateful: false
+    context_cost: none
+    side_effects: [high-volume-network]
+
+  feroxbuster:
+    kind: cli
+    locator: {type: command, value: feroxbuster}
+    placement: bounded-worker
+    stateful: false
+    context_cost: none
+    side_effects: [high-volume-network]
+
+  dirsearch:
+    kind: cli
+    locator: {type: command, value: dirsearch}
+    placement: bounded-worker
+    stateful: false
+    context_cost: none
+    side_effects: [high-volume-network]
+
+  nuclei:
+    kind: cli
+    locator: {type: command, value: nuclei}
+    placement: bounded-worker
+    stateful: false
+    context_cost: none
+    side_effects: [high-volume-network]
+    configuration:
+      required: true
+      files_all: ["${HOME}/nuclei-templates"]
+
+  interactsh:
+    kind: cli
+    locator: {type: command, value: interactsh-client}
+    placement: main
+    stateful: true
+    context_cost: low
+    side_effects: [external-callback, local-write]
+
+  sqlmap:
+    kind: cli
+    locator: {type: command, value: sqlmap}
+    placement: bounded-worker
+    stateful: true
+    context_cost: none
+    side_effects: [high-volume-network, local-write]
+
+  dalfox:
+    kind: cli
+    locator: {type: command, value: dalfox}
+    placement: bounded-worker
+    stateful: false
+    context_cost: none
+    side_effects: [high-volume-network]
+
+  naabu:
+    kind: cli
+    locator: {type: command, value: naabu}
+    placement: bounded-worker
+    stateful: false
+    context_cost: none
+    side_effects: [high-volume-network]
+
+  nmap:
+    kind: cli
+    locator: {type: command, value: nmap}
+    placement: bounded-worker
+    stateful: false
+    context_cost: none
+    side_effects: [high-volume-network]
+
+  semgrep:
+    kind: cli
+    locator: {type: command, value: semgrep}
+    placement: bounded-worker
+    stateful: false
+    context_cost: none
+    side_effects: [local-read, local-write]
+
+  trufflehog:
+    kind: cli
+    locator: {type: command, value: trufflehog}
+    placement: bounded-worker
+    stateful: false
+    context_cost: none
+    side_effects: [local-read, local-write]
+
+  chromium:
+    kind: cli
+    locator: {type: command, value: chromium}
+    placement: mcp-runtime
+    stateful: true
+    context_cost: none
+    side_effects: [network-request, local-write]
+
+  playwright-mcp:
+    kind: mcp
+    locator:
+      type: path
+      value: "${BB_STACK_ROOT}/.runtime/node_modules/@playwright/mcp/cli.js"
+      interpreter: node
+    placement: shared-main
+    stateful: true
+    context_cost: medium
+    side_effects: [network-request, browser-action, local-write]
+    mcp:
+      name: playwright
+      transport: stdio
+      command: node
+      args:
+        - "${BB_STACK_ROOT}/.runtime/node_modules/@playwright/mcp/cli.js"
+        - --headless
+        - --no-sandbox
+        - --executable-path
+        - "${BB_CHROMIUM_BIN}"
+        - --output-mode
+        - file
+        - --output-dir
+        - "${BB_ARTIFACT_ROOT}/browser"
+        - --save-session
+
+  anastasis-mcp:
+    kind: mcp
+    locator:
+      type: path
+      value: "${BB_STACK_ROOT}/.runtime/node_modules/anastasis-mcp-server/dist/index.js"
+      interpreter: node
+    placement: subagent-inline
+    stateful: false
+    context_cost: high
+    side_effects: [network-request, local-read, local-write]
+    mcp:
+      name: anastasis
+      transport: stdio
+      command: node
+      args: ["${BB_STACK_ROOT}/.runtime/node_modules/anastasis-mcp-server/dist/index.js"]
+
+  osint-mcp:
+    kind: mcp
+    locator:
+      type: path
+      value: "${BB_STACK_ROOT}/.runtime/node_modules/osint-mcp-server/dist/index.js"
+      interpreter: node
+    placement: subagent-inline
+    stateful: false
+    context_cost: high
+    side_effects: [passive-network, local-write]
+    mcp:
+      name: osint
+      transport: stdio
+      command: node
+      args: ["${BB_STACK_ROOT}/.runtime/node_modules/osint-mcp-server/dist/index.js"]
+
+  mihomo-http:
+    kind: service
+    locator: {type: tcp, host: 127.0.0.1, port: 7890}
+    placement: runtime
+    stateful: true
+    context_cost: none
+    side_effects: [network-routing]
+
+  mail-otp:
+    kind: cli
+    locator: {type: command, value: mail-otp}
+    placement: main
+    stateful: true
+    context_cost: low
+    side_effects: [mailbox-read, local-read]
+    configuration:
+      required: true
+      files_all: ["${HOME}/.local/share/pentest-mail/config.env"]
+
+  filecodebox:
+    kind: service
+    locator: {type: command, value: curl}
+    placement: main
+    stateful: false
+    context_cost: none
+    side_effects: [external-upload]
+    configuration:
+      required: true
+      env_all: [BB_FILECODEBOX_URL]
+
+  seclists:
+    kind: data
+    locator: {type: path, value: "${BB_STACK_ROOT}/.runtime/data/SecLists"}
+    placement: runtime
+    stateful: false
+    context_cost: none
+    side_effects: [local-read]
+
+  gf-patterns:
+    kind: data
+    locator: {type: path, value: "${HOME}/.gf"}
+    placement: runtime
+    stateful: false
+    context_cost: none
+    side_effects: [local-read]
+
+  adb:
+    kind: cli
+    locator: {type: command, value: adb}
+    placement: main
+    stateful: true
+    context_cost: none
+    side_effects: [device-read, device-write]
+
+  apktool:
+    kind: cli
+    locator: {type: command, value: apktool}
+    placement: bounded-worker
+    stateful: false
+    context_cost: none
+    side_effects: [local-read, local-write]
+
+  jadx:
+    kind: cli
+    locator: {type: command, value: jadx}
+    placement: bounded-worker
+    stateful: false
+    context_cost: none
+    side_effects: [local-read, local-write]
+
+  frida:
+    kind: cli
+    locator: {type: command, value: frida}
+    placement: main
+    stateful: true
+    context_cost: low
+    side_effects: [device-read, device-write]
+
+  objection:
+    kind: cli
+    locator: {type: command, value: objection}
+    placement: main
+    stateful: true
+    context_cost: low
+    side_effects: [device-read, device-write]
+
+  radare2:
+    kind: cli
+    locator: {type: command, value: r2}
+    placement: bounded-worker
+    stateful: true
+    context_cost: low
+    side_effects: [local-read, local-write, process-execution]
+
+capabilities:
+  http.raw: {strategy: any, providers: [curl]}
+  data.json: {strategy: any, providers: [jq]}
+  tls.inspect: {strategy: any, providers: [openssl]}
+  runtime.python: {strategy: any, providers: [pentest-python, project-python]}
+  recon.subdomains: {strategy: any, providers: [subfinder, assetfinder, amass]}
+  recon.resolve: {strategy: any, providers: [dnsx]}
+  web.probe: {strategy: any, providers: [httpx]}
+  web.crawl: {strategy: any, providers: [katana, gau, waybackurls]}
+  web.fuzz: {strategy: any, providers: [ffuf, feroxbuster, dirsearch]}
+  web.templates: {strategy: any, providers: [nuclei]}
+  web.sqli-assist: {strategy: any, providers: [sqlmap]}
+  web.xss-assist: {strategy: any, providers: [dalfox]}
+  network.scan: {strategy: any, providers: [naabu, nmap]}
+  source.audit: {strategy: any, providers: [semgrep, trufflehog]}
+  browser.stateful: {strategy: any, providers: [playwright-mcp]}
+  analysis.javascript: {strategy: any, providers: [anastasis-mcp]}
+  osint.correlation: {strategy: any, providers: [osint-mcp]}
+  oob.callback: {strategy: any, providers: [interactsh]}
+  proxy.http: {strategy: any, providers: [mihomo-http]}
+  otp.mail: {strategy: any, providers: [mail-otp]}
+  delivery.file-share: {strategy: any, providers: [filecodebox]}
+  data.wordlists: {strategy: any, providers: [seclists, gf-patterns]}
+  android.device: {strategy: any, providers: [adb]}
+  android.static: {strategy: all, providers: [apktool, jadx]}
+  android.dynamic: {strategy: any, providers: [frida, objection]}
+  reverse.static: {strategy: any, providers: [radare2, jadx]}

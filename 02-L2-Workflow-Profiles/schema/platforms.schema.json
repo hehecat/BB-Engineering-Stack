@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:bb-engineering-stack:schema:platforms:v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "platforms"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "platforms": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {"pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"},
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["workflows", "report_language", "request_identification", "identity_value_from", "delivery_overlay"],
+        "properties": {
+          "workflows": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {"enum": ["bug-bounty", "ctf", "lab"]}
+          },
+          "report_language": {"type": "string", "minLength": 1},
+          "request_identification": {"enum": ["required", "optional", "program-defined", "disabled"]},
+          "identity_value_from": {"type": ["string", "null"]},
+          "delivery_overlay": {"type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"}
+        }
+      }
+    }
+  }
+}

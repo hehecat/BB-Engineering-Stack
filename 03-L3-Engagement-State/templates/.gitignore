@@ -1,0 +1,10 @@
+notes/*.local.md
+*.local.env
+*.local.json
+*.jwt
+*.cookie
+cookies.txt
+secrets/
+deliverables/*.tar
+deliverables/*.tar.gz
+deliverables/*.zip

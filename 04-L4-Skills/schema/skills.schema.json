@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:bb-engineering-stack:schema:skills:v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "skills"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "skills": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {"pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"},
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["role", "source", "provenance"],
+        "properties": {
+          "role": {"enum": ["orchestrator", "methodology", "specialist", "automation", "reference", "delivery"]},
+          "source": {"type": "string", "pattern": "^(?:library|vendor)/[a-zA-Z0-9._/-]+$"},
+          "provenance": {"type": "string", "minLength": 1}
+        }
+      }
+    }
+  }
+}

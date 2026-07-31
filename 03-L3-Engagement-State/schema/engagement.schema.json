@@ -1,0 +1,308 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:bb-engineering-stack:schema:engagement:v1",
+  "title": "BB Engineering Stack Engagement",
+  "type": "object",
+  "additionalProperties": false,
+  "$defs": {
+    "scopeAsset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "pattern"],
+      "properties": {
+        "type": {
+          "enum": ["domain", "host", "url-prefix", "cidr", "app-id", "repository", "other"]
+        },
+        "pattern": {
+          "type": "string",
+          "minLength": 1
+        },
+        "notes": {
+          "type": "string"
+        }
+      }
+    }
+  },
+  "required": [
+    "schema_version",
+    "slug",
+    "title",
+    "workflow",
+    "platform",
+    "mode",
+    "lifecycle",
+    "phase",
+    "timestamps",
+    "authorization",
+    "scope",
+    "overlays",
+    "identity",
+    "current",
+    "checkpoint"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "slug": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1
+    },
+    "workflow": {
+      "enum": ["bug-bounty", "ctf", "lab"]
+    },
+    "platform": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+    },
+    "mode": {
+      "enum": ["interactive", "continuous"]
+    },
+    "lifecycle": {
+      "enum": ["active", "paused", "blocked", "closed"]
+    },
+    "phase": {
+      "type": "string"
+    },
+    "timestamps": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["created_at", "updated_at"],
+      "properties": {
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "authorization": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "source"],
+      "properties": {
+        "status": {
+          "enum": ["confirmed", "not-required"]
+        },
+        "source": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["file", "revision", "reviewed_at", "in_scope", "out_of_scope"],
+      "properties": {
+        "file": {
+          "const": "notes/SCOPE.md"
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "reviewed_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "in_scope": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/scopeAsset"
+          }
+        },
+        "out_of_scope": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/scopeAsset"
+          }
+        }
+      }
+    },
+    "overlays": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["delivery"],
+      "properties": {
+        "delivery": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+          }
+        }
+      }
+    },
+    "identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["request_identification", "contexts"],
+      "properties": {
+        "request_identification": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["enabled", "value_from"],
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "value_from": {
+              "type": ["string", "null"]
+            }
+          }
+        },
+        "contexts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "role", "secret_ref"],
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+              },
+              "role": {
+                "type": "string",
+                "minLength": 1
+              },
+              "secret_ref": {
+                "type": ["string", "null"],
+                "pattern": "^notes/LAB-CREDS\\.local\\.md(?:#[-a-z0-9]+)?$"
+              }
+            }
+          }
+        }
+      }
+    },
+    "current": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["lead_id", "finding_id", "next_action", "stop_reason"],
+      "properties": {
+        "lead_id": {
+          "type": ["string", "null"],
+          "pattern": "^H-[0-9]{3,}$"
+        },
+        "finding_id": {
+          "type": ["string", "null"],
+          "pattern": "^F-[0-9]{3,}$"
+        },
+        "next_action": {
+          "type": "string",
+          "minLength": 1
+        },
+        "stop_reason": {
+          "type": ["string", "null"]
+        }
+      }
+    },
+    "checkpoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["handoff_file", "updated_at"],
+      "properties": {
+        "handoff_file": {
+          "const": "SESSION-HANDOFF.md"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "identity": {
+            "properties": {
+              "request_identification": {
+                "properties": {
+                  "enabled": {
+                    "const": true
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "identity": {
+            "properties": {
+              "request_identification": {
+                "properties": {
+                  "value_from": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "workflow": {
+            "const": "bug-bounty"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "phase": {
+            "enum": ["explore", "prove", "ship"]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "workflow": {
+            "const": "ctf"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "phase": {
+            "enum": ["triage", "solve", "writeup"]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "workflow": {
+            "const": "lab"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "phase": {
+            "enum": ["reproduce", "develop", "verify"]
+          }
+        }
+      }
+    }
+  ]
+}

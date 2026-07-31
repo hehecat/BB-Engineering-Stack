@@ -1,0 +1,10 @@
+schema_version: 1
+name: android
+required:
+  - runtime.python
+  - android.device
+  - android.static
+optional:
+  - android.dynamic
+  - http.raw
+  - proxy.http

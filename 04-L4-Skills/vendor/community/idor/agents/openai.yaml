@@ -1,0 +1,4 @@
+interface:
+  display_name: "Advanced IDOR"
+  short_description: "Deep BOLA and object authorization testing"
+  default_prompt: "Use $idor to map IDOR/BOLA risk across the provided app context, endpoint inventory, or HTTP/API traffic."

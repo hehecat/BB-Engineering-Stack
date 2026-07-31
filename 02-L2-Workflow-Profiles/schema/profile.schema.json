@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:bb-engineering-stack:schema:runtime-profile:v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "name",
+    "prompt_mode",
+    "workflow",
+    "platform",
+    "default_mode",
+    "l5_profile",
+    "skill_profile",
+    "max_custom_tokens"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "name": {"type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"},
+    "prompt_mode": {"enum": ["append", "replacement"]},
+    "workflow": {"enum": ["bug-bounty", "ctf", "lab"]},
+    "platform": {"type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"},
+    "default_mode": {"enum": ["interactive", "continuous"]},
+    "l5_profile": {"type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"},
+    "skill_profile": {"type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"},
+    "max_custom_tokens": {"type": "integer", "minimum": 200, "maximum": 5000}
+  }
+}

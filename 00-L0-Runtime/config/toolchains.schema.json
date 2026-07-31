@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:bb-engineering-stack:schema:toolchains:v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "toolchains"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "toolchains": {
+      "type": "object",
+      "required": ["node", "go"],
+      "additionalProperties": {
+        "type": "object",
+        "required": ["version", "files"],
+        "properties": {
+          "version": {"type": ["string", "number"]},
+          "minimum": {"type": ["string", "number"]},
+          "minimum_major": {"type": "integer"},
+          "files": {
+            "type": "object",
+            "required": ["x86_64", "aarch64"],
+            "additionalProperties": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["archive", "url", "sha256", "top_directory"],
+              "properties": {
+                "archive": {"type": "string"},
+                "url": {"type": "string", "format": "uri"},
+                "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+                "top_directory": {"type": "string"}
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

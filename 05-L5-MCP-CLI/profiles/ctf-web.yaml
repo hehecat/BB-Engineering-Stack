@@ -1,0 +1,18 @@
+schema_version: 1
+name: ctf-web
+required:
+  - http.raw
+  - data.json
+  - runtime.python
+  - web.fuzz
+  - browser.stateful
+optional:
+  - tls.inspect
+  - web.probe
+  - web.crawl
+  - web.sqli-assist
+  - web.xss-assist
+  - analysis.javascript
+  - oob.callback
+  - proxy.http
+  - data.wordlists

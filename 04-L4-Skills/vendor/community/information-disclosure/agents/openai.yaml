@@ -1,0 +1,4 @@
+interface:
+  display_name: "Information Disclosure"
+  short_description: "Sensitive data exposure testing"
+  default_prompt: "Use $information-disclosure to map sensitive data exposure across the provided app context, endpoints, or responses."

@@ -1,0 +1,4 @@
+interface:
+  display_name: "CSRF"
+  short_description: "Cross-site request forgery testing"
+  default_prompt: "Use $csrf to map CSRF risk across the provided state-changing flows, endpoints, or HTTP traffic."

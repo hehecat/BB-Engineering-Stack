@@ -1,0 +1,4 @@
+interface:
+  display_name: "API Hacking"
+  short_description: "API security testing methodology"
+  default_prompt: "Use $api-hacking to map API security risk across the provided endpoints, app context, or HTTP/API traffic."

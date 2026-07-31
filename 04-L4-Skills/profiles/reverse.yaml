@@ -1,0 +1,5 @@
+schema_version: 1
+name: reverse
+orchestrator: reverse-orchestrator
+required: [reverse-orchestrator, solve-challenge]
+optional: [android-pentest, ctf-writeup]

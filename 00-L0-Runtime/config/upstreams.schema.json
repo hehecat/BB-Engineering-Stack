@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:bb-engineering-stack:schema:upstreams:v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "policy", "inventory", "components"],
+  "$defs": {
+    "relativePath": {
+      "type": "string",
+      "minLength": 1,
+      "not": {"pattern": "^(?:/|[A-Za-z]:[\\\\/])"}
+    },
+    "componentName": {
+      "type": "string",
+      "pattern": "^(?:skill|mcp|tool)\\.[a-z0-9]+(?:[.-][a-z0-9]+)*$"
+    },
+    "component": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["category", "target", "checker", "license"],
+      "properties": {
+        "category": {"enum": ["skills", "mcp", "tools"]},
+        "target": {"type": "string", "minLength": 1},
+        "checker": {"enum": ["github-tree", "github-commit", "npm"]},
+        "repository": {"type": "string", "format": "uri"},
+        "branch": {"type": "string", "minLength": 1},
+        "subpath": {"type": "string", "minLength": 1},
+        "current_revision": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "current_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "provider": {"type": "string", "pattern": "^[a-z0-9]+(?:[.-][a-z0-9]+)*$"},
+        "license": {"type": "string", "minLength": 1}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"checker": {"enum": ["github-tree", "github-commit"]}}},
+          "then": {"required": ["repository", "branch", "current_revision"]}
+        },
+        {
+          "if": {"properties": {"checker": {"const": "github-tree"}}},
+          "then": {"required": ["subpath", "current_digest"]}
+        },
+        {
+          "if": {"properties": {"category": {"const": "mcp"}}},
+          "then": {"required": ["provider"]}
+        }
+      ]
+    }
+  },
+  "properties": {
+    "schema_version": {"const": 1},
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["candidate_root", "backup_root", "network_timeout_seconds", "auto_promote"],
+      "properties": {
+        "candidate_root": {"type": "string", "minLength": 1},
+        "backup_root": {"type": "string", "minLength": 1},
+        "network_timeout_seconds": {"type": "integer", "minimum": 5, "maximum": 120},
+        "auto_promote": {"const": false}
+      }
+    },
+    "inventory": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["skills", "mcp_packages", "tools"],
+      "properties": {
+        "skills": {"$ref": "#/$defs/relativePath"},
+        "mcp_packages": {"$ref": "#/$defs/relativePath"},
+        "tools": {"$ref": "#/$defs/relativePath"}
+      }
+    },
+    "components": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {"$ref": "#/$defs/componentName"},
+      "additionalProperties": {"$ref": "#/$defs/component"}
+    }
+  }
+}

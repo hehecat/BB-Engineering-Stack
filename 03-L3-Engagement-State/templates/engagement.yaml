@@ -1,0 +1,45 @@
+schema_version: 1
+slug: example-program
+title: Example Program
+workflow: bug-bounty
+platform: generic-vdp
+mode: interactive
+lifecycle: active
+phase: explore
+
+timestamps:
+  created_at: "2026-01-01T00:00:00Z"
+  updated_at: "2026-01-01T00:00:00Z"
+
+authorization:
+  status: confirmed
+  source: "User instruction and program policy captured in notes/SCOPE.md"
+
+scope:
+  file: notes/SCOPE.md
+  revision: 1
+  reviewed_at: "2026-01-01T00:00:00Z"
+  in_scope:
+    - type: host
+      pattern: example.invalid
+      notes: Example value replaced during engagement creation
+  out_of_scope: []
+
+overlays:
+  delivery: []
+
+identity:
+  request_identification:
+    enabled: false
+    value_from: null
+  contexts: []
+
+current:
+  lead_id: null
+  finding_id: null
+  next_action: "Read notes/SCOPE.md and select the first in-scope lead"
+  stop_reason: null
+
+checkpoint:
+  handoff_file: SESSION-HANDOFF.md
+  updated_at: "2026-01-01T00:00:00Z"

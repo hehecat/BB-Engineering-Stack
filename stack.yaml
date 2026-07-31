@@ -1,0 +1,41 @@
+schema_version: 1
+name: bb-engineering-stack
+version_file: VERSION
+minimum_runtime:
+  python: "3.11"
+  node: "20"
+  claude_code: "2.1"
+
+paths:
+  runtime: .runtime
+  global_prompt: 01-L1-Global-Prompt
+  workflow_profiles: 02-L2-Workflow-Profiles
+  engagement_state: 03-L3-Engagement-State
+  skills: 04-L4-Skills
+  capabilities: 05-L5-MCP-CLI
+  docs: 90-Docs
+  verification: 99-Verification
+
+defaults:
+  profile: ctf-quick
+  workflow_profiles:
+    bug-bounty: bb-interactive
+    ctf: ctf-quick
+    lab: lab-replacement
+  work_root: "${HOME}/BB-Workspaces"
+  config_home: "${HOME}/.config/bb-stack"
+  claude_config_dir: "${HOME}/.claude"
+
+registries:
+  runtime_profiles: 02-L2-Workflow-Profiles/profiles
+  platforms: 02-L2-Workflow-Profiles/platforms
+  skill_manifest: 04-L4-Skills/skills.yaml
+  skill_profiles: 04-L4-Skills/profiles
+  capabilities: 05-L5-MCP-CLI/capabilities.yaml
+  capability_profiles: 05-L5-MCP-CLI/profiles
+  upstreams: 00-L0-Runtime/config/upstreams.yaml
+
+keysmith:
+  repository: https://github.com/Jia-Ethan/claude-keysmith.git
+  revision: acb9d0b7ade07415c5e50117d2a55cc50a0be64e
+  cache_dir: "${BB_CONFIG_HOME}/vendor/claude-keysmith"

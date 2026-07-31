@@ -1,0 +1,4 @@
+interface:
+  display_name: "SSTI"
+  short_description: "Server-side template injection testing"
+  default_prompt: "Use $ssti to map server-side template injection risk across the provided renderers, templates, or endpoints."

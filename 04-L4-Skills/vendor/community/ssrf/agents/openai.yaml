@@ -1,0 +1,4 @@
+interface:
+  display_name: "SSRF"
+  short_description: "Server-side request forgery testing"
+  default_prompt: "Use $ssrf to map SSRF risk across the provided URL-fetching endpoints, callbacks, or traffic."

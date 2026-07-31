@@ -1,0 +1,32 @@
+schema_version: 1
+platforms:
+  generic-vdp:
+    workflows: [bug-bounty]
+    report_language: program-defined
+    request_identification: optional
+    identity_value_from: null
+    delivery_overlay: generic-vdp
+  hackerone:
+    workflows: [bug-bounty]
+    report_language: en
+    request_identification: required
+    identity_value_from: BB_H1_USERNAME
+    delivery_overlay: hackerone
+  butian:
+    workflows: [bug-bounty]
+    report_language: zh-CN
+    request_identification: program-defined
+    identity_value_from: null
+    delivery_overlay: butian
+  standalone-ctf:
+    workflows: [ctf]
+    report_language: challenge-defined
+    request_identification: disabled
+    identity_value_from: null
+    delivery_overlay: ctf-writeup
+  local-lab:
+    workflows: [lab]
+    report_language: operator-defined
+    request_identification: disabled
+    identity_value_from: null
+    delivery_overlay: lab-notes

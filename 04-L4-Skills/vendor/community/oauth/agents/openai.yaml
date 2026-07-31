@@ -1,0 +1,4 @@
+interface:
+  display_name: "OAuth"
+  short_description: "OAuth redirect and token-flow testing"
+  default_prompt: "Use $oauth to map OAuth security risk across the provided auth flows, redirects, or HTTP traffic."

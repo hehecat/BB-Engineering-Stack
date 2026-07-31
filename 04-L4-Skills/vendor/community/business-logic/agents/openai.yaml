@@ -1,0 +1,4 @@
+interface:
+  display_name: "Business Logic"
+  short_description: "Workflow and product-rule abuse testing"
+  default_prompt: "Use $business-logic to map business logic risk across the provided product flows, endpoints, or HTTP/API traffic."

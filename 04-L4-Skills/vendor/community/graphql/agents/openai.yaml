@@ -1,0 +1,4 @@
+interface:
+  display_name: "GraphQL"
+  short_description: "GraphQL resolver and mutation testing"
+  default_prompt: "Use $graphql to map GraphQL security risk across the provided operations, schema hints, or HTTP traffic."

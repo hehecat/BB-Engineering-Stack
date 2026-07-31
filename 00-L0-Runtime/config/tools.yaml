@@ -1,0 +1,144 @@
+schema_version: 1
+
+profiles:
+  minimal:
+    required: [system-base]
+    optional: [mihomo]
+  ctf-web:
+    required: [system-base, ffuf, chromium, seclists]
+    optional: [httpx, katana, gau, sqlmap, interactsh-client]
+  web:
+    required: [system-base, subfinder, dnsx, httpx, katana, ffuf, nuclei, chromium, seclists]
+    optional: [assetfinder, amass, gau, waybackurls, interactsh-client, dalfox, naabu, sqlmap, semgrep, trufflehog]
+  android:
+    required: [system-base, adb, apktool, jadx]
+    optional: [frida, objection]
+  reverse:
+    required: [system-base, radare2]
+    optional: [jadx, apktool]
+
+installers:
+  system-base:
+    kind: apt
+    checks: [curl, jq, openssl, git, python3]
+    packages: [ca-certificates, curl, git, jq, openssl, python3, python3-venv, unzip]
+  chromium:
+    kind: apt
+    checks: [chromium]
+    packages: [chromium]
+  adb:
+    kind: apt
+    checks: [adb]
+    packages: [adb]
+  apktool:
+    kind: apt
+    checks: [apktool]
+    packages: [apktool]
+  jadx:
+    kind: apt
+    checks: [jadx]
+    packages: [jadx]
+  radare2:
+    kind: apt
+    checks: [r2]
+    packages: [radare2]
+  sqlmap:
+    kind: apt
+    checks: [sqlmap]
+    packages: [sqlmap]
+  semgrep:
+    kind: pipx
+    checks: [semgrep]
+    package: semgrep==1.130.0
+  frida:
+    kind: pipx
+    checks: [frida]
+    package: frida-tools==14.4.5
+  objection:
+    kind: pipx
+    checks: [objection]
+    package: objection==1.11.0
+  subfinder:
+    kind: go
+    checks: [subfinder]
+    package: github.com/projectdiscovery/subfinder/v2/cmd/subfinder@v2.14.0
+  assetfinder:
+    kind: go
+    checks: [assetfinder]
+    package: github.com/tomnomnom/assetfinder@v0.1.1
+  amass:
+    kind: go
+    checks: [amass]
+    package: github.com/owasp-amass/amass/v5/cmd/amass@v5.1.1
+  dnsx:
+    kind: go
+    checks: [dnsx]
+    package: github.com/projectdiscovery/dnsx/cmd/dnsx@v1.3.0
+  httpx:
+    kind: go
+    checks: [httpx]
+    package: github.com/projectdiscovery/httpx/cmd/httpx@v1.10.0
+  katana:
+    kind: go
+    checks: [katana]
+    package: github.com/projectdiscovery/katana/cmd/katana@v1.6.1
+  gau:
+    kind: go
+    checks: [gau]
+    package: github.com/lc/gau/v2/cmd/gau@v2.2.4
+  waybackurls:
+    kind: go
+    checks: [waybackurls]
+    package: github.com/tomnomnom/waybackurls@v0.1.0
+  ffuf:
+    kind: go
+    checks: [ffuf]
+    package: github.com/ffuf/ffuf/v2@v2.1.0
+  nuclei:
+    kind: go
+    checks: [nuclei]
+    package: github.com/projectdiscovery/nuclei/v3/cmd/nuclei@v3.11.0
+    post_install: [nuclei, -update-templates]
+    post_check: "${HOME}/nuclei-templates"
+  interactsh-client:
+    kind: go
+    checks: [interactsh-client]
+    package: github.com/projectdiscovery/interactsh/cmd/interactsh-client@v1.3.1
+  dalfox:
+    kind: go
+    checks: [dalfox]
+    package: github.com/hahwul/dalfox/v2@v2.13.0
+  naabu:
+    kind: go
+    checks: [naabu]
+    package: github.com/projectdiscovery/naabu/v2/cmd/naabu@v2.6.1
+  trufflehog:
+    kind: archive-binary
+    checks: [trufflehog]
+    binary: trufflehog
+    files:
+      x86_64:
+        archive: trufflehog_3.96.0_linux_amd64.tar.gz
+        url: https://github.com/trufflesecurity/trufflehog/releases/download/v3.96.0/trufflehog_3.96.0_linux_amd64.tar.gz
+        sha256: 7105f1cd6577f058a9e39d0578f1a99c8a1e481e4d3512cd8a09acfe22a0fdc0
+      aarch64:
+        archive: trufflehog_3.96.0_linux_arm64.tar.gz
+        url: https://github.com/trufflesecurity/trufflehog/releases/download/v3.96.0/trufflehog_3.96.0_linux_arm64.tar.gz
+        sha256: 50acd4c7a3b8ebfe5083d8350956057030c44be3515dedd55b45263495c490b2
+  seclists:
+    kind: git-data
+    checks: []
+    repository: https://github.com/danielmiessler/SecLists.git
+    revision: aeb36e9df937d1b77042e5667780e8156cd419f7
+    destination: "${BB_STACK_ROOT}/.runtime/data/SecLists"
+    sparse_paths:
+      - Ai/LLM_Testing
+      - Discovery/Web-Content
+      - Fuzzing/LFI
+      - Fuzzing/XSS
+      - Pattern-Matching
+  mihomo:
+    kind: service
+    checks: []
+    host: 127.0.0.1
+    port: 7890

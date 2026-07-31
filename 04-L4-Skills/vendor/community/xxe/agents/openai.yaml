@@ -1,0 +1,4 @@
+interface:
+  display_name: "XXE"
+  short_description: "XML external entity injection testing"
+  default_prompt: "Use $xxe to map XXE risk across the provided XML endpoints, uploads, converters, or parser flows."

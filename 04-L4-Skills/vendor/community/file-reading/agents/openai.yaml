@@ -1,0 +1,4 @@
+interface:
+  display_name: "File Reading"
+  short_description: "LFI, traversal, and file disclosure testing"
+  default_prompt: "Use $file-reading to map file-read and path traversal risk across the provided endpoints, uploads, or artifacts."

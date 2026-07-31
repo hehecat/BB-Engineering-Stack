@@ -1,0 +1,4 @@
+interface:
+  display_name: "Race Condition"
+  short_description: "Concurrency and state-transition testing"
+  default_prompt: "Use $race-condition to map race-condition risk across the provided workflows, endpoints, or HTTP/API traffic."

@@ -1,0 +1,4 @@
+interface:
+  display_name: "SQL Injection"
+  short_description: "SQLi and database query abuse testing"
+  default_prompt: "Use $sqli to map SQL injection risk across the provided endpoints, filters, or traffic."

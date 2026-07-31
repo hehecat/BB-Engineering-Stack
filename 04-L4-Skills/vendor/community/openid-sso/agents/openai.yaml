@@ -1,0 +1,4 @@
+interface:
+  display_name: "OpenID and SSO"
+  short_description: "OIDC, SAML, and SSO trust testing"
+  default_prompt: "Use $openid-sso to map SSO and federated identity risk across the provided auth flows or configuration."

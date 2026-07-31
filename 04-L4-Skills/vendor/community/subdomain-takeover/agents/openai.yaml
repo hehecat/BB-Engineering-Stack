@@ -1,0 +1,4 @@
+interface:
+  display_name: "Subdomain Takeover"
+  short_description: "Dangling DNS and trusted-origin testing"
+  default_prompt: "Use $subdomain-takeover to map takeover risk across the provided domains, DNS records, or asset inventory."

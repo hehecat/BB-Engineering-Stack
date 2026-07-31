@@ -1,0 +1,12 @@
+.venv/
+.runtime/
+.cache/
+generated/
+__pycache__/
+*.pyc
+*.egg-info/
+*.log
+.env
+*.local.*
+05-L5-MCP-CLI/generated/*
+!05-L5-MCP-CLI/generated/.gitignore

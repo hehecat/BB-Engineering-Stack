@@ -1,0 +1,12 @@
+#!/usr/bin/env sh
+set -eu
+SCRIPT=$0
+while [ -L "$SCRIPT" ]; do
+  LINK=$(readlink "$SCRIPT")
+  case "$LINK" in
+    /*) SCRIPT=$LINK ;;
+    *) SCRIPT=$(dirname -- "$SCRIPT")/$LINK ;;
+  esac
+done
+ROOT=${BB_STACK_ROOT:-"$(CDPATH= cd -- "$(dirname -- "$SCRIPT")/../.." && pwd -P)"}
+exec "$ROOT/00-L0-Runtime/bin/bb-stack" launch "$@"

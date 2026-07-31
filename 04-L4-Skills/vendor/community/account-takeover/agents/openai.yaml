@@ -1,0 +1,4 @@
+interface:
+  display_name: "Account Takeover"
+  short_description: "ATO testing across auth and recovery flows"
+  default_prompt: "Use $account-takeover to map account takeover risk across the provided auth flows, app context, or HTTP/API traffic."

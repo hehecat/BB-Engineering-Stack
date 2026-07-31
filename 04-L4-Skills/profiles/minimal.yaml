@@ -1,0 +1,5 @@
+schema_version: 1
+name: minimal
+orchestrator: ctf-orchestrator
+required: [ctf-orchestrator]
+optional: [solve-challenge]

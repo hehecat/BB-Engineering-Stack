@@ -1,0 +1,4 @@
+interface:
+  display_name: "XSS"
+  short_description: "Cross-site scripting testing"
+  default_prompt: "Use $xss to map cross-site scripting risk across the provided pages, inputs, or client code."

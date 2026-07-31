@@ -1,0 +1,4 @@
+interface:
+  display_name: "Request Smuggling"
+  short_description: "HTTP desync and parser mismatch testing"
+  default_prompt: "Use $request-smuggling to map HTTP desync risk across the provided hosts, proxy stack, or raw requests."

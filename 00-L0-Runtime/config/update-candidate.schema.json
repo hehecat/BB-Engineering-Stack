@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:bb-engineering-stack:schema:update-candidate:v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "component",
+    "category",
+    "checker",
+    "current",
+    "latest",
+    "created_at",
+    "state"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "component": {
+      "type": "string",
+      "pattern": "^(?:skill|mcp|tool)\\.[a-z0-9]+(?:[.-][a-z0-9]+)*$"
+    },
+    "category": {"enum": ["skills", "mcp", "tools"]},
+    "checker": {"type": "string", "minLength": 1},
+    "current": {"type": ["string", "null"]},
+    "latest": {"type": ["string", "null"]},
+    "created_at": {"type": "string", "format": "date-time"},
+    "state": {
+      "enum": [
+        "staged",
+        "review-required",
+        "no-content-change",
+        "stage-failed",
+        "validation-failed",
+        "validated",
+        "promoted",
+        "rolled-back"
+      ]
+    },
+    "candidate_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "source": {"type": "string", "format": "uri"},
+    "integrity": {"type": "string", "minLength": 1},
+    "reason": {"type": "string", "minLength": 1},
+    "error": {"type": "string", "minLength": 1},
+    "validation": {"type": "object"},
+    "validated_at": {"type": "string", "format": "date-time"},
+    "promoted_at": {"type": "string", "format": "date-time"},
+    "backup": {"type": "string", "minLength": 1},
+    "rolled_back_at": {"type": "string", "format": "date-time"}
+  }
+}

@@ -1,0 +1,4 @@
+interface:
+  display_name: "MFA Bypass"
+  short_description: "Two-factor and MFA bypass testing"
+  default_prompt: "Use $mfa-bypass to map MFA bypass risk across the provided login, recovery, or account-security flows."
