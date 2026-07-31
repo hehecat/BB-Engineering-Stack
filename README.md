@@ -37,16 +37,29 @@ BB_CONFIG_HOME=$HOME/.config/bb-stack
 ```bash
 ./00-L0-Runtime/bin/bootstrap --profile ctf-web
 source "$HOME/.config/bb-stack/env.sh"
-bb-stack doctor --profile ctf-web --strict --probe-mcp
+bb-stack status --profile ctf-web --strict --probe-mcp
 bb-stack new --workflow ctf --platform standalone-ctf challenge-name TARGET
-bb-claude --profile ctf-quick --engagement "$HOME/BB-Workspaces/challenge-name"
+bb-stack launch --profile ctf-quick --engagement challenge-name
 ```
 
 No engagement data belongs in this source repository.
 
-For Bug Bounty use `bootstrap --profile web`, create a `bug-bounty` engagement,
-then launch `bb-interactive` or `bb-continuous`. See
-[`90-Docs/QUICKSTART.md`](90-Docs/QUICKSTART.md).
+`bb-stack` is the control plane for the complete lifecycle. `bb-claude` is only
+a convenience wrapper around `bb-stack launch`.
+
+```text
+bootstrap -> status -> new -> launch -> engagement checkpoint -> updates check
+```
+
+For Bug Bounty use `bootstrap --profile web`, create a `bug-bounty` Engagement,
+then launch `bb-interactive` or `bb-continuous`. The unified status view reports
+resolved roots, Prompt composition, Engagement state, Claude/Codex Skills,
+MCP/CLI providers, proxy application, personal integrations, and exact repair
+actions.
+
+See [`90-Docs/QUICKSTART.md`](90-Docs/QUICKSTART.md) for the end-to-end flow and
+[`90-Docs/CONFIGURATION.md`](90-Docs/CONFIGURATION.md) for machine-local roots,
+proxy, HackerOne identity, OTP, file delivery, and Keysmith.
 
 Check pinned dependencies without changing them:
 

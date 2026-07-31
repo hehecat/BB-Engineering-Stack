@@ -6,7 +6,7 @@ Audited: 2026-07-31
 
 | Layer | Acceptance evidence | Result |
 | --- | --- | --- |
-| L0 Runtime | clean bootstrap, deterministic PATH, pinned Python/Node, tool profiles, launchers, Keysmith adapter, staged updates | pass |
+| L0 Runtime | clean bootstrap, deterministic PATH, unified status, pinned Python/Node, tool profiles, launchers, Keysmith adapter, staged updates | pass |
 | L1 Global Prompt | append and replacement fragments are platform-neutral and budgeted | pass |
 | L2 Workflow Profiles | 5 runtime profiles and 5 platform overlays validate and render | pass |
 | L3 Engagement State | CTF/BB/Lab create, validate, lifecycle, checkpoint, migration preview | pass |
@@ -20,7 +20,10 @@ install routes; device-specific provisioning remains machine-dependent.
 ## Verified Results
 
 - Contract and lifecycle suite: pass.
+- Unified status contracts (roots, Prompt, Engagement, Skills, MCP/CLI, proxy,
+  personal integrations, redaction): pass.
 - Fresh HOME/non-default clone bootstrap: pass.
+- Fresh HOME strict unified status: pass.
 - Real Claude Code Engagement smoke: pass.
 - Isolated Keysmith install/status/uninstall: pass.
 - Playwright MCP: connected, 24 tools.
@@ -45,6 +48,7 @@ install routes; device-specific provisioning remains machine-dependent.
 
 ## Publication Step
 
-The local source repository has no operator identity, initial commit, or remote.
-Set those explicitly, commit only tracked source, then push to the chosen private
-or public remote. Never add `.runtime`, `$BB_CONFIG_HOME`, or `$BB_WORK_ROOT`.
+The local source repository has an initial commit and repository-local Git
+identity. No remote is configured. Add the chosen private or public remote,
+review tracked source, then push. Never add `.runtime`, `$BB_CONFIG_HOME`, or
+`$BB_WORK_ROOT`.

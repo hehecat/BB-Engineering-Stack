@@ -309,6 +309,7 @@ class RuntimeManager:
                 '    export HTTP_PROXY="${BB_HTTP_PROXY:-http://127.0.0.1:7890}"',
                 '    export HTTPS_PROXY="${BB_HTTP_PROXY:-http://127.0.0.1:7890}"',
                 '    export ALL_PROXY="${BB_SOCKS_PROXY:-socks5://127.0.0.1:7891}"',
+                '    unset http_proxy https_proxy all_proxy',
                 "    ;;",
                 "  direct) unset HTTP_PROXY HTTPS_PROXY ALL_PROXY http_proxy https_proxy all_proxy ;;",
                 '  *) printf "bb-stack: unknown BB_PROXY_MODE=%s\\n" "$BB_PROXY_MODE" >&2 ;;',

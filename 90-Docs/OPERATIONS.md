@@ -4,13 +4,18 @@
 
 ```bash
 bb-stack new SLUG TARGET --workflow ctf --platform standalone-ctf
+bb-stack status --profile ctf-web --engagement SLUG --strict
 bb-stack engagement validate SLUG
-bb-claude --profile ctf-quick --engagement SLUG
+bb-stack launch --profile ctf-quick --engagement SLUG
 ```
 
 The launcher changes its working directory to the Engagement. Claude reads
 `engagement.yaml`, `notes/SCOPE.md`, `SESSION-HANDOFF.md`, and `STATUS.md` before
 selecting work.
+
+For Bug Bounty, use profile `web` with `bb-interactive` or `bb-continuous`.
+`bb-stack status --profile web --engagement SLUG` derives the platform and mode
+from `engagement.yaml`, then checks the matching personal requirements.
 
 ## Lifecycle
 
@@ -31,3 +36,19 @@ local files with mode 600.
 Use an Engagement created with `--mode continuous` and launch
 `bb-continuous`. Specialist Skill pivot rules close one lead; they do not close
 the Engagement. SHIP starts only when requested.
+
+## Unified Status
+
+Run the local dashboard before launch, after configuration changes, and after
+moving the stack to another machine:
+
+```bash
+bb-stack status --profile ctf-web
+bb-stack status --profile web --platform hackerone --probe-mcp
+bb-stack status --profile web --engagement SLUG --strict --json
+```
+
+`--strict` returns nonzero only for required failures. Missing optional OTP,
+file delivery, Codex Skills, or Keysmith deployment remains visible without
+blocking an unrelated CTF workflow. `--check-external` is opt-in because it
+contacts configured external services.

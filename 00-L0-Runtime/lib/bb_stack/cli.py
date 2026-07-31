@@ -17,6 +17,7 @@ from .paths import StackPaths
 from .profiles import ProfileRegistry
 from .runtime import RuntimeManager
 from .skills import SkillRegistry
+from .status import StackStatus
 from .updates import UpdateManager
 from .validation import validate
 
@@ -41,6 +42,26 @@ def build_parser() -> argparse.ArgumentParser:
 
     validate_cmd = commands.add_parser("validate", help="validate all stack contracts")
     validate_cmd.add_argument("--json", action="store_true")
+
+    status = commands.add_parser(
+        "status", help="show unified paths, Prompt, Skills, MCP, runtime, and personal configuration"
+    )
+    status.add_argument(
+        "--profile",
+        default="ctf-web",
+        choices=["minimal", "ctf-web", "web", "android", "reverse"],
+    )
+    status.add_argument("--workflow-profile")
+    status.add_argument(
+        "--platform",
+        choices=["generic-vdp", "hackerone", "butian", "standalone-ctf", "local-lab"],
+    )
+    status.add_argument("--probe-mcp", action="store_true")
+    status.add_argument("--include-high-context-mcp", action="store_true")
+    status.add_argument("--check-external", action="store_true")
+    status.add_argument("--engagement")
+    status.add_argument("--strict", action="store_true")
+    status.add_argument("--json", action="store_true")
 
     bootstrap = commands.add_parser("bootstrap", help="create the local runtime and install a profile")
     bootstrap.add_argument("--profile", default="ctf-web", choices=["minimal", "ctf-web", "web", "android", "reverse"])
@@ -200,6 +221,22 @@ def command(args: argparse.Namespace, paths: StackPaths) -> int:
         }
         emit(result, args.json)
         return 0
+    if args.command == "status":
+        manager = StackStatus(paths)
+        report = manager.collect(
+            args.profile,
+            workflow_profile=args.workflow_profile,
+            platform=args.platform,
+            probe_mcp=args.probe_mcp,
+            include_high_context_mcp=args.include_high_context_mcp,
+            check_external=args.check_external,
+            engagement=args.engagement,
+        )
+        if args.json:
+            emit(report, True)
+        else:
+            print(manager.render_text(report))
+        return 1 if args.strict and not report["ready"] else 0
     if args.command == "bootstrap":
         result = RuntimeManager(paths).bootstrap(
             args.profile,
