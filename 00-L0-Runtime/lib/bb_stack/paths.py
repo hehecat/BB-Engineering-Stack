@@ -91,7 +91,7 @@ class StackPaths:
             env["BB_ARTIFACT_ROOT"] = str(artifact_root.resolve())
         return env
 
-    def runtime_path(self) -> str:
+    def runtime_path(self, extra_path: str | None = None) -> str:
         nvm_bins = sorted(
             (self.home / ".nvm" / "versions" / "node").glob("*/bin"), reverse=True
         )
@@ -115,7 +115,11 @@ class StackPaths:
             Path("/sbin"),
             Path("/bin"),
         ]
-        extra = os.environ.get("BB_EXTRA_PATH", "").split(os.pathsep)
+        extra = (
+            os.environ.get("BB_EXTRA_PATH", "")
+            if extra_path is None
+            else extra_path
+        ).split(os.pathsep)
         ordered: list[str] = []
         for entry in [str(path) for path in entries] + extra:
             if entry and entry not in ordered:

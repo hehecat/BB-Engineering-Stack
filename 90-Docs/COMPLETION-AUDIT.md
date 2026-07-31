@@ -6,7 +6,7 @@ Audited: 2026-07-31
 
 | Layer | Acceptance evidence | Result |
 | --- | --- | --- |
-| L0 Runtime | clean bootstrap, deterministic PATH, unified status, first-party mail OTP, pinned Python/Node, tool profiles, launchers, Keysmith adapter, staged updates | pass |
+| L0 Runtime | clean bootstrap, safe machine configurator, portable export/import, deterministic PATH, unified status, first-party mail OTP, pinned Python/Node, tool profiles, launchers, Keysmith adapter, staged updates | pass |
 | L1 Global Prompt | append and replacement fragments are platform-neutral and budgeted | pass |
 | L2 Workflow Profiles | 5 runtime profiles and 5 platform overlays validate and render | pass |
 | L3 Engagement State | CTF/BB/Lab create, validate, lifecycle, checkpoint, migration preview | pass |
@@ -24,6 +24,8 @@ install routes; device-specific provisioning remains machine-dependent.
   personal integrations, redaction): pass.
 - Mail OTP mode-600 config, MIME extraction, password/XOAUTH2, and Fake IMAP
   contracts: pass.
+- Literal machine config, non-executing generated environment, portable
+  secret exclusion, preview/conflict import, and isolated round trip: pass.
 - Fresh HOME/non-default clone bootstrap: pass.
 - Fresh HOME strict unified status: pass.
 - Real Claude Code Engagement smoke: pass.

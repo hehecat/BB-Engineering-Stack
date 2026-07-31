@@ -14,6 +14,8 @@ git clone YOUR_STACK_REMOTE "$HOME/BB-Engineering-Stack"
 cd "$HOME/BB-Engineering-Stack"
 ./00-L0-Runtime/bin/bootstrap --profile ctf-web
 source "$HOME/.config/bb-stack/env.sh"
+bb-stack configure
+source "$HOME/.config/bb-stack/env.sh"
 bb-stack status --profile ctf-web --strict --probe-mcp
 
 bb-stack new ctf-demo https://challenge.example \
@@ -26,6 +28,8 @@ bb-stack launch --profile ctf-quick --engagement ctf-demo
 ```bash
 ./00-L0-Runtime/bin/bootstrap --profile web
 source "$HOME/.config/bb-stack/env.sh"
+bb-stack configure
+source "$HOME/.config/bb-stack/env.sh"
 bb-stack status --profile web --strict --probe-mcp
 
 bb-stack new example-bb https://example.com \
@@ -33,7 +37,7 @@ bb-stack new example-bb https://example.com \
 bb-stack launch --profile bb-interactive --engagement example-bb
 ```
 
-For HackerOne, set `BB_H1_USERNAME` in `$BB_CONFIG_HOME/config.env`, create with
+For HackerOne, run `bb-stack configure --h1-username NAME`, create with
 `--platform hackerone`, then copy current written program rules into
 `notes/SCOPE.md` before testing. For Butian use `--platform butian`; it does not
 inherit HackerOne identity or report fields.
@@ -45,12 +49,13 @@ for example, a HackerOne Engagement automatically checks `BB_H1_USERNAME`.
 
 ## Proxy
 
-Edit `$BB_CONFIG_HOME/config.env`:
+Configure the local proxy:
 
 ```bash
-BB_PROXY_MODE="mihomo"
-BB_HTTP_PROXY="http://127.0.0.1:7890"
-BB_SOCKS_PROXY="socks5://127.0.0.1:7891"
+bb-stack configure --proxy-mode mihomo \
+  --http-proxy http://127.0.0.1:7890 \
+  --socks-proxy socks5://127.0.0.1:7891
+source "$BB_CONFIG_HOME/env.sh"
 ```
 
 Source `env.sh` again, then verify `proxy mode`, `applied`, and `listener` in
@@ -58,7 +63,7 @@ Source `env.sh` again, then verify `proxy mode`, `applied`, and `listener` in
 Set non-default stack/work/config roots in the environment before running
 bootstrap; generated `env.sh` preserves those resolved roots. `config.env` owns
 only machine options such as proxy, tester identity, and local service URLs.
-Add uncommon global binary directories through colon-separated `BB_EXTRA_PATH`;
+Add uncommon global binary directories with `bb-stack configure --extra-path`;
 the runtime does not inherit arbitrary project paths from the parent shell.
 
 Use the status dashboard after every machine-local change:

@@ -37,6 +37,8 @@ BB_CONFIG_HOME=$HOME/.config/bb-stack
 ```bash
 ./00-L0-Runtime/bin/bootstrap --profile ctf-web
 source "$HOME/.config/bb-stack/env.sh"
+bb-stack configure
+source "$HOME/.config/bb-stack/env.sh"
 bb-stack status --profile ctf-web --strict --probe-mcp
 bb-stack new --workflow ctf --platform standalone-ctf challenge-name TARGET
 bb-stack launch --profile ctf-quick --engagement challenge-name
@@ -48,7 +50,7 @@ No engagement data belongs in this source repository.
 a convenience wrapper around `bb-stack launch`.
 
 ```text
-bootstrap -> status -> new -> launch -> engagement checkpoint -> updates check
+bootstrap -> configure -> status -> new -> launch -> checkpoint -> portable export
 ```
 
 For Bug Bounty use `bootstrap --profile web`, create a `bug-bounty` Engagement,
@@ -69,3 +71,14 @@ bb-stack updates check --all
 
 See [`90-Docs/UPDATES.md`](90-Docs/UPDATES.md) for staging, validation,
 promotion, rollback, and extension contracts.
+
+Before switching computers, export only portable non-secret intent and back up
+Engagements separately:
+
+```bash
+bb-stack portable export "$HOME/bb-stack-portable.json"
+bb-stack portable inspect "$HOME/bb-stack-portable.json"
+```
+
+See [`90-Docs/MIGRATION.md`](90-Docs/MIGRATION.md) for preview-first restore and
+the explicit secret restoration checklist.

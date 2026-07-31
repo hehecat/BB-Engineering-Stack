@@ -52,3 +52,16 @@ bb-stack status --profile web --engagement SLUG --strict --json
 file delivery, Codex Skills, or Keysmith deployment remains visible without
 blocking an unrelated CTF workflow. `--check-external` is opt-in because it
 contacts configured external services.
+
+## Machine Configuration And Handoff
+
+```bash
+bb-stack configure
+source "$BB_CONFIG_HOME/env.sh"
+bb-stack portable export "$HOME/bb-stack-portable.json"
+bb-stack portable inspect "$HOME/bb-stack-portable.json"
+```
+
+On a destination machine, bootstrap first, preview with `portable import`, then
+apply with `--yes`. Restore Engagement content from its separate encrypted
+backup and use the emitted secret checklist for local-only integrations.

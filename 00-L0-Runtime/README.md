@@ -24,6 +24,12 @@ roots, runtime, Prompt, current Engagement, Skills, MCP/CLI, proxy environment,
 personal integrations, and optional Keysmith deployment without printing
 configured passwords or tokens.
 
+Use `bb-stack configure` for non-secret machine options. It parses
+`config.env` as literal assignments, writes it atomically with mode 600, and
+regenerates `env.sh`; generated shell code never sources the editable config
+file. `bb-stack portable` exports and restores the safe subset without old
+absolute paths or credentials.
+
 Bootstrap also installs the first-party `mail-otp` compatibility command. Use
 `bb-stack mail configure` and `bb-stack mail test`; mailbox credentials remain
 outside the repository in a mode-600 local config.

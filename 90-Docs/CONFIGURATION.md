@@ -10,6 +10,23 @@ bb-stack status --profile web --platform hackerone
 bb-stack status --profile web --engagement PROGRAM-SLUG --strict
 ```
 
+Use the interactive configurator for first setup:
+
+```bash
+bb-stack configure
+source "$BB_CONFIG_HOME/env.sh"
+```
+
+For scripts and headless provisioning, pass only the settings being changed:
+
+```bash
+bb-stack configure --proxy-mode mihomo \
+  --http-proxy http://127.0.0.1:7890 \
+  --socks-proxy socks5://127.0.0.1:7891
+bb-stack configure --h1-username your-hackerone-username
+bb-stack configure --show
+```
+
 The dashboard reports L0-L5 state and prints ordered repair actions. Human and
 JSON output omit configured passwords, URL credentials, paths after a service
 origin, query strings, mailbox contents, and tokens. External service checks
@@ -33,7 +50,10 @@ the active values with `bb-stack status` or `bb-stack paths`.
 
 ## Machine Options
 
-Edit `$BB_CONFIG_HOME/config.env`, keep it mode `600`, then reload `env.sh`.
+`bb-stack configure` owns `$BB_CONFIG_HOME/config.env` and regenerates
+`env.sh`. The config is parsed as literal assignments; generated shell code
+does not source the editable file. Existing unknown extension assignments are
+preserved but are not loaded or included in portable exports.
 
 | Variable | Purpose | Default |
 | --- | --- | --- |
@@ -44,8 +64,10 @@ Edit `$BB_CONFIG_HOME/config.env`, keep it mode `600`, then reload `env.sh`.
 | `BB_FILECODEBOX_URL` | FileCodeBox base origin | empty |
 | `BB_EXTRA_PATH` | uncommon global binary paths, colon-separated | empty |
 
+After each configuration command, reload the generated environment and run
+status:
+
 ```bash
-chmod 600 "$BB_CONFIG_HOME/config.env"
 source "$BB_CONFIG_HOME/env.sh"
 bb-stack status --profile ctf-web --strict
 ```
@@ -61,12 +83,12 @@ the configured HTTP listener to accept TCP connections and the active
 Conflicting lowercase variables are also detected.
 
 ```bash
-BB_PROXY_MODE="mihomo"
-BB_HTTP_PROXY="http://127.0.0.1:7890"
-BB_SOCKS_PROXY="socks5://127.0.0.1:7891"
+bb-stack configure --proxy-mode mihomo \
+  --http-proxy http://127.0.0.1:7890 \
+  --socks-proxy socks5://127.0.0.1:7891
 ```
 
-After editing, source `env.sh` again. A listening mihomo service does not enable
+After configuring, source `env.sh` again. A listening mihomo service does not enable
 proxying by itself; the dashboard distinguishes `listener` from `applied`.
 
 ## Platform Identity
@@ -74,7 +96,7 @@ proxying by itself; the dashboard distinguishes `listener` from `applied`.
 Set only the username, not passwords or API tokens:
 
 ```bash
-BB_H1_USERNAME="your-hackerone-username"
+bb-stack configure --h1-username your-hackerone-username
 ```
 
 It is required when the selected platform is `hackerone` and informational for
@@ -142,7 +164,7 @@ suppresses its output.
 Set a base HTTP or HTTPS origin without a take code, token, query, or path:
 
 ```bash
-BB_FILECODEBOX_URL="https://filebox.example"
+bb-stack configure --filecodebox-url https://filebox.example
 ```
 
 Local status validates the URL shape and `curl` provider. With
@@ -176,3 +198,28 @@ bb-stack updates check --all
 ```
 
 Stage, validate, promote, and roll back through the contracts in `UPDATES.md`.
+
+## Portable Machine Intent
+
+Export a JSON document containing only portable, non-secret settings, relative
+root intent, detected Skill profiles, and Engagement inventory metadata:
+
+```bash
+bb-stack portable export "$HOME/bb-stack-portable.json"
+bb-stack portable inspect "$HOME/bb-stack-portable.json"
+```
+
+`BB_EXTRA_PATH`, old-machine absolute roots, mailbox credentials, Claude auth,
+cookies, tokens, Engagement evidence, runtime data, and generated Keysmith/MCP
+state are excluded. Import is a preview unless `--yes` is supplied. Existing
+non-empty destination values win unless `--force` is also supplied:
+
+```bash
+bb-stack portable import "$HOME/bb-stack-portable.json"
+bb-stack portable import "$HOME/bb-stack-portable.json" --yes
+bb-stack portable import "$HOME/bb-stack-portable.json" --yes --force
+source "$BB_CONFIG_HOME/env.sh"
+```
+
+Import never changes the active roots. Set destination `BB_STACK_ROOT`,
+`BB_WORK_ROOT`, and `BB_CONFIG_HOME` before bootstrap.

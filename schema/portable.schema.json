@@ -1,0 +1,107 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:bb-engineering-stack:schema:portable:v1",
+  "title": "BB Engineering Stack Portable Configuration",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "kind", "schema_version", "created_at", "source", "root_intent",
+    "machine_config", "profiles", "engagements", "excluded", "restore_checklist"
+  ],
+  "$defs": {
+    "rootIntent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "path"],
+      "properties": {
+        "kind": {"enum": ["home-relative", "custom"]},
+        "path": {"type": ["string", "null"], "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$)).*$"}
+      }
+    }
+  },
+  "properties": {
+    "kind": {"const": "bb-stack-portable"},
+    "schema_version": {"const": 1},
+    "created_at": {"type": "string", "format": "date-time"},
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["stack_version"],
+      "properties": {"stack_version": {"type": "string", "minLength": 1}}
+    },
+    "root_intent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["stack_root", "work_root", "config_home", "claude_config_dir"],
+      "properties": {
+        "stack_root": {"$ref": "#/$defs/rootIntent"},
+        "work_root": {"$ref": "#/$defs/rootIntent"},
+        "config_home": {"$ref": "#/$defs/rootIntent"},
+        "claude_config_dir": {"$ref": "#/$defs/rootIntent"}
+      }
+    },
+    "machine_config": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "BB_PROXY_MODE", "BB_HTTP_PROXY", "BB_SOCKS_PROXY",
+        "BB_H1_USERNAME", "BB_FILECODEBOX_URL"
+      ],
+      "properties": {
+        "BB_PROXY_MODE": {"enum": ["direct", "mihomo"]},
+        "BB_HTTP_PROXY": {"type": "string", "pattern": "^https?://[^/?#@]+$"},
+        "BB_SOCKS_PROXY": {"type": "string", "pattern": "^socks5h?://[^/?#@]+$"},
+        "BB_H1_USERNAME": {"type": "string", "maxLength": 100, "pattern": "^\\S*$"},
+        "BB_FILECODEBOX_URL": {"type": "string", "pattern": "^(|https?://[^/?#@]+)$"}
+      }
+    },
+    "profiles": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["claude", "codex"],
+      "properties": {
+        "claude": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},
+        "codex": {"type": "array", "uniqueItems": true, "items": {"type": "string"}}
+      }
+    },
+    "engagements": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["slug", "workflow", "platform", "mode", "lifecycle", "phase", "checkpoint"],
+        "properties": {
+          "slug": {"type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"},
+          "workflow": {"enum": ["bug-bounty", "ctf", "lab"]},
+          "platform": {"type": "string"},
+          "mode": {"enum": ["interactive", "continuous"]},
+          "lifecycle": {"enum": ["active", "paused", "blocked", "closed"]},
+          "phase": {"type": "string"},
+          "checkpoint": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["file", "updated_at"],
+            "properties": {
+              "file": {"const": "SESSION-HANDOFF.md"},
+              "updated_at": {"type": "string", "format": "date-time"}
+            }
+          }
+        }
+      }
+    },
+    "excluded": {"type": "array", "items": {"type": "string"}},
+    "restore_checklist": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["component", "required", "action"],
+        "properties": {
+          "component": {"type": "string"},
+          "required": {"type": "boolean"},
+          "action": {"type": "string"}
+        }
+      }
+    }
+  }
+}

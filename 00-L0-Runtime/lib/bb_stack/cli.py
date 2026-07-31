@@ -9,12 +9,14 @@ from typing import Any
 
 from . import __version__
 from .capabilities import CapabilityRegistry
+from .configuration import ConfigurationManager
 from .engagement import EngagementManager
 from .errors import StackError
 from .io import load_yaml
 from .keysmith import KeysmithAdapter
 from .mail_otp import add_mail_subcommands, run_mail_command
 from .paths import StackPaths
+from .portable import PortableManager
 from .profiles import ProfileRegistry
 from .runtime import RuntimeManager
 from .skills import SkillRegistry
@@ -43,6 +45,35 @@ def build_parser() -> argparse.ArgumentParser:
 
     validate_cmd = commands.add_parser("validate", help="validate all stack contracts")
     validate_cmd.add_argument("--json", action="store_true")
+
+    configure = commands.add_parser(
+        "configure", help="set non-secret machine options and regenerate env.sh"
+    )
+    configure.add_argument("--proxy-mode", choices=["direct", "mihomo"])
+    configure.add_argument("--http-proxy")
+    configure.add_argument("--socks-proxy")
+    configure.add_argument("--h1-username")
+    configure.add_argument("--filecodebox-url")
+    configure.add_argument("--extra-path")
+    configure.add_argument("--show", action="store_true")
+    configure.add_argument("--json", action="store_true")
+
+    portable = commands.add_parser(
+        "portable", help="export, inspect, or import non-secret machine intent"
+    )
+    portable_sub = portable.add_subparsers(dest="portable_command", required=True)
+    portable_export = portable_sub.add_parser("export")
+    portable_export.add_argument("output", type=Path)
+    portable_export.add_argument("--force", action="store_true")
+    portable_export.add_argument("--json", action="store_true")
+    portable_inspect = portable_sub.add_parser("inspect")
+    portable_inspect.add_argument("source", type=Path)
+    portable_inspect.add_argument("--json", action="store_true")
+    portable_import = portable_sub.add_parser("import")
+    portable_import.add_argument("source", type=Path)
+    portable_import.add_argument("--yes", action="store_true")
+    portable_import.add_argument("--force", action="store_true")
+    portable_import.add_argument("--json", action="store_true")
 
     status = commands.add_parser(
         "status", help="show unified paths, Prompt, Skills, MCP, runtime, and personal configuration"
@@ -226,6 +257,42 @@ def command(args: argparse.Namespace, paths: StackPaths) -> int:
             "updates": UpdateManager(paths).validate_catalog(),
         }
         emit(result, args.json)
+        return 0
+    if args.command == "configure":
+        manager = ConfigurationManager(paths)
+        if args.show:
+            emit(manager.snapshot(), args.json)
+            return 0
+        option_map = {
+            "BB_PROXY_MODE": args.proxy_mode,
+            "BB_HTTP_PROXY": args.http_proxy,
+            "BB_SOCKS_PROXY": args.socks_proxy,
+            "BB_H1_USERNAME": args.h1_username,
+            "BB_FILECODEBOX_URL": args.filecodebox_url,
+            "BB_EXTRA_PATH": args.extra_path,
+        }
+        updates = {key: value for key, value in option_map.items() if value is not None}
+        if not updates:
+            updates = manager.interactive_updates()
+        result = manager.configure(updates)
+        result["env_file"] = str(RuntimeManager(paths).write_environment())
+        result["reload"] = f"source {paths.env_file}"
+        emit(result, args.json)
+        return 0
+    if args.command == "portable":
+        manager = PortableManager(paths)
+        if args.portable_command == "export":
+            emit(manager.export(args.output, force=args.force), args.json)
+        elif args.portable_command == "inspect":
+            emit(manager.inspect(args.source), args.json)
+        else:
+            result = manager.import_document(
+                args.source, yes=args.yes, force=args.force
+            )
+            if args.yes:
+                result["env_file"] = str(RuntimeManager(paths).write_environment())
+                result["reload"] = f"source {paths.env_file}"
+            emit(result, args.json)
         return 0
     if args.command == "status":
         manager = StackStatus(paths)

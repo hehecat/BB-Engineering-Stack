@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-import re
 import shlex
 import shutil
 import socket
@@ -13,6 +12,7 @@ from urllib.parse import urlparse
 from urllib.request import ProxyHandler, Request, build_opener
 
 from .capabilities import CapabilityRegistry
+from .configuration import MACHINE_CONFIG_KEYS, load_machine_config
 from .engagement import EngagementManager
 from .errors import StackError, ValidationError
 from .io import load_yaml
@@ -22,32 +22,6 @@ from .paths import StackPaths
 from .profiles import ProfileRegistry
 from .runtime import RuntimeManager
 from .skills import SkillRegistry
-
-
-_ASSIGNMENT = re.compile(r"^\s*(?:export\s+)?([A-Z_][A-Z0-9_]*)=(.*)$")
-def load_machine_config(path: Path) -> tuple[dict[str, str], list[str]]:
-    if not path.is_file():
-        return {}, []
-    values: dict[str, str] = {}
-    invalid: list[str] = []
-    for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
-        stripped = line.strip()
-        if not stripped or stripped.startswith("#"):
-            continue
-        match = _ASSIGNMENT.match(line)
-        if not match:
-            invalid.append(f"line {number}")
-            continue
-        try:
-            parsed = shlex.split(match.group(2), comments=True, posix=True)
-        except ValueError:
-            invalid.append(f"line {number}")
-            continue
-        if len(parsed) > 1:
-            invalid.append(f"line {number}")
-            continue
-        values[match.group(1)] = parsed[0] if parsed else ""
-    return values, invalid
 
 
 class StackStatus:
@@ -238,14 +212,7 @@ class StackStatus:
                 "Fix unsupported config.env assignments: " + ", ".join(invalid),
                 None,
             )
-        known = {
-            "BB_PROXY_MODE",
-            "BB_HTTP_PROXY",
-            "BB_SOCKS_PROXY",
-            "BB_H1_USERNAME",
-            "BB_FILECODEBOX_URL",
-            "BB_EXTRA_PATH",
-        }
+        known = set(MACHINE_CONFIG_KEYS)
         return {
             "ready": present and mode == 0o600 and not invalid,
             "path": str(path),
@@ -339,8 +306,8 @@ class StackStatus:
                 actions,
                 "required",
                 "proxy.mode",
-                "Set BB_PROXY_MODE to direct or mihomo in config.env",
-                None,
+                "Set the proxy mode through bb-stack configure",
+                "bb-stack configure --proxy-mode direct",
             )
         return {
             "ready": ready,
@@ -662,7 +629,7 @@ class StackStatus:
                 "required",
                 "identity.hackerone",
                 "Set BB_H1_USERNAME before using the HackerOne overlay",
-                None,
+                "bb-stack configure --h1-username USERNAME",
             )
         if mail_config.is_file() and mail_mode == 0o600 and not mail_config_valid:
             self._action(
@@ -686,7 +653,7 @@ class StackStatus:
                 "optional",
                 "mail.otp",
                 message,
-                None,
+                "bb-stack mail configure",
             )
         if mail_mode is not None and mail_mode != 0o600:
             self._action(
@@ -705,7 +672,7 @@ class StackStatus:
                 "required",
                 "delivery.url",
                 "Set BB_FILECODEBOX_URL to a valid HTTP or HTTPS URL",
-                None,
+                "bb-stack configure --filecodebox-url https://filebox.example",
             )
         elif delivery_relevant and not delivery["usable"]:
             self._action(
@@ -713,7 +680,7 @@ class StackStatus:
                 "optional",
                 "delivery.filecodebox",
                 "Set BB_FILECODEBOX_URL when file handoff is needed",
-                None,
+                "bb-stack configure --filecodebox-url https://filebox.example",
             )
         external = {"mail": "not-run", "delivery": "not-run"}
         if check_external:
