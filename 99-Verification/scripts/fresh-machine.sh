@@ -19,12 +19,17 @@ rsync -a --exclude='.git' --exclude='.runtime' "$SOURCE/" "$ROOT/"
 
 export HOME="$HOME_TEST"
 export BB_STACK_ROOT="$ROOT"
-export BB_WORK_ROOT="$HOME_TEST/work"
 export BB_CONFIG_HOME="$HOME_TEST/config"
 export CLAUDE_CONFIG_DIR="$HOME_TEST/.claude"
 
-"$ROOT/00-L0-Runtime/bin/bootstrap" --profile minimal --skip-tools --json >/dev/null
+"$ROOT/00-L0-Runtime/bin/bootstrap" --profile minimal --skip-tools \
+  --work-root "$HOME_TEST/chosen-workspace" --json >/dev/null
 source "$BB_CONFIG_HOME/env.sh"
+[[ "$BB_WORK_ROOT" == "$HOME_TEST/chosen-workspace" ]]
+[[ -f "$BB_WORK_ROOT/CLAUDE.md" ]]
+[[ -f "$BB_WORK_ROOT/.mcp.json" ]]
+[[ -f "$BB_WORK_ROOT/.claude/settings.local.json" ]]
+[[ -d "$BB_WORK_ROOT/engagements" ]]
 bb-stack validate --json >/dev/null
 bb-stack eval contracts --json >/dev/null
 bb-stack doctor --profile minimal --strict --json >/dev/null

@@ -35,18 +35,38 @@ run only with `--check-external`; MCP processes are started only with
 
 ## Resolved Roots
 
-Set non-default roots in the shell before the first bootstrap:
+Select the work root directly during bootstrap. The shown path is recommended,
+not fixed:
+
+```bash
+./00-L0-Runtime/bin/bootstrap --profile ctf-web \
+  --work-root "$HOME/BB-Workspaces"
+```
+
+For fully custom source and configuration roots, set them in the shell before
+bootstrap:
 
 ```bash
 export BB_STACK_ROOT="$HOME/src/BB-Engineering-Stack"
-export BB_WORK_ROOT="$HOME/security-work"
 export BB_CONFIG_HOME="$HOME/.config/bb-stack"
-./00-L0-Runtime/bin/bootstrap --profile ctf-web
+./00-L0-Runtime/bin/bootstrap --profile ctf-web \
+  --work-root "$HOME/security-work"
 ```
 
 Generated `$BB_CONFIG_HOME/env.sh` preserves these roots. Do not place them in
 `config.env`; bootstrap removes managed root assignments from that file. Check
 the active values with `bb-stack status` or `bb-stack paths`.
+
+To select a different work root later without reinstalling tools:
+
+```bash
+bb-stack workspace init --work-root "$HOME/New-Security-Work"
+source "$BB_CONFIG_HOME/env.sh"
+```
+
+The selected root contains `CLAUDE.md`, `.mcp.json`, project-local Claude
+environment settings, `inbox/`, and `engagements/`. Existing managed files with
+local edits are not overwritten unless `--force` is supplied.
 
 ## Machine Options
 

@@ -21,14 +21,31 @@ contracts pass. It does not add attack knowledge or change workflow policy.
 ## Sources Of Truth
 
 - `stack.yaml`: roots, defaults, registry locations, pinned Keysmith source.
+- Workspace `CLAUDE.md`: natural-language task classification and route invocation.
 - L2 profile YAML: Prompt composition and L4/L5 profile selection.
 - `engagement.yaml`: canonical current work-unit control state.
 - `04-L4-Skills/skills.yaml`: Skill inventory and source directory.
 - `05-L5-MCP-CLI/capabilities.yaml`: provider/capability mapping.
 - `00-L0-Runtime/config/upstreams.yaml`: verified update channels and pins.
 
-Generated Prompt and MCP files live under `$BB_CONFIG_HOME/generated`. Runtime
-dependencies live under `.runtime`. Neither is committed.
+Generated strict-launch Prompt and MCP files live under
+`$BB_CONFIG_HOME/generated`. Bootstrap also renders a small project router,
+project MCP baseline, and machine-local Claude settings into the user-selected
+`$BB_WORK_ROOT`. Runtime dependencies live under `.runtime`. None are committed
+to this source repository.
+
+## Natural Claude Entry
+
+`cd "$BB_WORK_ROOT" && claude` loads the generated project `CLAUDE.md`. The
+router classifies CTF Web, Web/BB/VDP, Android, Reverse, or Lab intent and calls
+`bb-stack workspace route`. That command creates or resumes the isolated
+Engagement, renders its exact L2 Prompt, reports the ordered Skill route, and
+returns the four L3 state files to read.
+
+The project `.mcp.json` contains only the low-context Headless baseline. MCP
+servers are selected when Claude starts, so strict per-profile MCP composition
+continues to use `bb-stack launch`. This preserves a simple default entry
+without pretending that a running Claude process can hot-load arbitrary MCPs.
 
 ## Prompt Composition
 

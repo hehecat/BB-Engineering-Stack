@@ -220,6 +220,16 @@
           "format": "date-time"
         }
       }
+    },
+    "routing": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind"],
+      "properties": {
+        "kind": {
+          "enum": ["ctf-web", "web", "android", "reverse", "lab"]
+        }
+      }
     }
   },
   "allOf": [

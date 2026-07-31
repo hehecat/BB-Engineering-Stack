@@ -206,10 +206,10 @@ class PortableManager:
         return result
 
     def _engagement_inventory(self) -> list[dict[str, Any]]:
-        if not self.paths.work_root.is_dir():
-            return []
         result: list[dict[str, Any]] = []
-        for root in sorted(self.paths.work_root.iterdir()):
+        from .engagement import EngagementManager
+
+        for root in EngagementManager(self.paths).roots():
             state_path = root / "engagement.yaml"
             if not state_path.is_file():
                 continue

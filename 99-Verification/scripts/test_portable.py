@@ -49,7 +49,10 @@ class PortableTests(unittest.TestCase):
         mail.parent.mkdir(parents=True)
         mail.write_text('MAIL_PASSWORD="mail-secret-value"\n', encoding="utf-8")
         mail.chmod(0o600)
-        secret = self.source.work_root / "portable-ctf/notes/LAB-CREDS.local.md"
+        secret = (
+            self.source.engagements_root
+            / "portable-ctf/notes/LAB-CREDS.local.md"
+        )
         secret.write_text("engagement-secret-value\n", encoding="utf-8")
         secret.chmod(0o600)
         self.bundle = self.base / "portable.json"

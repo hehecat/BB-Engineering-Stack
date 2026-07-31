@@ -25,3 +25,10 @@ reads the four L3 state files, preserves exact markers and next action, selects
 the expected orchestrator-to-profile Skill route, and writes valid JSON under
 `artifacts/`. Use `status --require-agent-eval --strict` to require current
 Prompt and evaluation-contract digests.
+
+The unit suite also covers the generated workspace router, a user-selected
+work root, the nested Engagement boundary, the project MCP baseline, and
+managed-file drift. A release-level plain-Claude check starts `claude` in an
+isolated generated workspace and supplies a synthetic Web or APK task without
+naming a Profile; the created Engagement must record the expected
+`routing.kind` and rendered Profile.

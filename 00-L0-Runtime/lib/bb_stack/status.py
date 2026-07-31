@@ -25,6 +25,7 @@ from .paths import StackPaths
 from .profiles import ProfileRegistry
 from .runtime import RuntimeManager
 from .skills import SkillRegistry
+from .workspace import WorkspaceManager
 
 
 class StackStatus:
@@ -53,6 +54,15 @@ class StackStatus:
         actions: list[dict[str, str]] = []
 
         paths_report = self._paths(profile, actions)
+        workspace_report = WorkspaceManager(self.paths).status()
+        if not workspace_report["ready"]:
+            self._action(
+                actions,
+                "required",
+                "workspace.initialize",
+                "Initialize or refresh the natural-language Claude workspace",
+                "bb-stack workspace init",
+            )
         config_report = self._config(
             profile,
             machine_config_path,
@@ -117,6 +127,7 @@ class StackStatus:
         ready = bool(
             not required_failures
             and paths_report["ready"]
+            and workspace_report["ready"]
             and config_report["ready"]
             and proxy_report["ready"]
             and runtime_report["ready"]
@@ -132,6 +143,7 @@ class StackStatus:
             "ready": ready,
             "profile": profile,
             "paths": paths_report,
+            "workspace": workspace_report,
             "machine_config": config_report,
             "proxy": proxy_report,
             "runtime": runtime_report,
@@ -152,6 +164,7 @@ class StackStatus:
             "home": (self.paths.home, True),
             "stack_root": (self.paths.root, True),
             "work_root": (self.paths.work_root, True),
+            "engagements_root": (self.paths.engagements_root, True),
             "config_home": (self.paths.config_home, True),
             "claude_config_dir": (self.paths.claude_config_dir, False),
             "runtime": (self.paths.runtime, True),
@@ -887,14 +900,6 @@ class StackStatus:
                 "Repair or uninstall the active Keysmith deployment; its managed Prompt changed",
                 "bb-stack keysmith status",
             )
-        elif not result["deployed"] and replacement_profile:
-            self._action(
-                actions,
-                "optional",
-                "keysmith.deployment",
-                "Keysmith persistent replacement is not enabled; bb-stack launch still works",
-                f"bb-stack keysmith install --profile {replacement_profile} --yes",
-            )
         return result
 
     @staticmethod
@@ -906,6 +911,16 @@ class StackStatus:
             marker = "OK" if item["exists"] and (item["writable"] or not item["required"]) else "MISS"
             lines.append(f"  [{marker}] {name}: {item['path']}")
         runtime = report["runtime"]
+        workspace = report["workspace"]
+        lines.extend(
+            [
+                "",
+                "Claude Workspace",
+                f"  [{'OK' if workspace['ready'] else 'MISS'}] root={workspace['root']}",
+                f"  entry={workspace['default_entry']}",
+                f"  MCP servers={workspace['mcp_servers']}",
+            ]
+        )
         lines.extend(
             [
                 "",

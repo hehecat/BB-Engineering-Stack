@@ -23,11 +23,11 @@ Bug Bounty、VDP、授权 Web/API 测试、Android 静态分析和二进制逆�
 
 ```text
 $BB_STACK_ROOT   项目源码、Prompt、Profile、Skill、Schema、测试
-$BB_WORK_ROOT    实际 Engagement、证据、报告、本地凭据
+$BB_WORK_ROOT    用户选择的 Claude 安全工作区根目录
 $BB_CONFIG_HOME  当前机器配置和生成文件，不进入源码仓库
 ```
 
-默认路径：
+建议默认路径（不是固定路径）：
 
 ```text
 BB_STACK_ROOT=$HOME/BB-Engineering-Stack
@@ -36,6 +36,10 @@ BB_CONFIG_HOME=$HOME/.config/bb-stack
 ```
 
 真实目标数据不得写入本项目源码目录。
+
+`BB_WORK_ROOT` 在初始化时由用户决定。工作区会在其中生成项目级
+`CLAUDE.md`、`.mcp.json`、`inbox/` 和 `engagements/`，不要求工作区与
+源码目录同名或位于固定位置。
 
 ## L0-L5 架构
 
@@ -81,7 +85,8 @@ git clone https://github.com/hehecat/BB-Engineering-Stack.git \
   "$HOME/BB-Engineering-Stack"
 cd "$HOME/BB-Engineering-Stack"
 
-./00-L0-Runtime/bin/bootstrap --profile ctf-web
+./00-L0-Runtime/bin/bootstrap --profile ctf-web \
+  --work-root "$HOME/BB-Workspaces"
 source "$HOME/.config/bb-stack/env.sh"
 
 bb-stack configure
@@ -90,11 +95,50 @@ bb-stack status --profile ctf-web --strict --probe-mcp
 bb-stack eval contracts
 ```
 
+也可以选择其他专用目录：
+
+```bash
+./00-L0-Runtime/bin/bootstrap --profile ctf-web \
+  --work-root "$HOME/Security-Work"
+```
+
+## 默认使用：直接启动 Claude
+
+初始化后进入自己选择的工作根，正常运行 Claude Code：
+
+```bash
+cd "$BB_WORK_ROOT"
+claude
+```
+
+之后直接使用自然语言：
+
+```text
+这是一个 CTF Web 题目：https://challenge.example
+对 https://target.example 做授权 Web 渗透测试
+继续 example-bb
+逆向 inbox/demo.apk，先做静态分析
+分析 inbox/challenge.bin
+```
+
+工作根的 `CLAUDE.md` 会识别任务并调用 `bb-stack workspace route`，自动：
+
+1. 创建或恢复 `engagements/<slug>/`。
+2. 选择 CTF Web、Bug Bounty、Android、Reverse 或 Lab 路由。
+3. 读取专用 Prompt、Scope、STATUS 和 HANDOFF。
+4. 选择主编排 Skill 和当前专项 Skill。
+5. 将证据、脚本和报告限制在当前 Engagement。
+
+项目 `.mcp.json` 只加载精简的 Headless 通用 MCP。高上下文 MCP 或需要严格
+隔离和复现时，再使用 `bb-stack launch --profile ...`。
+首次进入新工作根时，Claude Code 可能要求确认项目级 `.mcp.json`；确认的是
+bootstrap 生成的通用 MCP 配置，可先用 `bb-stack workspace status` 查看服务名。
+
 私有仓库需要当前机器的 GitHub 身份具有访问权限。
 
 ## CTF Web
 
-创建独立任务并启动 Claude：
+通常直接在工作根启动 `claude` 并描述题目。以下是显式控制方式：
 
 ```bash
 bb-stack new web-challenge https://challenge.example \
@@ -197,7 +241,7 @@ bb-stack launch --profile ctf-reverse --engagement reverse-challenge
 每个目标使用一个独立目录：
 
 ```text
-$BB_WORK_ROOT/<slug>/
+$BB_WORK_ROOT/engagements/<slug>/
   engagement.yaml
   notes/SCOPE.md
   STATUS.md
@@ -220,10 +264,12 @@ bb-stack engagement pause SLUG --reason 'switching machine'
 
 ```bash
 bb-stack engagement resume SLUG
-bb-stack launch --profile PROFILE --engagement SLUG
+cd "$BB_WORK_ROOT"
+claude
 ```
 
-在 Engagement 目录内运行 `bb-stack status` 时可以自动识别当前任务。
+在 Engagement 目录内运行 `bb-stack status` 时可以自动识别当前任务。严格
+Profile 启动仍可使用 `bb-stack launch --profile PROFILE --engagement SLUG`。
 
 ## 统一状态检查
 
@@ -358,7 +404,8 @@ Engagement 目录和本地凭据由使用者按自己的存储方式复制；por
 
 ## 项目状态
 
-当前版本：`0.6.0`
+当前版本：`0.7.0`
 
 CTF Web、Bug Bounty、Android 静态分析和 Reverse Profile 已通过严格状态检查。
-CTF Web 与 Bug Bounty 路由已通过隔离的真实 Claude 行为评测。
+CTF Web、Bug Bounty、Android Profile 及普通 `claude` 的 Android 自动路由均已
+通过隔离的真实 Claude 行为评测。

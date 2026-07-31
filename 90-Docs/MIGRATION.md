@@ -73,7 +73,8 @@ bb-stack engagement migrate "$LEGACY_BB_ROOT/path/to/old-target" NEW-SLUG TARGET
   --workflow bug-bounty --platform generic-vdp
 ```
 
-Add `--yes` to copy into `$BB_WORK_ROOT/NEW-SLUG/legacy-import`. The command
+Add `--yes` to copy into
+`$BB_WORK_ROOT/engagements/NEW-SLUG/legacy-import`. The command
 excludes Git internals, dependency trees, cookies, and common token files. It
 never moves or deletes the source.
 

@@ -70,6 +70,10 @@ class StackPaths:
         return self.config_home / "generated"
 
     @property
+    def engagements_root(self) -> Path:
+        return self.work_root / "engagements"
+
+    @property
     def env_file(self) -> Path:
         return self.config_home / "env.sh"
 
@@ -130,7 +134,9 @@ class StackPaths:
         if value is not None:
             candidate = Path(value).expanduser()
             if not candidate.is_absolute() and "/" not in str(value):
-                candidate = self.work_root / candidate
+                nested = self.engagements_root / candidate
+                legacy = self.work_root / candidate
+                candidate = nested if nested.exists() or not legacy.exists() else legacy
             candidate = candidate.resolve()
             if not (candidate / "engagement.yaml").is_file():
                 raise StackError(f"not an engagement directory: {candidate}")
@@ -149,6 +155,7 @@ class StackPaths:
             self.config_home,
             self.generated,
             self.work_root,
+            self.engagements_root,
         ):
             path.mkdir(parents=True, exist_ok=True)
 

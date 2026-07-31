@@ -4,6 +4,12 @@
 scope, current IDs, and next action. Markdown owns written scope, working notes,
 findings, and recovery context.
 
+New work units live under `$BB_WORK_ROOT/engagements/<slug>/`. The optional
+`routing.kind` field records whether the natural workspace selected CTF Web,
+Web/BB, Android, Reverse, or Lab so a later plain-Claude session resumes the
+same domain Profile. Legacy work units directly under `$BB_WORK_ROOT` remain
+readable but new data is never created there.
+
 ## Lifecycle
 
 ```text

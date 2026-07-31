@@ -9,7 +9,7 @@ authorized Web/API testing, Android static analysis, and reverse engineering.
 
 ```text
 $BB_STACK_ROOT   system source, profiles, Skills, schemas, tests
-$BB_WORK_ROOT    real engagements, evidence, reports, local credentials
+$BB_WORK_ROOT    user-selected Claude security workspace root
 $BB_CONFIG_HOME  machine-local configuration, no secrets in source
 ```
 
@@ -37,17 +37,22 @@ BB_CONFIG_HOME=$HOME/.config/bb-stack
 ## Quick Start
 
 ```bash
-./00-L0-Runtime/bin/bootstrap --profile ctf-web
+./00-L0-Runtime/bin/bootstrap --profile ctf-web \
+  --work-root "$HOME/BB-Workspaces"
 source "$HOME/.config/bb-stack/env.sh"
 bb-stack configure
 source "$HOME/.config/bb-stack/env.sh"
 bb-stack status --profile ctf-web --strict --probe-mcp
 bb-stack eval contracts
-bb-stack new --workflow ctf --platform standalone-ctf challenge-name TARGET
-bb-stack launch --profile ctf-quick --engagement challenge-name
+cd "$BB_WORK_ROOT"
+claude
 ```
 
-No engagement data belongs in this source repository.
+No engagement data belongs in this source repository. The suggested work root
+is not fixed; select another dedicated directory with `--work-root`. The
+workspace router creates or resumes `engagements/<slug>/` from normal Claude
+conversation. Explicit `new` and `launch` commands remain available for strict
+reproduction and profile-specific MCP isolation.
 
 `bb-stack` is the control plane for the complete lifecycle. `bb-claude` is only
 a convenience wrapper around `bb-stack launch`.

@@ -25,6 +25,7 @@ from .paths import StackPaths
 from .profiles import ProfileRegistry
 from .skills import SkillRegistry
 from .validation import validate
+from .workspace import WorkspaceManager
 
 
 class RuntimeManager:
@@ -71,6 +72,15 @@ class RuntimeManager:
                         "count": len(installed),
                     }
                 )
+        workspace = WorkspaceManager(self.paths).initialize(dry_run=dry_run)
+        actions.append(
+            {
+                "component": "workspace",
+                "state": "planned" if dry_run else "ready",
+                "path": workspace["root"],
+                "entry": workspace["default_entry"],
+            }
+        )
         return {"schema_version": 1, "profile": profile, "dry_run": dry_run, "actions": actions}
 
     def validate_config(self) -> dict[str, Any]:
@@ -758,6 +768,7 @@ class RuntimeManager:
             "paths": {
                 "stack_root": str(self.paths.root),
                 "work_root": str(self.paths.work_root),
+                "engagements_root": str(self.paths.engagements_root),
                 "config_home": str(self.paths.config_home),
                 "runtime": str(self.paths.runtime),
             },

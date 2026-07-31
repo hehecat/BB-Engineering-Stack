@@ -33,6 +33,7 @@ class LifecycleTests(unittest.TestCase):
         self.assertTrue((ctf / "notes" / "solve-log.md").is_file())
         self.assertTrue((lab / "notes" / "experiment-log.md").is_file())
         h1_state = self.manager.validate(h1)
+        self.assertEqual(ctf.parent, self.paths.engagements_root)
         self.assertTrue(h1_state["identity"]["request_identification"]["enabled"])
         self.assertEqual(
             h1_state["identity"]["request_identification"]["value_from"], "BB_H1_USERNAME"

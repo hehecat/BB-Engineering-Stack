@@ -2,6 +2,17 @@
 
 ## Create And Resume
 
+Normal use starts from the selected workspace and does not expose Profile names:
+
+```bash
+cd "$BB_WORK_ROOT"
+claude
+```
+
+Describe a new target, artifact, or continuation in natural language. The
+project router creates or resumes the Engagement and loads its Prompt and state.
+Use the commands below only for explicit control or strict reproduction.
+
 ```bash
 bb-stack new SLUG TARGET --workflow ctf --platform standalone-ctf
 bb-stack status --profile ctf-web --engagement SLUG --strict

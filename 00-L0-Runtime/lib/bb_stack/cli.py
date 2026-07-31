@@ -24,6 +24,7 @@ from .skills import SkillRegistry
 from .status import StackStatus
 from .updates import UpdateManager
 from .validation import validate
+from .workspace import ROUTES, WorkspaceManager
 
 
 def emit(value: Any, json_output: bool = False) -> None:
@@ -117,12 +118,41 @@ def build_parser() -> argparse.ArgumentParser:
 
     bootstrap = commands.add_parser("bootstrap", help="create the local runtime and install a profile")
     bootstrap.add_argument("--profile", default="ctf-web", choices=["minimal", "ctf-web", "web", "android", "reverse"])
+    bootstrap.add_argument(
+        "--work-root",
+        type=Path,
+        help="workspace root (recommended default: $HOME/BB-Workspaces)",
+    )
     bootstrap.add_argument("--with-optional", action="store_true")
     bootstrap.add_argument("--skip-tools", action="store_true")
     bootstrap.add_argument("--skip-node", action="store_true")
     bootstrap.add_argument("--skip-skills", action="store_true")
     bootstrap.add_argument("--dry-run", action="store_true")
     bootstrap.add_argument("--json", action="store_true")
+
+    workspace = commands.add_parser(
+        "workspace", help="initialize, inspect, or route the natural-language Claude workspace"
+    )
+    workspace_sub = workspace.add_subparsers(dest="workspace_command", required=True)
+    workspace_init = workspace_sub.add_parser("init")
+    workspace_init.add_argument("--work-root", type=Path)
+    workspace_init.add_argument("--force", action="store_true")
+    workspace_init.add_argument("--dry-run", action="store_true")
+    workspace_init.add_argument("--json", action="store_true")
+    workspace_status = workspace_sub.add_parser("status")
+    workspace_status.add_argument("--json", action="store_true")
+    workspace_route = workspace_sub.add_parser("route")
+    workspace_route.add_argument("--kind", choices=sorted(ROUTES))
+    workspace_route.add_argument("--target")
+    workspace_route.add_argument("--slug")
+    workspace_route.add_argument(
+        "--platform",
+        choices=["generic-vdp", "hackerone", "butian", "standalone-ctf", "local-lab"],
+    )
+    workspace_route.add_argument(
+        "--mode", choices=["interactive", "continuous"]
+    )
+    workspace_route.add_argument("--json", action="store_true")
 
     profile = commands.add_parser("profile", help="list, validate, or render runtime profiles")
     profile_sub = profile.add_subparsers(dest="profile_command", required=True)
@@ -291,6 +321,7 @@ def command(args: argparse.Namespace, paths: StackPaths) -> int:
             updates = manager.interactive_updates()
         result = manager.configure(updates)
         result["env_file"] = str(RuntimeManager(paths).write_environment())
+        result["workspace"] = WorkspaceManager(paths).initialize()
         result["reload"] = f"source {paths.env_file}"
         emit(result, args.json)
         return 0
@@ -306,6 +337,7 @@ def command(args: argparse.Namespace, paths: StackPaths) -> int:
             )
             if args.yes:
                 result["env_file"] = str(RuntimeManager(paths).write_environment())
+                result["workspace"] = WorkspaceManager(paths).initialize()
                 result["reload"] = f"source {paths.env_file}"
             emit(result, args.json)
         return 0
@@ -350,6 +382,25 @@ def command(args: argparse.Namespace, paths: StackPaths) -> int:
             skip_skills=args.skip_skills,
             dry_run=args.dry_run,
         )
+        emit(result, args.json)
+        return 0
+    if args.command == "workspace":
+        manager = WorkspaceManager(paths)
+        if args.workspace_command == "init":
+            result = manager.initialize(force=args.force, dry_run=args.dry_run)
+            if not args.dry_run:
+                result["env_file"] = str(RuntimeManager(paths).write_environment())
+                result["reload"] = f"source {paths.env_file}"
+        elif args.workspace_command == "status":
+            result = manager.status()
+        else:
+            result = manager.route(
+                kind=args.kind,
+                target=args.target,
+                slug=args.slug,
+                platform=args.platform,
+                mode=args.mode,
+            )
         emit(result, args.json)
         return 0
     if args.command == "profile":
@@ -540,6 +591,11 @@ def command(args: argparse.Namespace, paths: StackPaths) -> int:
 def main() -> int:
     parser = build_parser()
     args = parser.parse_args()
+    requested_work_root = getattr(args, "work_root", None)
+    if requested_work_root is not None:
+        import os
+
+        os.environ["BB_WORK_ROOT"] = str(requested_work_root.expanduser().resolve())
     try:
         return command(args, StackPaths.discover())
     except (StackError, OSError, KeyError, ValueError) as error:

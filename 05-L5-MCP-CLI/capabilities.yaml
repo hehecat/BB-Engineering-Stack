@@ -221,6 +221,9 @@ providers:
     stateful: true
     context_cost: medium
     side_effects: [network-request, browser-action, local-write]
+    configuration:
+      required: true
+      env_all: [BB_CHROMIUM_BIN]
     mcp:
       name: playwright
       transport: stdio

@@ -12,17 +12,24 @@ Claude installation already uses a custom config directory.
 ```bash
 git clone YOUR_STACK_REMOTE "$HOME/BB-Engineering-Stack"
 cd "$HOME/BB-Engineering-Stack"
-./00-L0-Runtime/bin/bootstrap --profile ctf-web
+./00-L0-Runtime/bin/bootstrap --profile ctf-web \
+  --work-root "$HOME/BB-Workspaces"
 source "$HOME/.config/bb-stack/env.sh"
 bb-stack configure
 source "$HOME/.config/bb-stack/env.sh"
 bb-stack status --profile ctf-web --strict --probe-mcp
 bb-stack eval contracts
 
-bb-stack new ctf-demo https://challenge.example \
-  --workflow ctf --platform standalone-ctf
-bb-stack launch --profile ctf-quick --engagement ctf-demo
+cd "$BB_WORK_ROOT"
+claude
+# Then say: 这是一个 CTF Web 题目：https://challenge.example
 ```
+
+`$HOME/BB-Workspaces` is a recommendation, not a fixed location. Select any
+dedicated directory with `--work-root`; bootstrap persists the resolved value
+in `$BB_CONFIG_HOME/env.sh` and generates the project router there.
+Claude Code may request one-time approval for the generated project
+`.mcp.json`; inspect its server list with `bb-stack workspace status` first.
 
 After a new-machine restore or Prompt change, run the bounded real-Agent gate:
 
@@ -40,7 +47,8 @@ does not contact a target and keeps the synthetic workspace under
 Static APK analysis is headless and does not require a connected device:
 
 ```bash
-./00-L0-Runtime/bin/bootstrap --profile android
+./00-L0-Runtime/bin/bootstrap --profile android \
+  --work-root "$HOME/BB-Workspaces"
 bb-stack status --profile android --strict
 bb-stack new apk-challenge ./challenge.apk --workflow ctf --platform standalone-ctf
 bb-stack launch --profile ctf-android --engagement apk-challenge
@@ -65,7 +73,8 @@ artifact providers.
 ## Bug Bounty Or VDP
 
 ```bash
-./00-L0-Runtime/bin/bootstrap --profile web
+./00-L0-Runtime/bin/bootstrap --profile web \
+  --work-root "$HOME/BB-Workspaces"
 source "$HOME/.config/bb-stack/env.sh"
 bb-stack configure
 source "$HOME/.config/bb-stack/env.sh"
@@ -134,9 +143,10 @@ bb-stack engagement pause example-bb --reason 'switching machine'
 bb-stack engagement resume example-bb
 ```
 
-From inside an Engagement directory, `bb-stack status --profile web` detects
-that work unit automatically. `bb-claude` remains available as a shorter launch
-wrapper, but it is not required for the workflow.
+The normal entry is `cd "$BB_WORK_ROOT" && claude`. The workspace `CLAUDE.md`
+routes natural-language tasks and continuations. From inside an Engagement,
+`bb-stack status --profile web` detects that work unit automatically.
+`bb-claude` remains available for explicit Prompt and MCP isolation.
 
 ## Update Audit
 

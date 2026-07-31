@@ -90,6 +90,7 @@ class StatusTests(unittest.TestCase):
         )
         for section in (
             "paths",
+            "workspace",
             "machine_config",
             "proxy",
             "runtime",

@@ -17,6 +17,7 @@ export PYTHONPATH="$ROOT/00-L0-Runtime/lib${PYTHONPATH:+:$PYTHONPATH}"
 "$PYTHON" "$ROOT/99-Verification/scripts/test_evaluation.py"
 "$PYTHON" "$ROOT/99-Verification/scripts/test_runtime_installers.py"
 "$PYTHON" "$ROOT/99-Verification/scripts/test_android_reverse_skill.py"
+"$PYTHON" "$ROOT/99-Verification/scripts/test_workspace.py"
 "$ROOT/00-L0-Runtime/bin/bb-stack" validate --json >/dev/null
 
 if [[ -x "$ROOT/.runtime/venv/bin/python" && -d "$ROOT/.runtime/node_modules" ]]; then

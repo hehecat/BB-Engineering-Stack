@@ -7,13 +7,19 @@ and staged update governance.
 Run the dependency-light entrypoint first on a new machine:
 
 ```bash
-./00-L0-Runtime/bin/bootstrap --profile ctf-web
+./00-L0-Runtime/bin/bootstrap --profile ctf-web \
+  --work-root "$HOME/BB-Workspaces"
 source "$HOME/.config/bb-stack/env.sh"
 bb-stack status --profile ctf-web --strict
 ```
 
 Machine output is written only to `.runtime/`, `$BB_CONFIG_HOME`, and
-`$HOME/.local/bin`. `config.env` is mode 600 and is never copied into source.
+`$HOME/.local/bin`, plus the user-selected `$BB_WORK_ROOT`. The work-root value
+is not fixed; the displayed path is only the recommended default. `config.env`
+is mode 600 and is never copied into source.
+
+Bootstrap renders the natural Claude entry in the work root. Inspect or refresh
+it with `bb-stack workspace status` and `bb-stack workspace init`.
 
 Use `bb-stack updates check --all` for a read-only dependency audit. Candidate
 updates are isolated under `.runtime` and require separate validate and promote

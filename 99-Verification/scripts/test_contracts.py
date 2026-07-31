@@ -42,7 +42,7 @@ class ContractTests(unittest.TestCase):
     def test_all_registries_validate(self) -> None:
         self.assertEqual(len(ProfileRegistry(self.paths).validate_all()), 7)
         self.assertGreaterEqual(len(SkillRegistry(self.paths).validate_all()), 40)
-        self.assertEqual(len(CapabilityRegistry(self.paths).validate_all()), 5)
+        self.assertEqual(len(CapabilityRegistry(self.paths).validate_all()), 6)
         runtime = RuntimeManager(self.paths).validate_config()
         self.assertIn("ctf-web", runtime["tool_profiles"])
 
@@ -115,6 +115,16 @@ class ContractTests(unittest.TestCase):
     def test_source_has_no_engagement_data_directory(self) -> None:
         self.assertFalse((ROOT / "engagements").exists())
         self.assertFalse((ROOT / "recon").exists())
+
+    def test_workspace_router_is_small_and_routes_without_profile_questions(self) -> None:
+        router = (
+            ROOT / "02-L2-Workflow-Profiles" / "workspace" / "CLAUDE.md"
+        ).read_text(encoding="utf-8")
+        self.assertLess(len(router.split()), 700)
+        self.assertIn("bb-stack workspace route", router)
+        self.assertIn("Do not ask the user to choose an internal Profile", router)
+        for kind in ("ctf-web", "web", "android", "reverse", "lab"):
+            self.assertIn(f"`{kind}`", router)
 
     def test_yaml_duplicate_keys_are_rejected(self) -> None:
         duplicate = Path(self.temporary.name) / "duplicate.yaml"

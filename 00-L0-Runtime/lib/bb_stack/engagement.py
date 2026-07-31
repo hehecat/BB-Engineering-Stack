@@ -69,6 +69,7 @@ class EngagementManager:
         mode: str = "interactive",
         title: str | None = None,
         authorization_source: str | None = None,
+        route_kind: str | None = None,
     ) -> Path:
         if not SLUG_RE.fullmatch(slug):
             raise ValidationError("slug must use lowercase letters, digits, and single hyphens")
@@ -76,11 +77,11 @@ class EngagementManager:
             raise ValidationError(f"unsupported workflow: {workflow}")
         if mode not in {"interactive", "continuous"}:
             raise ValidationError(f"unsupported mode: {mode}")
-        root = (self.paths.work_root / slug).resolve()
+        root = (self.paths.engagements_root / slug).resolve()
         try:
-            root.relative_to(self.paths.work_root.resolve())
+            root.relative_to(self.paths.engagements_root.resolve())
         except ValueError as error:
-            raise ValidationError("engagement path escapes BB_WORK_ROOT") from error
+            raise ValidationError("engagement path escapes the workspace engagements directory") from error
         if root.exists():
             raise StackError(f"engagement already exists: {root}")
 
@@ -135,6 +136,8 @@ class EngagementManager:
             },
             "checkpoint": {"handoff_file": "SESSION-HANDOFF.md", "updated_at": timestamp},
         }
+        if route_kind is not None:
+            state["routing"] = {"kind": route_kind}
         validate(state, self.schema, "new engagement")
 
         self._make_directories(root, workflow)
@@ -298,10 +301,8 @@ class EngagementManager:
         return state
 
     def list(self) -> list[dict[str, str]]:
-        if not self.paths.work_root.is_dir():
-            return []
         result = []
-        for path in sorted(self.paths.work_root.iterdir()):
+        for path in self.roots():
             if not (path / "engagement.yaml").is_file():
                 continue
             try:
@@ -318,6 +319,26 @@ class EngagementManager:
             except ValidationError as error:
                 result.append({"slug": path.name, "error": str(error), "path": str(path)})
         return result
+
+    def roots(self) -> list[Path]:
+        roots: list[Path] = []
+        if self.paths.engagements_root.is_dir():
+            roots.extend(
+                path
+                for path in sorted(self.paths.engagements_root.iterdir())
+                if path.is_dir()
+            )
+        # Read-only compatibility for work units created before the workspace
+        # gained an explicit engagements/ boundary.
+        if self.paths.work_root.is_dir():
+            roots.extend(
+                path
+                for path in sorted(self.paths.work_root.iterdir())
+                if path.is_dir()
+                and path != self.paths.engagements_root
+                and (path / "engagement.yaml").is_file()
+            )
+        return roots
 
     def transition(self, root: Path, lifecycle: str, reason: str | None = None) -> dict[str, Any]:
         state = self.validate(root)
@@ -355,7 +376,7 @@ class EngagementManager:
         source = source.expanduser().resolve()
         if not source.is_dir():
             raise ValidationError(f"legacy source is not a directory: {source}")
-        destination = self.paths.work_root / slug
+        destination = self.paths.engagements_root / slug
         if not yes:
             return destination
         created = self.create(
