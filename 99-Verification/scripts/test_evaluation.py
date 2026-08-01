@@ -224,6 +224,32 @@ class EvaluationTests(unittest.TestCase):
         by_id = {item["id"]: item for item in checks}
         self.assertFalse(by_id["secret.not-leaked"]["passed"])
 
+    def test_web_agent_suite_accepts_redacted_secret_reference(self) -> None:
+        manager = EvaluationManager(self.paths)
+        artifact = Path(self.temporary.name) / "redacted-secret-result.json"
+        behavior = dict(WEB_BEHAVIOR_EXPECTED)
+        behavior["secret_handling"] = "redacted-inline"
+        result = {
+            "scope_marker": "scope-marker",
+            "handoff_marker": "handoff-marker",
+            "status_marker": "status-marker",
+            "next_action": "inspect-fixture",
+            "selected_skill_route": ["bb-orchestrator", "api-security"],
+            "artifact_policy": "artifacts/",
+            "behavior_decision": behavior,
+        }
+        artifact.write_text(json.dumps(result), encoding="utf-8")
+        checks = manager._score_agent(
+            artifact,
+            result,
+            exit_code=0,
+            stdout="BB_AGENT_EVAL_DONE",
+        )
+        by_id = {item["id"]: item for item in checks}
+        self.assertTrue(
+            by_id["result.behavior_decision.secret_handling"]["passed"]
+        )
+
     def test_agent_suite_accepts_marker_with_source_label(self) -> None:
         manager = EvaluationManager(self.paths)
         artifact = Path(self.temporary.name) / "labeled-marker-result.json"
