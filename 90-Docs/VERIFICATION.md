@@ -22,9 +22,13 @@ small model request.
 
 `eval agent` is the stronger behavioral gate. It verifies that real Claude
 reads the four L3 state files, preserves exact markers and next action, selects
-the expected orchestrator-to-profile Skill route, and writes valid JSON under
-`artifacts/`. Use `status --require-agent-eval --strict` to require current
-Prompt and evaluation-contract digests.
+the expected Skill route, and writes valid JSON under `artifacts/`. The
+`bb-interactive` fixture additionally scores Scope candidate handling, business
+Lead priority, proof labels, cross-system chain rejection, root-cause grouping,
+minimal action counts, canonical findings path, and synthetic-secret redaction.
+Use `status --require-agent-eval --strict` to require current Prompt and
+evaluation-contract digests. The contract digest includes the fixture builder
+and scorer, so changing evaluation logic also invalidates an earlier pass.
 
 The unit suite also covers the generated workspace router, a user-selected
 work root, the nested Engagement boundary, the project MCP baseline, and

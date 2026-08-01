@@ -38,7 +38,8 @@ Treat the returned `engagement` directory as the active working directory for
 all reads, commands, evidence, scripts, reports, and checkpoints. Run the
 returned repair commands when required components are missing, then rerun the
 route command. Use the ordered `skill_route`; add only the specialist Skill for
-the current lead.
+the current lead. Assets discovered during routing or recon remain candidates
+until the Engagement's written Scope matches them.
 
 ## Session Discipline
 

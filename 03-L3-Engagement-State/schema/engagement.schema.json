@@ -120,6 +120,12 @@
             "$ref": "#/$defs/scopeAsset"
           }
         },
+        "candidates": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/scopeAsset"
+          }
+        },
         "out_of_scope": {
           "type": "array",
           "items": {

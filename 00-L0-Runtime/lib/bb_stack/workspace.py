@@ -56,7 +56,7 @@ ROUTES: dict[str, dict[str, Any]] = {
         "profile": "bb-interactive",
         "skill_profile": "web",
         "l5_profile": "web",
-        "skill_route": ["bb-orchestrator", "bb-methodology"],
+        "skill_route": ["bb-orchestrator"],
         "slug_suffix": "bb",
     },
     "android": {

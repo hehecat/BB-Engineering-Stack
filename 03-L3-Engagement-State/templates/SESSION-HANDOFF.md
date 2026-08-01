@@ -23,6 +23,11 @@ Updated: 2026-01-01T00:00:00Z
 - The engagement has been initialized.
 - No technical observations have been recorded.
 
+## Scope Candidates
+
+None recorded. Do not actively test discovered adjacent assets unless the
+written Scope has promoted them.
+
 ## Active Lead
 
 No active lead.

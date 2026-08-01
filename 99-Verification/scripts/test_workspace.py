@@ -135,6 +135,7 @@ class WorkspaceTests(unittest.TestCase):
 
         self.assertEqual(result["profile"], "bb-continuous")
         self.assertEqual(result["platform"], "hackerone")
+        self.assertEqual(result["skill_route"], ["bb-orchestrator"])
         prompt = Path(result["prompt_file"]).read_text()
         self.assertIn("HackerOne", prompt)
 

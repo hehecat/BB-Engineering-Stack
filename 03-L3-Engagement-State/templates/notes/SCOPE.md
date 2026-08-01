@@ -21,6 +21,15 @@ Revision: 1
 | --- | --- |
 | No explicit exclusions recorded | Recheck the referenced rules before adding adjacent assets |
 
+## Candidate Assets
+
+Discovered relationship is not authorization. Record provenance here and move
+an asset to In-Scope only with a written source and Scope revision.
+
+| Asset or pattern | Type | Provenance | Active testing |
+| --- | --- | --- | --- |
+| None recorded | other | none | prohibited until promoted |
+
 ## Rate And Automation Rules
 
 - Follow the written program or competition rate rules.
@@ -37,6 +46,18 @@ Revision: 1
 - Use controlled test accounts and reversible test data where applicable.
 - Stop repeated side effects once the required proof is captured.
 - Keep credentials and long-lived tokens out of shared artifacts.
+
+### Default Production Action Budget
+
+Written program rules and explicit revisions below override these defaults.
+
+| Action | Per-lead ceiling |
+| --- | --- |
+| Minimal reversible state change | 1 |
+| Inert upload | 1 file, at most 1 KiB |
+| Adjacent object identifiers after control | 3 |
+| Credential guesses on one auth surface | 5 |
+| OTP validation on a controlled identifier | 10, without extra sends |
 
 ## Platform-Specific Rules
 

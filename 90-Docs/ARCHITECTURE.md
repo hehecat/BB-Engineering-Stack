@@ -72,7 +72,11 @@ budgets, orchestrator requirements, domain routing, and L4/L5 references.
 Real-Agent evaluation uses a generated local Engagement with unique markers,
 allows only Claude read/write tools, prohibits network work, and scores Scope,
 HANDOFF, STATUS, next-action, the complete Skill route, and artifact placement.
+The Web profile also applies the current `bb-orchestrator` snapshot to a local
+decision fixture and scores candidate-asset handling, high-signal Lead choice,
+proof labels, root-cause clustering, action counts, canonical logs, and a
+synthetic secret canary.
 Prompt and evaluation-contract SHA256 values prevent a prior pass from
 validating changed behavior. The contract digest includes the routed Skill
-trees, so updating an orchestrator or terminal profile Skill invalidates the
-prior result.
+trees, fixture builder, and scorer, so updating an orchestrator, terminal
+profile Skill, fixture, or scoring logic invalidates the prior result.

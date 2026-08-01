@@ -17,7 +17,8 @@ Bug Bounty、VDP、授权 Web/API 测试、Android 静态分析和二进制逆�
 - 集成 Playwright MCP、HTTP/Recon CLI、OTP 邮箱、Android 和 Reverse 工具。
 - 支持 Headless VPS，不要求桌面环境。
 - Skill、MCP 和 CLI 使用固定版本，更新需要显式检查、验证和确认。
-- 提供静态合同测试和隔离的真实 Claude 行为评测。
+- 提供静态合同测试和隔离的真实 Claude 行为评测，包括 BB Scope、Lead
+  排序、证据分级、动作预算和秘密脱敏决策。
 
 ## 设计边界
 
@@ -221,12 +222,22 @@ bb-stack new butian-program https://target.example \
 
 每次测试前将当前项目的书面范围、频率、身份和排除项记录到
 `notes/SCOPE.md`。不同平台 Overlay 不会互相继承身份字段或报告格式。
+DNS、JavaScript、证书或跳转发现的关联资产先进入 `Candidate Assets`，只有书面
+规则或用户指令匹配后才能通过 Scope revision 转为主动测试目标。
 
 Bug Bounty 主要路由：
 
 ```text
-bb-orchestrator -> bb-methodology -> 当前 Lead 的专项 Skill
+bb-orchestrator -> 当前 Lead 的专项 Skill
 ```
+
+`bb-methodology` 只在 Lead 队列为空、陈旧或缺少多样性时按需加载。证明采用
+`signal -> primitive -> impact -> confirmed` 四级状态；具体影响必须由正负样本、
+身份或对象边界支撑，不能由 Schema、空字段或跨系统观察直接推断。
+
+新 Engagement 的 `notes/SCOPE.md` 带有可由项目规则覆盖的生产动作预算：每个
+Lead 默认一次最小状态变更、一个不超过 1 KiB 的惰性上传、三个邻近对象、五次
+凭据猜测和十次受控 OTP 校验。CTF 与本地 Lab 不使用这些生产默认值。
 
 只有在需要整理提交材料时才进入 SHIP 和报告 Skill。
 
@@ -393,6 +404,9 @@ bb-stack status --profile web --require-agent-eval --strict
 ```
 
 评测只允许 Claude 读取和写入本地合成 Engagement，不访问测试目标。
+`bb-interactive` 评测还会检查相邻资产不自扩 Scope、业务签名 Lead 优先级、
+Primitive 与 Impact 区分、跨系统拼链拒绝、最小动作计划、规范日志路径以及
+合成 Secret 不泄露。更换模型或修改 Harness 后可用同一命令做 A/B 对比。
 
 ## Skill、MCP 和工具更新
 
@@ -444,8 +458,8 @@ Engagement 目录和本地凭据由使用者按自己的存储方式复制；por
 
 ## 项目状态
 
-当前版本：`0.8.2`
+当前版本：`0.9.0`
 
 CTF Web、Bug Bounty、Android 静态分析和 Reverse Profile 已通过严格状态检查。
 CTF Web、Bug Bounty、Android Profile 及普通 `claude` 的 Android 自动路由均已
-通过隔离的真实 Claude 行为评测。
+通过隔离行为评测；Bug Bounty 评测同时覆盖 Harness 决策合同。

@@ -39,6 +39,15 @@ class LifecycleTests(unittest.TestCase):
             h1_state["identity"]["request_identification"]["value_from"], "BB_H1_USERNAME"
         )
         self.assertEqual(h1_state["overlays"]["delivery"], ["hackerone"])
+        self.assertEqual(h1_state["scope"]["candidates"], [])
+        scope = (h1 / "notes" / "SCOPE.md").read_text(encoding="utf-8")
+        self.assertIn("## Candidate Assets", scope)
+        self.assertIn("| Inert upload | 1 file, at most 1 KiB |", scope)
+        self.assertTrue((h1 / "notes" / "findings-live.md").is_file())
+        self.assertIn(
+            "do not create a parallel findings log",
+            (h1 / "CLAUDE.md").read_text(encoding="utf-8"),
+        )
 
     def test_lifecycle_and_secret_permissions(self) -> None:
         root = self.manager.create("state-test", "example.invalid", workflow="bug-bounty")

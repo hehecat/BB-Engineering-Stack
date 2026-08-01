@@ -4,6 +4,12 @@
 scope, current IDs, and next action. Markdown owns written scope, working notes,
 findings, and recovery context.
 
+Newly discovered adjacent assets remain `candidate` entries until a written
+authorization source promotes them through a Scope revision. Bug Bounty Scope
+records the current production action budget. Hypotheses record planned side
+effects; findings record proof level, observed versus inferred basis, negative
+control, root-cause cluster, cleanup, and redacted secret references.
+
 New work units live under `$BB_WORK_ROOT/engagements/<slug>/`. The optional
 `routing.kind` field records whether the natural workspace selected CTF Web,
 Web/BB, Android, Reverse, or Lab so a later plain-Claude session resumes the
@@ -28,4 +34,5 @@ lab:        reproduce, develop, verify
 
 Checkpoint order is evidence, hypotheses/findings, STATUS, HANDOFF, then YAML.
 The main session is the only canonical state writer. Credentials use the ignored
-`notes/LAB-CREDS.local.md` rendered from its `.example` template.
+`notes/LAB-CREDS.local.md` rendered from its `.example` template. Bug Bounty
+findings use `notes/findings-live.md`; parallel findings logs are not canonical.

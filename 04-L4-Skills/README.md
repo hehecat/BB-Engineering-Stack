@@ -5,6 +5,11 @@ Skills; `vendor/community/` is the portable specialist snapshot. Installations
 under Claude or Codex are links back to these sources, so there is one editable
 copy.
 
+For Bug Bounty, `bb-orchestrator` is the sole startup orchestrator. It owns the
+Scope gate, soft Lead ranking, evidence grading, and root-cause clustering.
+`bb-methodology` and broad reference Skills are loaded only when the active
+queue needs them; specialist Skills are selected one Lead at a time.
+
 ```bash
 bb-stack skills validate
 bb-stack skills install --profile ctf-web --agent claude --required-only

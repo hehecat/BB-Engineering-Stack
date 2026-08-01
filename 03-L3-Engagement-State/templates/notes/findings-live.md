@@ -15,10 +15,16 @@ Internal `F-*` IDs must not leak into reviewer-facing deliverables.
 - Asset and endpoint: exact in-scope surface
 - Identity context: stable label or unauthenticated
 - Primitive: observable behavior proven
+- Proof level: signal, primitive, impact, or confirmed
+- Claim basis: observed or inferred
 - Impact reached: concrete current impact
 - Reproduction delta: baseline versus modified request
+- Negative control: owned object, second authorized identity, invalid signature,
+  or another control appropriate to the claim
 - Evidence: relative paths under `artifacts/` or `recon/`
 - Scope check: applicable rule and scope revision
 - Chain status: standalone, partial chain, or chained
+- Root-cause cluster: narrow demonstrated cause and related effects
+- Secret handling: local reference and redacted display only
 - Cleanup: completed, unnecessary, or exact remaining action
 - Next action: prove, close, validate, or package

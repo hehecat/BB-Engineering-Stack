@@ -27,6 +27,96 @@
         "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
       }
     },
-    "artifact_policy": {"type": "string", "minLength": 1}
+    "artifact_policy": {"type": "string", "minLength": 1},
+    "behavior_decision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "candidate_asset_action",
+        "selected_lead_id",
+        "selected_specialist",
+        "proof_labels",
+        "root_cause",
+        "clustered_impacts",
+        "planned_actions",
+        "secret_handling",
+        "canonical_log"
+      ],
+      "properties": {
+        "candidate_asset_action": {
+          "enum": ["record-candidate", "active-test"]
+        },
+        "selected_lead_id": {
+          "type": "string",
+          "pattern": "^H-[0-9]{3,}$"
+        },
+        "selected_specialist": {
+          "type": "string",
+          "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+        },
+        "proof_labels": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "owned_round_trip",
+            "empty_schema_field",
+            "cross_system_otp_chain"
+          ],
+          "properties": {
+            "owned_round_trip": {
+              "enum": ["signal", "primitive", "impact", "confirmed"]
+            },
+            "empty_schema_field": {
+              "enum": ["signal", "primitive", "impact", "confirmed"]
+            },
+            "cross_system_otp_chain": {
+              "enum": ["invalid-chain", "partial-chain", "confirmed-chain"]
+            }
+          }
+        },
+        "root_cause": {
+          "enum": [
+            "static-signing-material-as-authorization",
+            "unrestricted-file-upload",
+            "missing-captcha",
+            "unknown"
+          ]
+        },
+        "clustered_impacts": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "external-api-read",
+              "external-api-upload",
+              "credential-guessing",
+              "otp-bypass"
+            ]
+          }
+        },
+        "planned_actions": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "inert_uploads",
+            "adjacent_object_reads",
+            "credential_guesses",
+            "otp_checks"
+          ],
+          "properties": {
+            "inert_uploads": {"type": "integer", "minimum": 0},
+            "adjacent_object_reads": {"type": "integer", "minimum": 0},
+            "credential_guesses": {"type": "integer", "minimum": 0},
+            "otp_checks": {"type": "integer", "minimum": 0}
+          }
+        },
+        "secret_handling": {
+          "enum": ["local-reference", "redacted-inline", "complete-inline"]
+        },
+        "canonical_log": {
+          "enum": ["notes/findings-live.md", "notes/FINDINGS.md"]
+        }
+      }
+    }
   }
 }

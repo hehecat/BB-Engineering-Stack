@@ -118,6 +118,7 @@ class EngagementManager:
                 "revision": 1,
                 "reviewed_at": timestamp,
                 "in_scope": [asset],
+                "candidates": [],
                 "out_of_scope": [],
             },
             "overlays": {"delivery": [platform_contract["delivery_overlay"]]},
@@ -183,7 +184,9 @@ class EngagementManager:
             "Read `engagement.yaml`, `notes/SCOPE.md`, `SESSION-HANDOFF.md`, and "
             "`STATUS.md` before acting. Keep evidence and generated output in this work "
             "unit. Never put credentials or complete tokens in Prompt, reports, shared "
-            "artifacts, or version control.\n",
+            "artifacts, or version control. Discovered adjacent assets remain candidates "
+            "until written Scope promotes them. Bug Bounty findings use "
+            "`notes/findings-live.md`; do not create a parallel findings log.\n",
             encoding="utf-8",
         )
         (root / "notes" / "SCOPE.md").write_text(
@@ -230,10 +233,25 @@ class EngagementManager:
             "| --- | --- | --- |\n"
             f"| `{target}` | {state['scope']['in_scope'][0]['type']} | Initial supplied target |\n\n"
             "## Out-Of-Scope Assets\n\nNone recorded.\n\n"
+            "## Candidate Assets\n\n"
+            "Discovered relationship is not authorization. Record provenance here and "
+            "promote an asset only with a written source and Scope revision.\n\n"
+            "| Asset or pattern | Type | Provenance | Active testing |\n"
+            "| --- | --- | --- | --- |\n"
+            "| None recorded | other | none | prohibited until promoted |\n\n"
             "## Operating Rules\n\n"
             "- Record current rate, identity, side-effect, and disclosure rules before testing.\n"
             "- Keep requests inside the assets and conditions above.\n"
-            "- Preserve exact evidence paths and redact secrets from shareable output.\n"
+            "- Preserve exact evidence paths and redact secrets from shareable output.\n\n"
+            "## Default Production Action Budget\n\n"
+            "Written program rules and explicit Scope revisions override these defaults.\n\n"
+            "| Action | Per-lead ceiling |\n"
+            "| --- | --- |\n"
+            "| Minimal reversible state change | 1 |\n"
+            "| Inert upload | 1 file, at most 1 KiB |\n"
+            "| Adjacent object identifiers after control | 3 |\n"
+            "| Credential guesses on one auth surface | 5 |\n"
+            "| OTP validation on a controlled identifier | 10, without extra sends |\n"
         )
 
     @staticmethod
@@ -249,7 +267,9 @@ class EngagementManager:
             "| Scope revision | 1 |\n"
             "| Current lead | none |\n"
             "| Current finding | none |\n\n"
-            "## Current Objective\n\nEstablish the first reproducible lead.\n\n"
+            "## Current Objective\n\nEstablish the first reproducible in-scope lead.\n\n"
+            "## Scope Candidates\n\nNone recorded. Candidate assets are not active "
+            "targets until a Scope revision records their authorization source.\n\n"
             f"## Exact Next Action\n\n{state['current']['next_action']}.\n\n"
             "## Queue\n\n| Priority | ID | Surface | Signal | Next test |\n"
             "| --- | --- | --- | --- | --- |\n"
@@ -274,6 +294,8 @@ class EngagementManager:
             "- Current lead: none\n"
             "- Current finding: none\n\n"
             "## Established Facts\n\n- Work unit initialized; no technical conclusion yet.\n\n"
+            "## Scope Candidates\n\nNone recorded. Do not actively test discovered adjacent "
+            "assets unless the written Scope has promoted them.\n\n"
             "## Evidence To Open\n\nNo evidence files yet.\n\n"
             "## Exact Next Actions\n\n"
             f"1. {state['current']['next_action']}.\n\n"

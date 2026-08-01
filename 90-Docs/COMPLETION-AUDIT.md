@@ -1,6 +1,6 @@
 # Completion Audit
 
-Audited: 2026-07-31
+Audited: 2026-08-01
 
 ## Delivered Scope
 
@@ -33,8 +33,10 @@ Android dynamic analysis remains device/emulator-dependent.
 - Real Claude Agent evaluation: Scope, HANDOFF, STATUS, next action, ordered
   `ctf-orchestrator` to `ctf-web` routing, artifact placement, schema, and
   process gates pass.
-- Real Claude Bug Bounty evaluation: ordered `bb-orchestrator` to
-  `bb-methodology` routing and all state/artifact gates pass.
+- Real Claude Bug Bounty behavior evaluation: `bb-orchestrator` startup,
+  lead-specific `api-security` routing, Scope candidate gate, Lead ranking,
+  evidence grades, root-cause grouping, action budget, canonical log, and
+  secret-canary checks pass in the isolated fixture.
 - Real Claude Android evaluation: ordered `reverse-orchestrator` to
   `android-reverse-engineering` routing and all state/artifact gates pass.
 - Isolated Keysmith install/status/uninstall: pass.
@@ -59,9 +61,7 @@ Android dynamic analysis remains device/emulator-dependent.
 - Keysmith source is pinned and cached, but persistent replacement is not active
   until `bb-stack keysmith install --profile ... --yes` is explicitly run.
 
-## Publication Step
+## Publication State
 
-The local source repository has an initial commit and repository-local Git
-identity. No remote is configured. Add the chosen private or public remote,
-review tracked source, then push. Never add `.runtime`, `$BB_CONFIG_HOME`, or
-`$BB_WORK_ROOT`.
+The source is published to its configured private Git remote. Never add
+`.runtime`, `$BB_CONFIG_HOME`, or `$BB_WORK_ROOT`.

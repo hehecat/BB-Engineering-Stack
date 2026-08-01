@@ -17,6 +17,11 @@ Last checkpoint: 2026-01-01T00:00:00Z
 
 Select and test the highest-value in-scope lead.
 
+## Scope Candidates
+
+None recorded. Candidate assets are not active targets until a Scope revision
+records their authorization source.
+
 ## Exact Next Action
 
 Read `notes/SCOPE.md`, inventory the supplied target, and create `H-001` in

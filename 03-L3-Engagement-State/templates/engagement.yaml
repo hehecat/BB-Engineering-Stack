@@ -23,6 +23,7 @@ scope:
     - type: host
       pattern: example.invalid
       notes: Example value replaced during engagement creation
+  candidates: []
   out_of_scope: []
 
 overlays:
