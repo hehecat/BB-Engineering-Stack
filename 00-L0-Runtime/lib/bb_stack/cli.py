@@ -57,6 +57,7 @@ def build_parser() -> argparse.ArgumentParser:
     configure.add_argument("--h1-username")
     configure.add_argument("--filecodebox-url")
     configure.add_argument("--agent-language", choices=["zh-CN", "en"])
+    configure.add_argument("--npm-registry")
     configure.add_argument("--extra-path")
     configure.add_argument("--show", action="store_true")
     configure.add_argument("--json", action="store_true")
@@ -125,6 +126,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="workspace root (recommended default: $HOME/BB-Workspaces)",
     )
     bootstrap.add_argument("--agent-language", choices=["zh-CN", "en"])
+    bootstrap.add_argument("--npm-registry")
     bootstrap.add_argument("--with-optional", action="store_true")
     bootstrap.add_argument("--skip-tools", action="store_true")
     bootstrap.add_argument("--skip-node", action="store_true")
@@ -318,6 +320,7 @@ def command(args: argparse.Namespace, paths: StackPaths) -> int:
             "BB_H1_USERNAME": args.h1_username,
             "BB_FILECODEBOX_URL": args.filecodebox_url,
             "BB_AGENT_LANGUAGE": args.agent_language,
+            "BB_NPM_REGISTRY": args.npm_registry,
             "BB_EXTRA_PATH": args.extra_path,
         }
         updates = {key: value for key, value in option_map.items() if value is not None}
@@ -378,10 +381,16 @@ def command(args: argparse.Namespace, paths: StackPaths) -> int:
     if args.command == "mail":
         return run_mail_command(args, paths.home)
     if args.command == "bootstrap":
-        if args.agent_language:
-            ConfigurationManager(paths).configure(
-                {"BB_AGENT_LANGUAGE": args.agent_language}
-            )
+        bootstrap_config = {
+            key: value
+            for key, value in {
+                "BB_AGENT_LANGUAGE": args.agent_language,
+                "BB_NPM_REGISTRY": args.npm_registry,
+            }.items()
+            if value is not None
+        }
+        if bootstrap_config:
+            ConfigurationManager(paths).configure(bootstrap_config)
         result = RuntimeManager(paths).bootstrap(
             args.profile,
             include_optional=args.with_optional,

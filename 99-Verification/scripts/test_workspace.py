@@ -52,6 +52,7 @@ class WorkspaceTests(unittest.TestCase):
         )
         self.assertEqual(settings["env"]["BB_WORK_ROOT"], str(self.paths.work_root))
         self.assertEqual(settings["env"]["BB_AGENT_LANGUAGE"], "zh-CN")
+        self.assertEqual(settings["env"]["BB_NPM_REGISTRY"], "auto")
         router = (self.paths.work_root / "CLAUDE.md").read_text()
         self.assertIn("bb-stack workspace route", router)
         self.assertIn("android", router)

@@ -31,6 +31,7 @@ MANAGED_ENV_KEYS = {
     "BB_H1_USERNAME",
     "BB_FILECODEBOX_URL",
     "BB_AGENT_LANGUAGE",
+    "BB_NPM_REGISTRY",
     "PATH",
     "HTTP_PROXY",
     "HTTPS_PROXY",
@@ -396,6 +397,7 @@ class WorkspaceManager:
             "BB_H1_USERNAME": machine["BB_H1_USERNAME"],
             "BB_FILECODEBOX_URL": machine["BB_FILECODEBOX_URL"],
             "BB_AGENT_LANGUAGE": machine["BB_AGENT_LANGUAGE"],
+            "BB_NPM_REGISTRY": machine["BB_NPM_REGISTRY"],
             "PATH": self.paths.runtime_path(
                 machine.get("BB_EXTRA_PATH", "")
             ),

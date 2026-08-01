@@ -23,6 +23,7 @@ PORTABLE_CONFIG_KEYS = (
     "BB_H1_USERNAME",
     "BB_FILECODEBOX_URL",
     "BB_AGENT_LANGUAGE",
+    "BB_NPM_REGISTRY",
 )
 
 
@@ -131,6 +132,7 @@ class PortableManager:
                 config["BB_FILECODEBOX_URL"], {"http", "https"}
             ),
             "BB_AGENT_LANGUAGE": config["BB_AGENT_LANGUAGE"],
+            "BB_NPM_REGISTRY": config["BB_NPM_REGISTRY"],
         }
         if any(value is None for value in machine_config.values()):
             raise ValidationError("machine configuration contains an invalid portable URL")

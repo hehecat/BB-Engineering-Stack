@@ -25,6 +25,7 @@ bb-stack configure --proxy-mode mihomo \
   --socks-proxy socks5://127.0.0.1:7891
 bb-stack configure --h1-username your-hackerone-username
 bb-stack configure --agent-language zh-CN
+bb-stack configure --npm-registry auto
 bb-stack configure --show
 ```
 
@@ -87,6 +88,7 @@ preserved but are not loaded or included in portable exports.
 | `BB_H1_USERNAME` | HackerOne tester identity | empty |
 | `BB_FILECODEBOX_URL` | FileCodeBox base origin | empty |
 | `BB_AGENT_LANGUAGE` | Agent visible output language: `zh-CN` or `en` | `zh-CN` |
+| `BB_NPM_REGISTRY` | `auto`, `npmjs`, `npmmirror`, or a custom HTTPS origin | `auto` |
 | `BB_EXTRA_PATH` | uncommon global binary paths, colon-separated | empty |
 
 After each configuration command, reload the generated environment and run
@@ -99,6 +101,14 @@ bb-stack status --profile ctf-web --strict
 
 The config parser accepts shell-style literal assignments but does not execute
 command substitutions or source the file during status collection.
+
+`BB_NPM_REGISTRY=auto` measures a real package-metadata request against npmjs
+and npmmirror, tries the faster reachable registry first, and falls back to the
+other registry when installation fails. An explicit value disables fallback.
+Runtime selection is passed directly to `npm ci`; it does not rewrite the
+source lockfile. Repository and staged update lockfiles always store canonical
+`registry.npmjs.org` URLs, independent of global `.npmrc` and
+`npm_config_registry` values.
 
 ## Proxy Comparison
 

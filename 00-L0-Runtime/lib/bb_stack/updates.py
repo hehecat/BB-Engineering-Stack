@@ -21,7 +21,7 @@ from .errors import CommandError, StackError, ValidationError
 from .io import dump_json, dump_yaml, expand, load_json, load_yaml
 from .paths import StackPaths
 from .profiles import ProfileRegistry
-from .runtime import RuntimeManager
+from .runtime import NPM_MIRROR_REGISTRY, NPM_OFFICIAL_REGISTRY, RuntimeManager
 from .skills import SkillRegistry
 from .validation import validate
 
@@ -553,6 +553,7 @@ class UpdateManager:
         npm = shutil.which("npm", path=self.paths.runtime_path())
         if not npm:
             raise CommandError("npm is required to stage an MCP update")
+        registry = RuntimeManager(self.paths).resolve_npm_registry()
         self._run(
             [
                 npm,
@@ -561,17 +562,42 @@ class UpdateManager:
                 "--ignore-scripts",
                 "--no-audit",
                 "--no-fund",
+                "--package-lock=true",
+                "--registry",
+                registry,
                 "--prefix",
                 str(candidate),
             ],
             timeout=120,
         )
+        lock = load_json(candidate / "package-lock.json")
+        self._canonicalize_npm_lock(lock, registry)
+        dump_json(candidate / "package-lock.json", lock)
         shutil.copy2(
             self.paths.root / "05-L5-MCP-CLI" / "lib" / "mcp_probe.mjs",
             candidate / "mcp_probe.mjs",
         )
-        lock = load_json(candidate / "package-lock.json")
         manifest["integrity"] = lock["packages"][f"node_modules/{component['target']}"]["integrity"]
+
+    @staticmethod
+    def _canonicalize_npm_lock(lock: dict[str, Any], registry: str) -> None:
+        mirrors = {
+            registry.rstrip("/"),
+            NPM_MIRROR_REGISTRY,
+        }
+        for package in lock.get("packages", {}).values():
+            if not isinstance(package, dict):
+                continue
+            resolved = package.get("resolved")
+            if not isinstance(resolved, str):
+                continue
+            for mirror in mirrors:
+                prefix = mirror + "/"
+                if resolved.startswith(prefix):
+                    package["resolved"] = (
+                        NPM_OFFICIAL_REGISTRY + resolved[len(mirror):]
+                    )
+                    break
 
     def _validate_npm_mcp(
         self, component: dict[str, Any], candidate: Path

@@ -927,6 +927,7 @@ class StackStatus:
                 "",
                 "Runtime",
                 f"  [{'OK' if runtime['ready'] else 'MISS'}] venv={runtime['venv']} node_modules={runtime['node_modules']}",
+                f"  npm registry configured={runtime['npm_registry']['configured']} resolved={runtime['npm_registry']['resolved'] or 'not-recorded'}",
             ]
         )
         version_parts = [

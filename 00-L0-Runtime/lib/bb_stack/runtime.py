@@ -13,8 +13,10 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import time
 from typing import Any
-from urllib.request import urlopen
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
 import zipfile
 
 from .capabilities import CapabilityRegistry
@@ -26,6 +28,14 @@ from .profiles import ProfileRegistry
 from .skills import SkillRegistry
 from .validation import validate
 from .workspace import WorkspaceManager
+
+
+NPM_OFFICIAL_REGISTRY = "https://registry.npmjs.org"
+NPM_MIRROR_REGISTRY = "https://registry.npmmirror.com"
+NPM_REGISTRY_ALIASES = {
+    "npmjs": NPM_OFFICIAL_REGISTRY,
+    "npmmirror": NPM_MIRROR_REGISTRY,
+}
 
 
 class RuntimeManager:
@@ -106,7 +116,14 @@ class RuntimeManager:
         timeout: int | None = None,
     ) -> None:
         try:
-            subprocess.run(command, env=env, cwd=cwd, timeout=timeout, check=True)
+            subprocess.run(
+                command,
+                env=env,
+                cwd=cwd,
+                timeout=timeout,
+                check=True,
+                stdout=sys.stderr,
+            )
         except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
             raise CommandError(f"command failed: {shlex.join(command)}: {error}") from error
 
@@ -139,6 +156,7 @@ class RuntimeManager:
     def _node_runtime(self, dry_run: bool) -> dict[str, Any]:
         source = self.config / "node-runtime"
         stamp = self.paths.runtime / "node.stamp"
+        registry_state_path = self.paths.runtime / "npm-registry.json"
         digest = self._digest_files([source / "package.json", source / "package-lock.json"])
         if dry_run:
             return {
@@ -156,15 +174,64 @@ class RuntimeManager:
             and stamp.is_file()
             and stamp.read_text(encoding="utf-8").strip() == digest
         ):
+            registry_state = self._npm_registry_state(registry_state_path)
             return {
                 "component": "node-runtime",
                 "state": "ready",
                 "path": str(self.paths.runtime / "node_modules"),
+                "npm_registry": registry_state.get("resolved"),
             }
         for name in ("package.json", "package-lock.json"):
             shutil.copy2(source / name, self.paths.runtime / name)
-        self._run(
-            [npm, "ci", "--ignore-scripts", "--no-audit", "--no-fund", "--prefix", str(self.paths.runtime)]
+        setting = ConfigurationManager(self.paths).effective()["BB_NPM_REGISTRY"]
+        attempted: list[str] = []
+        registry = None
+        last_error: CommandError | None = None
+        for candidate in self.available_npm_registries(setting):
+            attempted.append(candidate)
+            npm_env = dict(os.environ)
+            npm_env["NPM_CONFIG_REGISTRY"] = candidate
+            npm_env["npm_config_registry"] = candidate
+            try:
+                self._run(
+                    [
+                        npm,
+                        "ci",
+                        "--ignore-scripts",
+                        "--no-audit",
+                        "--no-fund",
+                        "--fetch-retries=1",
+                        "--fetch-timeout=15000",
+                        "--fetch-retry-mintimeout=1000",
+                        "--fetch-retry-maxtimeout=5000",
+                        "--registry",
+                        candidate,
+                        "--prefix",
+                        str(self.paths.runtime),
+                    ],
+                    env=npm_env,
+                    timeout=90,
+                )
+            except CommandError as error:
+                last_error = error
+                if setting != "auto":
+                    raise
+                continue
+            registry = candidate
+            break
+        if registry is None:
+            detail = ", ".join(attempted) if attempted else "none reachable"
+            raise CommandError(
+                "npm runtime installation failed; registries attempted: " + detail
+            ) from last_error
+        atomic_write(
+            registry_state_path,
+            json.dumps(
+                {"configured": setting, "resolved": registry},
+                indent=2,
+                ensure_ascii=True,
+            )
+            + "\n",
         )
         shutil.copy2(
             self.paths.root / "05-L5-MCP-CLI" / "lib" / "mcp_probe.mjs",
@@ -175,6 +242,66 @@ class RuntimeManager:
             "component": "node-runtime",
             "state": "ready",
             "path": str(self.paths.runtime / "node_modules"),
+            "npm_registry": registry,
+        }
+
+    @staticmethod
+    def npm_registry_candidates(setting: str) -> list[str]:
+        if setting == "auto":
+            return [NPM_OFFICIAL_REGISTRY, NPM_MIRROR_REGISTRY]
+        return [NPM_REGISTRY_ALIASES.get(setting, setting).rstrip("/")]
+
+    def resolve_npm_registry(self) -> str:
+        setting = ConfigurationManager(self.paths).effective()["BB_NPM_REGISTRY"]
+        candidates = self.available_npm_registries(setting)
+        if candidates:
+            return candidates[0]
+        raise CommandError(
+            "no npm registry is reachable; configure one with "
+            "bb-stack configure --npm-registry HTTPS_URL"
+        )
+
+    def available_npm_registries(self, setting: str) -> list[str]:
+        candidates = self.npm_registry_candidates(setting)
+        if setting != "auto":
+            return candidates
+        measured = [
+            (latency, index, registry)
+            for index, registry in enumerate(candidates)
+            if (latency := self._npm_registry_latency(registry)) is not None
+        ]
+        return [registry for _, _, registry in sorted(measured)]
+
+    @staticmethod
+    def _npm_registry_latency(registry: str) -> float | None:
+        request = Request(
+            registry.rstrip("/") + "/@modelcontextprotocol%2Fsdk/1.30.0",
+            headers={"User-Agent": "bb-stack-bootstrap/0.8"},
+        )
+        started = time.monotonic()
+        try:
+            with urlopen(request, timeout=5) as response:
+                if not 200 <= response.status < 400:
+                    return None
+                response.read(1)
+                return time.monotonic() - started
+        except (HTTPError, URLError, OSError, TimeoutError):
+            return None
+
+    @staticmethod
+    def _npm_registry_state(path: Path) -> dict[str, str]:
+        if not path.is_file():
+            return {}
+        try:
+            value = json.loads(path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            return {}
+        if not isinstance(value, dict):
+            return {}
+        return {
+            key: item
+            for key, item in value.items()
+            if key in {"configured", "resolved"} and isinstance(item, str)
         }
 
     @staticmethod
@@ -763,6 +890,9 @@ class RuntimeManager:
         commands = {}
         for name in ("python3", "node", "npm", "go", "git", "claude", "codex"):
             commands[name] = shutil.which(name, path=self.paths.runtime_path())
+        registry_state = self._npm_registry_state(
+            self.paths.runtime / "npm-registry.json"
+        )
         return {
             "schema_version": 1,
             "paths": {
@@ -775,5 +905,11 @@ class RuntimeManager:
             "env_file": self.paths.env_file.is_file(),
             "venv": (self.paths.venv / "bin" / "python").is_file(),
             "node_modules": (self.paths.runtime / "node_modules").is_dir(),
+            "npm_registry": {
+                "configured": ConfigurationManager(self.paths).effective()[
+                    "BB_NPM_REGISTRY"
+                ],
+                "resolved": registry_state.get("resolved"),
+            },
             "commands": commands,
         }

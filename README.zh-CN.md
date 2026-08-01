@@ -323,6 +323,27 @@ bb-stack status --profile web --strict
 
 状态页会区分“mihomo 端口存在”和“代理环境已经应用”。
 
+## npm 镜像
+
+初始化默认对 npm 官方源和 npmmirror 执行真实包元数据测速，优先使用当前网络更快
+的源；安装失败时再尝试另一个。仓库中的 `package-lock.json` 始终保存官方源 URL，
+不会被当前机器的 `.npmrc` 或 npm 缓存改写。
+
+```bash
+# 推荐：自动选择
+bb-stack configure --npm-registry auto
+
+# 也可以显式固定
+bb-stack configure --npm-registry npmjs
+bb-stack configure --npm-registry npmmirror
+
+# 初始化时直接指定
+bb-stack bootstrap --profile ctf-web --npm-registry auto
+```
+
+最终使用的 registry 会显示在 bootstrap 输出和 `bb-stack status` 的 Runtime
+部分。外网 VPS 通常选择 npmjs，中国大陆网络通常选择 npmmirror。
+
 ## OTP 邮箱
 
 OTP 是可选的一方实现，无需额外项目：
@@ -423,7 +444,7 @@ Engagement 目录和本地凭据由使用者按自己的存储方式复制；por
 
 ## 项目状态
 
-当前版本：`0.8.0`
+当前版本：`0.8.1`
 
 CTF Web、Bug Bounty、Android 静态分析和 Reverse Profile 已通过严格状态检查。
 CTF Web、Bug Bounty、Android Profile 及普通 `claude` 的 Android 自动路由均已

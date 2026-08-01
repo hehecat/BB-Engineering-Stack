@@ -83,6 +83,44 @@ class RuntimeInstallerTests(unittest.TestCase):
             env={"PATH": "/usr/bin:/bin"},
         )
 
+    def test_auto_npm_registry_prefers_official_then_falls_back(self) -> None:
+        self.assertEqual(
+            self.manager.npm_registry_candidates("auto"),
+            [
+                "https://registry.npmjs.org",
+                "https://registry.npmmirror.com",
+            ],
+        )
+        self.assertEqual(
+            self.manager.npm_registry_candidates("npmmirror"),
+            ["https://registry.npmmirror.com"],
+        )
+        with patch.object(
+            self.manager,
+            "_npm_registry_latency",
+            side_effect=lambda value: (
+                0.1 if value.endswith("npmmirror.com") else 0.5
+            ),
+        ):
+            self.assertEqual(
+                self.manager.available_npm_registries("auto"),
+                [
+                    "https://registry.npmmirror.com",
+                    "https://registry.npmjs.org",
+                ],
+            )
+        with patch.object(
+            self.manager,
+            "_npm_registry_latency",
+            side_effect=lambda value: (
+                0.1 if value.endswith("npmmirror.com") else None
+            ),
+        ):
+            self.assertEqual(
+                self.manager.resolve_npm_registry(),
+                "https://registry.npmmirror.com",
+            )
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -80,6 +80,36 @@ class ContractTests(unittest.TestCase):
 
         self.assertEqual(__version__, version)
 
+    def test_committed_npm_lock_uses_canonical_registry(self) -> None:
+        lock = (
+            ROOT / "00-L0-Runtime/config/node-runtime/package-lock.json"
+        ).read_text(encoding="utf-8")
+        self.assertIn("https://registry.npmjs.org/", lock)
+        self.assertNotIn("registry.npmmirror.com", lock)
+
+    def test_staged_npm_lock_registry_is_canonicalized(self) -> None:
+        lock = {
+            "packages": {
+                "node_modules/example": {
+                    "resolved": "https://registry.npmmirror.com/example/-/example-1.0.0.tgz"
+                },
+                "node_modules/git-example": {
+                    "resolved": "https://github.com/example/archive.tgz"
+                },
+            }
+        }
+        UpdateManager._canonicalize_npm_lock(
+            lock, "https://registry.npmmirror.com"
+        )
+        self.assertEqual(
+            lock["packages"]["node_modules/example"]["resolved"],
+            "https://registry.npmjs.org/example/-/example-1.0.0.tgz",
+        )
+        self.assertEqual(
+            lock["packages"]["node_modules/git-example"]["resolved"],
+            "https://github.com/example/archive.tgz",
+        )
+
     def test_authored_core_has_no_old_machine_paths(self) -> None:
         excluded = {".git", ".runtime", "vendor", "__pycache__"}
         offenders = []

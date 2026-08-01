@@ -20,6 +20,7 @@ MACHINE_CONFIG_DEFAULTS = {
     "BB_H1_USERNAME": "",
     "BB_FILECODEBOX_URL": "",
     "BB_AGENT_LANGUAGE": "zh-CN",
+    "BB_NPM_REGISTRY": "auto",
     "BB_EXTRA_PATH": "",
 }
 MACHINE_CONFIG_KEYS = tuple(MACHINE_CONFIG_DEFAULTS)
@@ -143,6 +144,7 @@ class ConfigurationManager:
                     values["BB_FILECODEBOX_URL"], {"http", "https"}
                 ),
                 "BB_AGENT_LANGUAGE": values["BB_AGENT_LANGUAGE"],
+                "BB_NPM_REGISTRY": values["BB_NPM_REGISTRY"],
                 "BB_EXTRA_PATH": values["BB_EXTRA_PATH"],
             },
             "unknown_keys": sorted(set(self.read()) - set(MACHINE_CONFIG_KEYS)),
@@ -183,6 +185,11 @@ class ConfigurationManager:
             raise ValidationError("BB_H1_USERNAME is too long")
         if values.get("BB_AGENT_LANGUAGE") not in {"zh-CN", "en"}:
             raise ValidationError("BB_AGENT_LANGUAGE must be zh-CN or en")
+        npm_registry = values.get("BB_NPM_REGISTRY", "")
+        if npm_registry not in {"auto", "npmjs", "npmmirror"}:
+            ConfigurationManager._validate_url(
+                "BB_NPM_REGISTRY", npm_registry, {"https"}
+            )
         extra_path = values.get("BB_EXTRA_PATH", "")
         for item in extra_path.split(os.pathsep):
             if item and not Path(item).expanduser().is_absolute():
@@ -220,6 +227,10 @@ class ConfigurationManager:
             "BB_FILECODEBOX_URL": ask("FileCodeBox origin", "BB_FILECODEBOX_URL"),
             "BB_AGENT_LANGUAGE": ask(
                 "Agent language (zh-CN/en)", "BB_AGENT_LANGUAGE"
+            ),
+            "BB_NPM_REGISTRY": ask(
+                "npm registry (auto/npmjs/npmmirror/HTTPS URL)",
+                "BB_NPM_REGISTRY",
             ),
             "BB_EXTRA_PATH": ask("Extra PATH entries", "BB_EXTRA_PATH"),
         }
