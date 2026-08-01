@@ -1,0 +1,15 @@
+# Local Test Credentials
+
+Render this template as `LAB-CREDS.local.md` with file mode 600. Local use only.
+Exclude the rendered file from commits, archives, reports, Prompt, screenshots,
+and chat.
+
+## tester-a
+
+- Purpose: controlled baseline account
+- Role: standard user
+- Login URL: recorded when the account is created
+- Username: recorded locally
+- Password: recorded locally
+- MFA or recovery reference: recorded locally when applicable
+- Session material: store in a separate ignored local file and reference it here

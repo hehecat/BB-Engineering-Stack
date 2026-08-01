@@ -444,7 +444,7 @@ Engagement 目录和本地凭据由使用者按自己的存储方式复制；por
 
 ## 项目状态
 
-当前版本：`0.8.1`
+当前版本：`0.8.2`
 
 CTF Web、Bug Bounty、Android 静态分析和 Reverse Profile 已通过严格状态检查。
 CTF Web、Bug Bounty、Android Profile 及普通 `claude` 的 Android 自动路由均已

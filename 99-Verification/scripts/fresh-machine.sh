@@ -15,7 +15,15 @@ trap cleanup EXIT
 ROOT="$SANDBOX/BB-Engineering-Stack"
 HOME_TEST="$SANDBOX/home"
 mkdir -p "$ROOT" "$HOME_TEST"
-rsync -a --exclude='.git' --exclude='.runtime' "$SOURCE/" "$ROOT/"
+if git -C "$SOURCE" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  (
+    cd "$SOURCE"
+    git ls-files --cached --others --exclude-standard -z |
+      rsync -a --from0 --files-from=- ./ "$ROOT/"
+  )
+else
+  rsync -a --exclude='.git' --exclude='.runtime' "$SOURCE/" "$ROOT/"
+fi
 
 export HOME="$HOME_TEST"
 export BB_STACK_ROOT="$ROOT"

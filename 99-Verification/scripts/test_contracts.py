@@ -4,6 +4,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 import shutil
+import subprocess
 import tempfile
 import unittest
 import json
@@ -71,6 +72,21 @@ class ContractTests(unittest.TestCase):
             "99-Verification",
         ):
             self.assertTrue((ROOT / name).is_dir(), name)
+
+    def test_required_engagement_templates_are_tracked(self) -> None:
+        relative = Path(
+            "03-L3-Engagement-State/templates/notes/LAB-CREDS.local.md.example"
+        )
+        self.assertTrue((ROOT / relative).is_file())
+        if (ROOT / ".git").exists():
+            result = subprocess.run(
+                ["git", "ls-files", "--error-unmatch", str(relative)],
+                cwd=ROOT,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 0, f"required template is not tracked: {relative}")
 
     def test_release_versions_match(self) -> None:
         version = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
