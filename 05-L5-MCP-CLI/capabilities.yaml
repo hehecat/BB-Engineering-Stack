@@ -240,6 +240,49 @@ providers:
         - "${BB_ARTIFACT_ROOT}/browser"
         - --save-session
 
+  chrome-devtools-cli:
+    kind: cli
+    locator:
+      type: path
+      value: "${BB_STACK_ROOT}/.runtime/node_modules/.bin/chrome-devtools"
+    placement: main
+    stateful: true
+    context_cost: none
+    side_effects: [network-request, browser-action, local-write]
+
+  chrome-devtools-mcp:
+    kind: mcp
+    locator:
+      type: path
+      value: "${BB_STACK_ROOT}/.runtime/node_modules/chrome-devtools-mcp/build/src/bin/chrome-devtools-mcp.js"
+      interpreter: node
+    placement: shared-main
+    stateful: true
+    context_cost: medium
+    side_effects: [network-request, browser-action, local-write]
+    mcp:
+      name: chrome-devtools
+      transport: stdio
+      command: node
+      args:
+        - "${BB_STACK_ROOT}/.runtime/node_modules/chrome-devtools-mcp/build/src/bin/chrome-devtools-mcp.js"
+        - --browser-url=http://127.0.0.1:9222
+        - --category-performance=false
+        - --performance-crux=false
+        - --usage-statistics=false
+        - --screenshot-format=webp
+        - --screenshot-max-width=1600
+
+  webcrack:
+    kind: cli
+    locator:
+      type: path
+      value: "${BB_STACK_ROOT}/.runtime/node_modules/.bin/webcrack"
+    placement: bounded-worker
+    stateful: false
+    context_cost: none
+    side_effects: [local-read, local-write, process-execution]
+
   anastasis-mcp:
     kind: mcp
     locator:
@@ -366,6 +409,102 @@ providers:
     context_cost: low
     side_effects: [local-read, local-write, process-execution]
 
+  unzip:
+    kind: cli
+    locator: {type: command, value: unzip}
+    placement: main
+    stateful: false
+    context_cost: none
+    side_effects: [local-read, local-write]
+
+  ideviceinstaller:
+    kind: cli
+    locator: {type: command, value: ideviceinstaller}
+    placement: main
+    stateful: true
+    context_cost: none
+    side_effects: [device-action, local-write]
+
+  iproxy:
+    kind: cli
+    locator: {type: command, value: iproxy}
+    placement: main
+    stateful: true
+    context_cost: none
+    side_effects: [device-action, network-request]
+
+  aws-cli:
+    kind: cli
+    locator: {type: command, value: aws}
+    placement: bounded-worker
+    stateful: false
+    context_cost: none
+    side_effects: [network-request, cloud-read, cloud-write]
+
+  azure-cli:
+    kind: cli
+    locator: {type: command, value: az}
+    placement: bounded-worker
+    stateful: false
+    context_cost: none
+    side_effects: [network-request, cloud-read, cloud-write]
+
+  gcloud-cli:
+    kind: cli
+    locator: {type: command, value: gcloud}
+    placement: bounded-worker
+    stateful: false
+    context_cost: none
+    side_effects: [network-request, cloud-read, cloud-write]
+
+  prowler:
+    kind: cli
+    locator: {type: command, value: prowler}
+    placement: bounded-worker
+    stateful: false
+    context_cost: none
+    side_effects: [network-request, cloud-read, local-write]
+
+  steampipe:
+    kind: cli
+    locator: {type: command, value: steampipe}
+    placement: bounded-worker
+    stateful: true
+    context_cost: none
+    side_effects: [network-request, cloud-read, local-write]
+
+  checkov:
+    kind: cli
+    locator: {type: command, value: checkov}
+    placement: bounded-worker
+    stateful: false
+    context_cost: none
+    side_effects: [local-read, local-write]
+
+  trivy:
+    kind: cli
+    locator: {type: command, value: trivy}
+    placement: bounded-worker
+    stateful: false
+    context_cost: none
+    side_effects: [local-read, local-write, network-request]
+
+  syft:
+    kind: cli
+    locator: {type: command, value: syft}
+    placement: bounded-worker
+    stateful: false
+    context_cost: none
+    side_effects: [local-read, local-write]
+
+  grype:
+    kind: cli
+    locator: {type: command, value: grype}
+    placement: bounded-worker
+    stateful: false
+    context_cost: none
+    side_effects: [local-read, local-write, network-request]
+
 capabilities:
   http.raw: {strategy: any, providers: [curl]}
   data.json: {strategy: any, providers: [jq]}
@@ -382,7 +521,9 @@ capabilities:
   network.scan: {strategy: any, providers: [naabu, nmap]}
   source.audit: {strategy: any, providers: [semgrep, trufflehog]}
   browser.stateful: {strategy: any, providers: [playwright-mcp]}
-  analysis.javascript: {strategy: any, providers: [anastasis-mcp]}
+  browser.devtools: {strategy: any, providers: [chrome-devtools-mcp, chrome-devtools-cli]}
+  analysis.javascript: {strategy: any, providers: [webcrack]}
+  analysis.javascript-extended: {strategy: any, providers: [anastasis-mcp]}
   osint.correlation: {strategy: any, providers: [osint-mcp]}
   oob.callback: {strategy: any, providers: [interactsh]}
   proxy.http: {strategy: any, providers: [mihomo-http]}
@@ -392,4 +533,12 @@ capabilities:
   android.device: {strategy: any, providers: [adb]}
   android.static: {strategy: all, providers: [apktool, jadx]}
   android.dynamic: {strategy: any, providers: [frida, objection]}
+  mobile.dynamic: {strategy: any, providers: [frida, objection]}
+  ios.static: {strategy: all, providers: [unzip, radare2]}
+  ios.device: {strategy: any, providers: [ideviceinstaller, iproxy]}
   reverse.static: {strategy: any, providers: [radare2, jadx]}
+  cloud.cli: {strategy: any, providers: [aws-cli, azure-cli, gcloud-cli]}
+  cloud.posture: {strategy: any, providers: [prowler, steampipe]}
+  source.iac: {strategy: any, providers: [checkov, trivy]}
+  source.sca: {strategy: any, providers: [syft, grype, trivy]}
+  container.audit: {strategy: any, providers: [trivy]}

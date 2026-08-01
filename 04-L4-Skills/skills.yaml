@@ -4,6 +4,8 @@ skills:
   bb-orchestrator: {role: orchestrator, source: library/bb-orchestrator, provenance: stack}
   ctf-orchestrator: {role: orchestrator, source: library/ctf-orchestrator, provenance: stack}
   reverse-orchestrator: {role: orchestrator, source: library/reverse-orchestrator, provenance: stack}
+  browser-js-orchestrator: {role: orchestrator, source: library/browser-js-orchestrator, provenance: stack}
+  security-orchestrator: {role: orchestrator, source: library/security-orchestrator, provenance: stack}
   account-takeover: {role: specialist, source: vendor/community/account-takeover, provenance: local-snapshot}
   android-pentest: {role: specialist, source: vendor/community/android-pentest, provenance: local-snapshot}
   android-reverse-engineering:
@@ -30,6 +32,54 @@ skills:
   graphql-audit: {role: specialist, source: vendor/community/graphql-audit, provenance: local-snapshot}
   idor: {role: specialist, source: vendor/community/idor, provenance: local-snapshot}
   information-disclosure: {role: specialist, source: vendor/community/information-disclosure, provenance: local-snapshot}
+  ios-pentest:
+    role: specialist
+    source: vendor/community/ios-pentest
+    provenance: ai-security-arsenal-snapshot
+    repository: https://github.com/hardw00t/ai-security-arsenal
+    revision: a1a68f7010a9c97b22336dcbcfde539c492a7109
+  network-pentest:
+    role: specialist
+    source: vendor/community/network-pentest
+    provenance: ai-security-arsenal-snapshot
+    repository: https://github.com/hardw00t/ai-security-arsenal
+    revision: a1a68f7010a9c97b22336dcbcfde539c492a7109
+  cloud-security:
+    role: specialist
+    source: vendor/community/cloud-security
+    provenance: ai-security-arsenal-snapshot
+    repository: https://github.com/hardw00t/ai-security-arsenal
+    revision: a1a68f7010a9c97b22336dcbcfde539c492a7109
+  sast-orchestration:
+    role: automation
+    source: vendor/community/sast-orchestration
+    provenance: ai-security-arsenal-snapshot
+    repository: https://github.com/hardw00t/ai-security-arsenal
+    revision: a1a68f7010a9c97b22336dcbcfde539c492a7109
+  iac-security:
+    role: specialist
+    source: vendor/community/iac-security
+    provenance: ai-security-arsenal-snapshot
+    repository: https://github.com/hardw00t/ai-security-arsenal
+    revision: a1a68f7010a9c97b22336dcbcfde539c492a7109
+  container-security:
+    role: specialist
+    source: vendor/community/container-security
+    provenance: ai-security-arsenal-snapshot
+    repository: https://github.com/hardw00t/ai-security-arsenal
+    revision: a1a68f7010a9c97b22336dcbcfde539c492a7109
+  sca-security:
+    role: specialist
+    source: vendor/community/sca-security
+    provenance: ai-security-arsenal-snapshot
+    repository: https://github.com/hardw00t/ai-security-arsenal
+    revision: a1a68f7010a9c97b22336dcbcfde539c492a7109
+  threat-modeling:
+    role: methodology
+    source: vendor/community/threat-modeling
+    provenance: ai-security-arsenal-snapshot
+    repository: https://github.com/hardw00t/ai-security-arsenal
+    revision: a1a68f7010a9c97b22336dcbcfde539c492a7109
   llm-security: {role: specialist, source: vendor/community/llm-security, provenance: local-snapshot}
   mfa-bypass: {role: specialist, source: vendor/community/mfa-bypass, provenance: local-snapshot}
   oauth: {role: specialist, source: vendor/community/oauth, provenance: local-snapshot}

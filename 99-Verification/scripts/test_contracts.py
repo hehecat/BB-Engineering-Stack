@@ -23,6 +23,7 @@ from bb_stack.profiles import ProfileRegistry
 from bb_stack.runtime import RuntimeManager
 from bb_stack.skills import SkillRegistry
 from bb_stack.updates import UpdateManager
+from bb_stack.workspace import ROUTES
 
 
 class ContractTests(unittest.TestCase):
@@ -41,9 +42,9 @@ class ContractTests(unittest.TestCase):
         self.temporary.cleanup()
 
     def test_all_registries_validate(self) -> None:
-        self.assertEqual(len(ProfileRegistry(self.paths).validate_all()), 7)
-        self.assertGreaterEqual(len(SkillRegistry(self.paths).validate_all()), 40)
-        self.assertEqual(len(CapabilityRegistry(self.paths).validate_all()), 6)
+        self.assertEqual(len(ProfileRegistry(self.paths).validate_all()), 17)
+        self.assertGreaterEqual(len(SkillRegistry(self.paths).validate_all()), 50)
+        self.assertEqual(len(CapabilityRegistry(self.paths).validate_all()), 16)
         runtime = RuntimeManager(self.paths).validate_config()
         self.assertIn("ctf-web", runtime["tool_profiles"])
 
@@ -59,6 +60,46 @@ class ContractTests(unittest.TestCase):
                 "01-L1-Global-Prompt/languages/zh-CN.md",
                 result.source_fragments,
             )
+
+    def test_workflow_policy_does_not_leak_between_profiles(self) -> None:
+        registry = ProfileRegistry(self.paths)
+        for name in registry.names():
+            rendered = registry.render(name)
+            content = Path(rendered.output_file).read_text(encoding="utf-8")
+            if rendered.workflow == "assessment":
+                self.assertIn("Authorized Security Assessment Workflow", content)
+                self.assertNotIn("Default Production Action Budget", content)
+                self.assertNotIn("Optimize for a verified flag", content)
+            elif rendered.workflow == "analysis":
+                self.assertIn("Security Analysis Workflow", content)
+                self.assertNotIn("Authorized Security Assessment Workflow", content)
+                self.assertNotIn("Default Production Action Budget", content)
+            elif rendered.workflow == "ctf":
+                self.assertIn("CTF Workflow", content)
+                self.assertNotIn("Authorized Security Assessment Workflow", content)
+
+    def test_cross_domain_skills_are_optional_handoffs(self) -> None:
+        registry = SkillRegistry(self.paths)
+        web = registry.profile("web")
+        self.assertIn("browser-js-orchestrator", web["optional"])
+        self.assertNotIn("browser-js-orchestrator", web["required"])
+        android = registry.profile("assessment-android")
+        self.assertIn("api-security", android["optional"])
+        self.assertNotIn("api-security", android["required"])
+
+    def test_route_profile_matrix_has_no_drift(self) -> None:
+        profiles = ProfileRegistry(self.paths)
+        skills = SkillRegistry(self.paths)
+        for kind, route in ROUTES.items():
+            with self.subTest(kind=kind):
+                profile = profiles.load(route["profile"])
+                self.assertEqual(profile["workflow"], route["workflow"])
+                self.assertEqual(profile["platform"], route["platform"])
+                self.assertEqual(profile["skill_profile"], route["skill_profile"])
+                self.assertEqual(profile["l5_profile"], route["l5_profile"])
+                selected = skills.profile(route["skill_profile"])
+                available = set(selected["required"] + selected["optional"])
+                self.assertLessEqual(set(route["skill_route"]), available)
 
     def test_layer_directories_exist(self) -> None:
         for name in (
@@ -170,10 +211,26 @@ class ContractTests(unittest.TestCase):
         router = (
             ROOT / "02-L2-Workflow-Profiles" / "workspace" / "CLAUDE.md"
         ).read_text(encoding="utf-8")
-        self.assertLess(len(router.split()), 700)
+        self.assertLess(len(router.split()), 1000)
         self.assertIn("bb-stack workspace route", router)
         self.assertIn("Do not ask the user to choose an internal Profile", router)
-        for kind in ("ctf-web", "web", "android", "reverse", "lab"):
+        for kind in (
+            "ctf-web",
+            "ctf-android",
+            "ctf-reverse",
+            "web",
+            "web-assessment",
+            "android-assessment",
+            "android-analysis",
+            "ios-assessment",
+            "reverse-analysis",
+            "network-assessment",
+            "cloud-assessment",
+            "llm-assessment",
+            "source-audit",
+            "browser-js",
+            "lab",
+        ):
             self.assertIn(f"`{kind}`", router)
 
     def test_yaml_duplicate_keys_are_rejected(self) -> None:
@@ -219,11 +276,36 @@ class ContractTests(unittest.TestCase):
             "current_revision"
         ]
         manager._git_remote_revision = lambda repository, branch: current_revision
-        report = manager.check({"skills"})
-        by_name = {item["name"]: item for item in report["results"]}
-        self.assertEqual(by_name["skill.ctf-web"]["status"], "current")
-        self.assertEqual(by_name["skill.account-takeover"]["status"], "manual")
-        self.assertEqual(by_name["skill.bb-orchestrator"]["status"], "stack-owned")
+        self.assertEqual(
+            manager.check({"skills"}, "skill.ctf-web")["results"][0]["status"],
+            "current",
+        )
+        self.assertEqual(
+            manager.check({"skills"}, "skill.account-takeover")["results"][0]["status"],
+            "manual",
+        )
+        self.assertEqual(
+            manager.check({"skills"}, "skill.bb-orchestrator")["results"][0]["status"],
+            "stack-owned",
+        )
+
+    def test_full_security_skill_updates_have_pinned_channels(self) -> None:
+        manager = UpdateManager(self.paths)
+        revision = "a1a68f7010a9c97b22336dcbcfde539c492a7109"
+        manager._git_remote_revision = lambda repository, branch: revision
+        for name in (
+            "ios-pentest",
+            "network-pentest",
+            "cloud-security",
+            "sast-orchestration",
+            "iac-security",
+            "container-security",
+            "sca-security",
+            "threat-modeling",
+        ):
+            with self.subTest(name=name):
+                result = manager.check({"skills"}, f"skill.{name}")["results"][0]
+                self.assertEqual(result["status"], "current")
 
     def test_unrelated_repository_commit_is_not_a_skill_update(self) -> None:
         manager = UpdateManager(self.paths)

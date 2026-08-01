@@ -148,6 +148,118 @@ class WorkspaceTests(unittest.TestCase):
         )
         self.assertEqual(ctf["profile"], "ctf-replacement")
 
+        android = self.manager.route(
+            kind="android",
+            target="./inbox/continuous.apk",
+            slug="continuous-android",
+            platform=None,
+            mode="continuous",
+        )
+        android_prompt = Path(android["prompt_file"]).read_text()
+        self.assertIn("mode=continuous", android_prompt)
+        self.assertIn("A status update is not a terminal action", android_prompt)
+
+    def test_browser_js_route_uses_analysis_workflow_without_bb_budget(self) -> None:
+        self.manager.initialize()
+        result = self.manager.route(
+            kind="browser-js",
+            target="https://example.invalid/app",
+            slug="example-js",
+            platform=None,
+            mode="interactive",
+        )
+
+        root = Path(result["engagement"])
+        self.assertEqual(result["workflow"], "analysis")
+        self.assertEqual(result["platform"], "standalone-analysis")
+        self.assertEqual(result["profile"], "browser-js")
+        self.assertEqual(result["skill_route"], ["browser-js-orchestrator"])
+        self.assertEqual(
+            result["browser_start"],
+            "bb-stack browser start --engagement example-js",
+        )
+        self.assertTrue((root / "notes" / "analysis-log.md").is_file())
+        self.assertNotIn(
+            "Default Production Action Budget",
+            (root / "notes" / "SCOPE.md").read_text(),
+        )
+
+    def test_workflow_domain_matrix_keeps_profiles_isolated(self) -> None:
+        self.manager.initialize()
+        assessment = self.manager.route(
+            kind="android-assessment",
+            target="./inbox/product.apk",
+            slug="product-android",
+            platform=None,
+            mode="continuous",
+        )
+        analysis = self.manager.route(
+            kind="android-analysis",
+            target="./inbox/library.apk",
+            slug="library-analysis",
+            platform=None,
+            mode="interactive",
+        )
+        challenge = self.manager.route(
+            kind="ctf-android",
+            target="./inbox/challenge.apk",
+            slug="challenge-android",
+            platform=None,
+            mode="interactive",
+        )
+
+        self.assertEqual(assessment["workflow"], "assessment")
+        self.assertEqual(assessment["profile"], "assessment-android")
+        self.assertEqual(assessment["platform"], "authorized-assessment")
+        self.assertEqual(
+            assessment["skill_route"],
+            [
+                "security-orchestrator",
+                "android-reverse-engineering",
+                "android-pentest",
+            ],
+        )
+        assessment_prompt = Path(assessment["prompt_file"]).read_text()
+        self.assertIn("Authorized Security Assessment Workflow", assessment_prompt)
+        self.assertNotIn("Default Production Action Budget", assessment_prompt)
+        self.assertNotIn("verified flag", assessment_prompt)
+
+        self.assertEqual(analysis["workflow"], "analysis")
+        self.assertEqual(analysis["profile"], "analysis-android")
+        analysis_prompt = Path(analysis["prompt_file"]).read_text()
+        self.assertIn("Security Analysis Workflow", analysis_prompt)
+        self.assertNotIn("Authorized Security Assessment Workflow", analysis_prompt)
+
+        self.assertEqual(challenge["workflow"], "ctf")
+        self.assertEqual(challenge["profile"], "ctf-android")
+        challenge_prompt = Path(challenge["prompt_file"]).read_text()
+        self.assertIn("CTF Workflow", challenge_prompt)
+        self.assertNotIn("Authorized Security Assessment Workflow", challenge_prompt)
+
+    def test_full_security_routes_select_expected_specialists(self) -> None:
+        self.manager.initialize()
+        cases = {
+            "web-assessment": ("assessment-web", "api-security"),
+            "ios-assessment": ("assessment-ios", "ios-pentest"),
+            "network-assessment": ("assessment-network", "network-pentest"),
+            "cloud-assessment": ("assessment-cloud", "cloud-security"),
+            "llm-assessment": ("assessment-llm", "llm-security"),
+            "source-audit": ("assessment-source", "sast-orchestration"),
+            "reverse-analysis": ("analysis-reverse", "reverse-orchestrator"),
+        }
+        for index, (kind, expected) in enumerate(cases.items(), start=1):
+            with self.subTest(kind=kind):
+                result = self.manager.route(
+                    kind=kind,
+                    target=f"./inbox/target-{index}",
+                    slug=f"route-{index}",
+                    platform=None,
+                    mode="interactive",
+                )
+                self.assertEqual(result["profile"], expected[0])
+                self.assertEqual(result["skill_route"][-1], expected[1])
+                self.assertEqual(result["workflow"], "assessment" if kind != "reverse-analysis" else "analysis")
+
     def test_managed_file_changes_are_not_overwritten_without_force(self) -> None:
         self.manager.initialize()
         router = self.paths.work_root / "CLAUDE.md"
@@ -158,7 +270,7 @@ class WorkspaceTests(unittest.TestCase):
         self.manager.initialize(force=True)
         self.assertNotIn("local edit", router.read_text())
 
-    def test_workspace_initializes_without_chromium_and_omits_playwright(self) -> None:
+    def test_workspace_never_loads_domain_mcp(self) -> None:
         original_which = shutil.which
 
         def without_chromium(command: str, path: str | None = None) -> str | None:

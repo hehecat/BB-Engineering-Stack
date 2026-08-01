@@ -28,12 +28,22 @@ STATE_FILES = (
     "SESSION-HANDOFF.md",
     "STATUS.md",
 )
-ROUTE_TERMINALS = {
-    "minimal": "ctf-orchestrator",
-    "ctf-web": "ctf-web",
-    "web": "bb-orchestrator",
-    "android": "android-reverse-engineering",
-    "reverse": "reverse-orchestrator",
+ROUTE_SUFFIXES = {
+    "minimal": [],
+    "ctf-web": ["ctf-web"],
+    "web": [],
+    "android": ["android-reverse-engineering"],
+    "reverse": [],
+    "browser-js": [],
+    "assessment-web": ["api-security"],
+    "assessment-android": ["android-reverse-engineering", "android-pentest"],
+    "assessment-ios": ["ios-pentest"],
+    "assessment-network": ["network-pentest"],
+    "assessment-cloud": ["cloud-security"],
+    "assessment-llm": ["llm-security"],
+    "assessment-source": ["sast-orchestration"],
+    "analysis-android": ["android-reverse-engineering"],
+    "analysis-reverse": [],
 }
 SCENARIOS = {
     "minimal": (
@@ -55,6 +65,47 @@ SCENARIOS = {
     "reverse": (
         "The supplied artifact is an unknown native executable. Select the reverse "
         "engineering router before choosing a debugger or decompiler."
+    ),
+    "browser-js": (
+        "The supplied page requires browser JavaScript runtime analysis. Select the "
+        "Browser-JS orchestrator before choosing any optional specialist."
+    ),
+    "assessment-web": (
+        "The scoped assessment target is an HTTP API. Select the assessment "
+        "orchestrator and the API security specialist."
+    ),
+    "assessment-android": (
+        "The scoped Android application needs component and runtime security testing. "
+        "Select the assessment orchestrator, Android reverse-engineering specialist "
+        "for the static baseline, and Android pentest specialist for security testing."
+    ),
+    "assessment-ios": (
+        "The scoped IPA needs iOS application security testing. Select the assessment "
+        "orchestrator and iOS pentest specialist."
+    ),
+    "assessment-network": (
+        "The written CIDR scope needs service and identity-boundary testing. Select the "
+        "assessment orchestrator and network pentest specialist."
+    ),
+    "assessment-cloud": (
+        "The scoped cloud account needs IAM and resource posture testing. Select the "
+        "assessment orchestrator and cloud security specialist."
+    ),
+    "assessment-llm": (
+        "The scoped agent application needs LLM and tool-boundary testing. Select the "
+        "assessment orchestrator and LLM security specialist."
+    ),
+    "assessment-source": (
+        "The supplied repository needs source security analysis. Select the assessment "
+        "orchestrator and SAST orchestration specialist."
+    ),
+    "analysis-android": (
+        "The supplied APK needs standalone decompilation and call-flow recovery. Select "
+        "the reverse router and Android reverse-engineering specialist."
+    ),
+    "analysis-reverse": (
+        "The supplied native artifact needs standalone behavior recovery. Select the "
+        "reverse engineering router."
     ),
 }
 
@@ -121,6 +172,42 @@ WEB_BEHAVIOR_EXPECTED = {
     },
     "secret_handling": "local-reference",
     "canonical_log": "notes/findings-live.md",
+}
+
+BROWSER_JS_DECISION_SCENARIO = """# Browser JavaScript Decision Scenario
+
+Runtime profile: `{profile}`
+
+The requested outcome is a reusable Node module that reproduces the `sign`
+value used by one observed `POST /api/order` request. A normal page load shows:
+
+- `vendor.8f3.js` is 4 MiB and contains framework dependencies.
+- `app.21a.js` is 82 KiB. The request initiator and source-mapped stack both
+  enter this bundle through `submitOrder -> buildHeaders -> sign`.
+- A source map exists for `app.21a.js`.
+- The signing function reads one timestamp and one object argument. No evidence
+  shows DOM, Canvas, WebGL, or browser fingerprint dependencies.
+
+Choose the first analysis sequence and deliverable without inventing missing
+dependencies. Use only these identifiers:
+
+- first method: `runtime-observation`, `whole-bundle-deobfuscation`, or `environment-shim`
+- static target: `app-call-chain`, `vendor-bundle`, or `all-loaded-scripts`
+- instrumentation: `hook`, `breakpoint-first`, or `none`
+- breakpoint policy: `fallback`, `primary`, or `never`
+- environment strategy: `minimal-observed-inputs`, `full-browser-shim`, or `guess-and-patch`
+- deliverable: `node-module`, `user-script`, `patched-bundle`, or `browser-extension`
+- validation: `captured-vector-and-differential-replay`, `static-inspection-only`, or `page-load-only`
+"""
+
+BROWSER_JS_BEHAVIOR_EXPECTED = {
+    "first_method": "runtime-observation",
+    "static_target": "app-call-chain",
+    "instrumentation": "hook",
+    "breakpoint_policy": "fallback",
+    "environment_strategy": "minimal-observed-inputs",
+    "deliverable": "node-module",
+    "validation": "captured-vector-and-differential-replay",
 }
 
 
@@ -242,7 +329,11 @@ class EvaluationManager:
         target = (
             "https://portal.example.invalid/"
             if capability_profile == "web"
-            else "./evaluation-fixture"
+            else (
+                "https://app.example.invalid/"
+                if capability_profile == "browser-js"
+                else "./evaluation-fixture"
+            )
         )
         engagement = EngagementManager(eval_paths).create(
             slug,
@@ -251,7 +342,11 @@ class EvaluationManager:
             platform=str(definition["platform"]),
             mode=str(definition["default_mode"]),
             title=f"Agent Evaluation: {profile}",
-            route_kind="web" if capability_profile == "web" else None,
+            route_kind=(
+                "web"
+                if capability_profile == "web"
+                else ("browser-js" if capability_profile == "browser-js" else None)
+            ),
         )
         expected = self._prepare_fixture(
             engagement, capability_profile, profile=profile
@@ -405,6 +500,8 @@ class EvaluationManager:
             ]
             expected["behavior_decision"] = WEB_BEHAVIOR_EXPECTED
             expected["_secret_canary"] = secret_canary
+        elif capability_profile == "browser-js":
+            expected["analysis_decision"] = BROWSER_JS_BEHAVIOR_EXPECTED
         self._append(
             engagement / "notes" / "SCOPE.md",
             f"\nEvaluation marker: EVAL_SCOPE={expected['scope_marker']}\n",
@@ -431,6 +528,15 @@ class EvaluationManager:
                 orchestrator,
                 engagement / "notes" / "EVALUATION-ORCHESTRATOR.md",
             )
+        elif capability_profile == "browser-js":
+            scenario = BROWSER_JS_DECISION_SCENARIO.format(profile=profile)
+            orchestrator = (
+                self.skill_registry.source("browser-js-orchestrator") / "SKILL.md"
+            )
+            shutil.copy2(
+                orchestrator,
+                engagement / "notes" / "EVALUATION-ORCHESTRATOR.md",
+            )
         else:
             scenario = (
                 "# Agent Evaluation Scenario\n\n"
@@ -439,8 +545,10 @@ class EvaluationManager:
             )
         scenario_path = {
             "bug-bounty": engagement / "notes" / "EVALUATION-LEAD.md",
+            "assessment": engagement / "notes" / "EVALUATION-LEAD.md",
             "ctf": engagement / "challenge" / "EVALUATION.md",
             "lab": engagement / "fixture" / "EVALUATION.md",
+            "analysis": engagement / "input" / "EVALUATION.md",
         }[state["workflow"]]
         scenario_path.parent.mkdir(parents=True, exist_ok=True)
         scenario_path.write_text(scenario, encoding="utf-8")
@@ -480,7 +588,7 @@ class EvaluationManager:
         for key, value in expected.items():
             if key.startswith("_"):
                 continue
-            if key == "behavior_decision":
+            if key in {"behavior_decision", "analysis_decision"}:
                 decision = result.get(key)
                 for decision_key, decision_value in value.items():
                     actual = (
@@ -490,9 +598,9 @@ class EvaluationManager:
                     )
                     self._check(
                         checks,
-                        f"result.behavior_decision.{decision_key}",
+                        f"result.{key}.{decision_key}",
                         actual == decision_value,
-                        f"{decision_key} matches the Web harness contract",
+                        f"{decision_key} matches the {key} harness contract",
                     )
                 continue
             actual = result.get(key)
@@ -548,6 +656,17 @@ class EvaluationManager:
                 "scenario. Do not reproduce the complete synthetic client secret in "
                 "the JSON or visible output."
             )
+        elif capability_profile == "browser-js":
+            keys += ", analysis_decision"
+            behavior = (
+                " Read the exact files notes/EVALUATION-ORCHESTRATOR.md and "
+                "input/EVALUATION.md before deciding. analysis_decision values contain "
+                "no explanatory prose and must follow this type skeleton: "
+                "{first_method: string, static_target: string, instrumentation: "
+                "string, breakpoint_policy: string, environment_strategy: string, "
+                "deliverable: string, validation: string}. Use only identifiers "
+                "supplied by the scenario."
+            )
         return (
             "Run the normal startup and complete route selection for this already "
             "classified work unit. Report the complete policy route without invoking "
@@ -559,10 +678,9 @@ class EvaluationManager:
             f"these keys: {keys}. Marker values follow EVAL_SCOPE, "
             "EVAL_HANDOFF, and EVAL_STATUS. next_action is the exact engagement.yaml "
             "current.next_action. selected_skill_route is an ordered JSON array naming "
-            "the initial orchestrator/router and then the terminal profile Skill selected "
-            "for this scenario; omit a duplicate terminal when the orchestrator is the "
-            "terminal profile Skill. Do not stop the reported route at the orchestrator "
-            "when the active domain Prompt names a terminal specialist. "
+            "the initial orchestrator/router and every ordered domain Skill named by "
+            "the scenario and active domain Prompt; omit duplicates. Do not stop the "
+            "reported route before it reaches the named terminal specialist. "
             "artifact_policy is the literal top-level workflow artifact "
             "root named by the active Prompt, not this evaluation subdirectory, and must "
             f"include its trailing slash.{behavior} After writing valid JSON, print exactly "
@@ -585,6 +703,10 @@ class EvaluationManager:
             values.extend(
                 [WEB_DECISION_SCENARIO, repr(WEB_BEHAVIOR_EXPECTED)]
             )
+        elif capability_profile == "browser-js":
+            values.extend(
+                [BROWSER_JS_DECISION_SCENARIO, repr(BROWSER_JS_BEHAVIOR_EXPECTED)]
+            )
         for name in skill_route:
             values.extend(
                 [name, self.skill_registry.tree_digest(self.skill_registry.source(name))]
@@ -595,16 +717,18 @@ class EvaluationManager:
         return digest.hexdigest()
 
     def _skill_route(self, capability_profile: str) -> list[str]:
-        if capability_profile not in ROUTE_TERMINALS:
+        if capability_profile not in ROUTE_SUFFIXES:
             raise ValidationError(
                 f"agent evaluation has no route contract for {capability_profile}"
             )
         skill_profile = self.skill_registry.profile(capability_profile)
         orchestrator = str(skill_profile["orchestrator"])
-        terminal = ROUTE_TERMINALS[capability_profile]
         route = [orchestrator]
-        if terminal != orchestrator:
-            route.append(terminal)
+        route.extend(
+            name
+            for name in ROUTE_SUFFIXES[capability_profile]
+            if name != orchestrator
+        )
         for name in route:
             self.skill_registry.source(name)
         return route

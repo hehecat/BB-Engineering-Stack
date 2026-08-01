@@ -16,6 +16,36 @@ profiles:
   reverse:
     required: [system-base, radare2]
     optional: [jadx, apktool]
+  browser-js:
+    required: [system-base, chromium]
+    optional: [semgrep]
+  assessment-web:
+    required: [system-base, chromium]
+    optional: [httpx, katana, ffuf, semgrep, interactsh-client]
+  assessment-android:
+    required: [system-base, java-runtime, adb, apktool, jadx]
+    optional: [frida, objection]
+  assessment-ios:
+    required: [system-base, radare2]
+    optional: [ios-device, frida, objection]
+  assessment-network:
+    required: [system-base, nmap]
+    optional: [naabu, seclists]
+  assessment-cloud:
+    required: [system-base]
+    optional: []
+  assessment-llm:
+    required: [system-base, chromium]
+    optional: [interactsh-client, seclists]
+  assessment-source:
+    required: [system-base, semgrep]
+    optional: [trufflehog]
+  analysis-android:
+    required: [system-base, java-runtime, apktool, jadx]
+    optional: [adb, frida, objection]
+  analysis-reverse:
+    required: [system-base, radare2]
+    optional: [jadx, apktool]
 
 installers:
   system-base:
@@ -34,6 +64,10 @@ installers:
     kind: apt
     checks: [adb]
     packages: [adb]
+  ios-device:
+    kind: apt
+    checks: [ideviceinstaller, iproxy]
+    packages: [ideviceinstaller, libusbmuxd-tools]
   apktool:
     kind: apt
     checks: [apktool]
@@ -135,6 +169,10 @@ installers:
     kind: go
     checks: [naabu]
     package: github.com/projectdiscovery/naabu/v2/cmd/naabu@v2.6.1
+  nmap:
+    kind: apt
+    checks: [nmap]
+    packages: [nmap]
   trufflehog:
     kind: archive-binary
     checks: [trufflehog]

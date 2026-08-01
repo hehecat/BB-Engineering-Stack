@@ -1,0 +1,4 @@
+schema_version: 1
+name: assessment-cloud
+required: [data.json, runtime.python]
+optional: [cloud.cli, cloud.posture, http.raw, proxy.http]

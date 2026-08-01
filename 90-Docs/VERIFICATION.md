@@ -5,6 +5,7 @@
 ./99-Verification/scripts/fresh-machine.sh
 ./99-Verification/scripts/keysmith-smoke.sh
 ./99-Verification/scripts/claude-smoke.sh
+./99-Verification/scripts/router-agent-smoke.sh
 bb-stack eval contracts
 bb-stack eval agent --profile ctf-quick
 ```
@@ -12,7 +13,7 @@ bb-stack eval agent --profile ctf-quick
 `run-all.sh` performs contracts, lifecycle tests, Prompt budgets, Skill
 frontmatter checks, strict YAML and MCP uniqueness tests, update-inventory and
 candidate-isolation tests, first-party mail-otp config/MIME/Fake-IMAP contracts,
-safe archive/deb installer tests, seven-profile Agent contracts, unified-status
+safe archive/deb installer tests, 17-profile Agent contracts, unified-status
 redaction and profile tests, strict CTF/Web doctors, and a real
 Playwright MCP handshake when runtime dependencies exist. Fresh-machine
 verification also requires `bb-stack status --strict` and the `mail-otp`
@@ -32,7 +33,6 @@ and scorer, so changing evaluation logic also invalidates an earlier pass.
 
 The unit suite also covers the generated workspace router, a user-selected
 work root, the nested Engagement boundary, the project MCP baseline, and
-managed-file drift. A release-level plain-Claude check starts `claude` in an
-isolated generated workspace and supplies a synthetic Web or APK task without
-naming a Profile; the created Engagement must record the expected
-`routing.kind` and rendered Profile.
+managed-file drift. `router-agent-smoke.sh` starts real Claude against an
+isolated generated workspace and requires 13 natural-language tasks to select
+the expected workflow/domain route and platform without naming a Profile.

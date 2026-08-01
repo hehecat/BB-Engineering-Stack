@@ -1,0 +1,4 @@
+schema_version: 1
+name: analysis-reverse
+required: [runtime.python, reverse.static]
+optional: [android.static, mobile.dynamic]

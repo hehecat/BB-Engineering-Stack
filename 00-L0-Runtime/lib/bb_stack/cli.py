@@ -8,6 +8,7 @@ import sys
 from typing import Any
 
 from . import __version__
+from .browser import BrowserRuntimeManager
 from .capabilities import CapabilityRegistry
 from .configuration import ConfigurationManager
 from .engagement import EngagementManager
@@ -25,6 +26,35 @@ from .status import StackStatus
 from .updates import UpdateManager
 from .validation import validate
 from .workspace import ROUTES, WorkspaceManager
+
+
+CAPABILITY_PROFILES = [
+    "minimal",
+    "ctf-web",
+    "web",
+    "android",
+    "reverse",
+    "browser-js",
+    "assessment-web",
+    "assessment-android",
+    "assessment-ios",
+    "assessment-network",
+    "assessment-cloud",
+    "assessment-llm",
+    "assessment-source",
+    "analysis-android",
+    "analysis-reverse",
+]
+PLATFORMS = [
+    "generic-vdp",
+    "hackerone",
+    "butian",
+    "authorized-assessment",
+    "standalone-ctf",
+    "local-lab",
+    "standalone-analysis",
+]
+WORKFLOWS = ["bug-bounty", "assessment", "ctf", "lab", "analysis"]
 
 
 def emit(value: Any, json_output: bool = False) -> None:
@@ -98,12 +128,12 @@ def build_parser() -> argparse.ArgumentParser:
     status.add_argument(
         "--profile",
         default="ctf-web",
-        choices=["minimal", "ctf-web", "web", "android", "reverse"],
+        choices=CAPABILITY_PROFILES,
     )
     status.add_argument("--workflow-profile")
     status.add_argument(
         "--platform",
-        choices=["generic-vdp", "hackerone", "butian", "standalone-ctf", "local-lab"],
+        choices=PLATFORMS,
     )
     status.add_argument("--probe-mcp", action="store_true")
     status.add_argument("--include-high-context-mcp", action="store_true")
@@ -119,7 +149,7 @@ def build_parser() -> argparse.ArgumentParser:
     add_mail_subcommands(mail)
 
     bootstrap = commands.add_parser("bootstrap", help="create the local runtime and install a profile")
-    bootstrap.add_argument("--profile", default="ctf-web", choices=["minimal", "ctf-web", "web", "android", "reverse"])
+    bootstrap.add_argument("--profile", default="ctf-web", choices=CAPABILITY_PROFILES)
     bootstrap.add_argument(
         "--work-root",
         type=Path,
@@ -152,12 +182,24 @@ def build_parser() -> argparse.ArgumentParser:
     workspace_route.add_argument("--slug")
     workspace_route.add_argument(
         "--platform",
-        choices=["generic-vdp", "hackerone", "butian", "standalone-ctf", "local-lab"],
+        choices=PLATFORMS,
     )
     workspace_route.add_argument(
         "--mode", choices=["interactive", "continuous"]
     )
     workspace_route.add_argument("--json", action="store_true")
+
+    browser = commands.add_parser(
+        "browser", help="manage an Engagement-isolated Chromium CDP runtime"
+    )
+    browser_sub = browser.add_subparsers(dest="browser_command", required=True)
+    browser_start = browser_sub.add_parser("start")
+    browser_start.add_argument("--engagement")
+    browser_start.add_argument("--json", action="store_true")
+    browser_status = browser_sub.add_parser("status")
+    browser_status.add_argument("--json", action="store_true")
+    browser_stop = browser_sub.add_parser("stop")
+    browser_stop.add_argument("--json", action="store_true")
 
     profile = commands.add_parser("profile", help="list, validate, or render runtime profiles")
     profile_sub = profile.add_subparsers(dest="profile_command", required=True)
@@ -176,7 +218,7 @@ def build_parser() -> argparse.ArgumentParser:
     new = commands.add_parser("new", help="create a new isolated work unit")
     new.add_argument("slug")
     new.add_argument("target")
-    new.add_argument("--workflow", choices=["bug-bounty", "ctf", "lab"], default="ctf")
+    new.add_argument("--workflow", choices=WORKFLOWS, default="ctf")
     new.add_argument("--platform")
     new.add_argument("--mode", choices=["interactive", "continuous"], default="interactive")
     new.add_argument("--title")
@@ -202,7 +244,7 @@ def build_parser() -> argparse.ArgumentParser:
     migrate.add_argument("source", type=Path)
     migrate.add_argument("slug")
     migrate.add_argument("target")
-    migrate.add_argument("--workflow", choices=["bug-bounty", "ctf", "lab"], default="bug-bounty")
+    migrate.add_argument("--workflow", choices=WORKFLOWS, default="bug-bounty")
     migrate.add_argument("--platform")
     migrate.add_argument("--yes", action="store_true")
     migrate.add_argument("--json", action="store_true")
@@ -214,20 +256,20 @@ def build_parser() -> argparse.ArgumentParser:
     skills_validate = skills_sub.add_parser("validate")
     skills_validate.add_argument("--json", action="store_true")
     skills_install = skills_sub.add_parser("install")
-    skills_install.add_argument("--profile", required=True, choices=["minimal", "ctf-web", "web", "android", "reverse"])
+    skills_install.add_argument("--profile", required=True, choices=CAPABILITY_PROFILES)
     skills_install.add_argument("--agent", choices=["claude", "codex", "both"], default="claude")
     skills_install.add_argument("--required-only", action="store_true")
     skills_install.add_argument("--force", action="store_true")
     skills_install.add_argument("--json", action="store_true")
     skills_status = skills_sub.add_parser("status")
-    skills_status.add_argument("--profile", required=True, choices=["minimal", "ctf-web", "web", "android", "reverse"])
+    skills_status.add_argument("--profile", required=True, choices=CAPABILITY_PROFILES)
     skills_status.add_argument("--agent", choices=["claude", "codex"], default="claude")
     skills_status.add_argument("--json", action="store_true")
 
     mcp = commands.add_parser("mcp", help="render or probe MCP configuration")
     mcp_sub = mcp.add_subparsers(dest="mcp_command", required=True)
     mcp_render = mcp_sub.add_parser("render")
-    mcp_render.add_argument("--profile", required=True, choices=["minimal", "ctf-web", "web", "android", "reverse"])
+    mcp_render.add_argument("--profile", required=True, choices=CAPABILITY_PROFILES)
     mcp_render.add_argument("--output", type=Path, required=True)
     mcp_render.add_argument("--artifact-root", type=Path, required=True)
     mcp_render.add_argument("--include-high-context", action="store_true")
@@ -238,7 +280,7 @@ def build_parser() -> argparse.ArgumentParser:
     mcp_probe.add_argument("--json", action="store_true")
 
     doctor = commands.add_parser("doctor", help="audit runtime, Skills, capabilities, and MCP readiness")
-    doctor.add_argument("--profile", default="ctf-web", choices=["minimal", "ctf-web", "web", "android", "reverse"])
+    doctor.add_argument("--profile", default="ctf-web", choices=CAPABILITY_PROFILES)
     doctor.add_argument("--engagement")
     doctor.add_argument("--strict", action="store_true")
     doctor.add_argument("--probe-mcp", action="store_true")
@@ -423,6 +465,16 @@ def command(args: argparse.Namespace, paths: StackPaths) -> int:
                 mode=args.mode,
             )
         emit(result, args.json)
+        return 0
+    if args.command == "browser":
+        manager = BrowserRuntimeManager(paths)
+        if args.browser_command == "start":
+            engagement = paths.engagement(args.engagement)
+            emit(manager.start(engagement), args.json)
+        elif args.browser_command == "status":
+            emit(manager.status(), args.json)
+        else:
+            emit(manager.stop(), args.json)
         return 0
     if args.command == "profile":
         registry = ProfileRegistry(paths)

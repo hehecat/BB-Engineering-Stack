@@ -27,6 +27,9 @@ selecting work.
 For Bug Bounty, use profile `web` with `bb-interactive` or `bb-continuous`.
 `bb-stack status --profile web --engagement SLUG` derives the platform and mode
 from `engagement.yaml`, then checks the matching personal requirements.
+Authorized non-BB work uses the `assessment` workflow and one domain Profile;
+standalone reconstruction uses `analysis`. Optional cross-domain Skills do not
+change the active workflow, Scope, platform overlay, or MCP composition.
 
 ## Lifecycle
 
@@ -89,5 +92,5 @@ bb-stack portable inspect "$HOME/bb-stack-portable.json"
 ```
 
 On a destination machine, bootstrap first, preview with `portable import`, then
-apply with `--yes`. Restore Engagement content from its separate encrypted
-backup and use the emitted secret checklist for local-only integrations.
+apply with `--yes`. Restore Engagement content from its separate backup and use
+the emitted secret checklist for local-only integrations.

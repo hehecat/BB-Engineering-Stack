@@ -4,5 +4,4 @@ required:
   - http.raw
   - data.json
   - runtime.python
-optional:
-  - browser.stateful
+optional: []

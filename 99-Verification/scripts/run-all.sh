@@ -17,12 +17,21 @@ export PYTHONPATH="$ROOT/00-L0-Runtime/lib${PYTHONPATH:+:$PYTHONPATH}"
 "$PYTHON" "$ROOT/99-Verification/scripts/test_evaluation.py"
 "$PYTHON" "$ROOT/99-Verification/scripts/test_runtime_installers.py"
 "$PYTHON" "$ROOT/99-Verification/scripts/test_android_reverse_skill.py"
+"$PYTHON" "$ROOT/99-Verification/scripts/test_browser_runtime.py"
 "$PYTHON" "$ROOT/99-Verification/scripts/test_workspace.py"
 "$ROOT/00-L0-Runtime/bin/bb-stack" validate --json >/dev/null
 
 if [[ -x "$ROOT/.runtime/venv/bin/python" && -d "$ROOT/.runtime/node_modules" ]]; then
+  (
+    cd "$ROOT/.runtime"
+    node --input-type=module -e \
+      "import {webcrack} from 'webcrack'; const r=await webcrack('var x=[\"ok\"];console.log(x[0]);'); if (!r.code.includes('console.log')) process.exit(1)"
+  )
   "$ROOT/00-L0-Runtime/bin/bb-stack" doctor --profile ctf-web --strict --probe-mcp --json >/dev/null
   "$ROOT/00-L0-Runtime/bin/bb-stack" doctor --profile web --strict --json >/dev/null
+  if command -v chromium >/dev/null 2>&1; then
+    "$ROOT/00-L0-Runtime/bin/bb-stack" doctor --profile browser-js --strict --probe-mcp --json >/dev/null
+  fi
   if [[ -x "$ROOT/.runtime/bin/jadx" ]] && command -v r2 >/dev/null 2>&1; then
     "$ROOT/00-L0-Runtime/bin/bb-stack" doctor --profile android --strict --json >/dev/null
     "$ROOT/00-L0-Runtime/bin/bb-stack" doctor --profile reverse --strict --json >/dev/null

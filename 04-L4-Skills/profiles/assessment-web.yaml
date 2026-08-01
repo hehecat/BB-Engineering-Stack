@@ -1,0 +1,5 @@
+schema_version: 1
+name: assessment-web
+orchestrator: security-orchestrator
+required: [security-orchestrator, api-security, dast-automation]
+optional: [browser-js-orchestrator, api-hacking, auth-hacking, authorization-bypass, business-logic, csrf, file-reading, file-upload, graphql, graphql-audit, idor, information-disclosure, llm-security, mfa-bypass, oauth, open-redirect, openid-sso, race-condition, request-smuggling, security-arsenal, sqli, ssrf, ssti, web-cache, xss, xxe]

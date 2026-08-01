@@ -27,11 +27,18 @@ class LifecycleTests(unittest.TestCase):
     def test_workflow_specific_trees(self) -> None:
         ctf = self.manager.create("web-ctf", "https://ctf.invalid", workflow="ctf")
         lab = self.manager.create("local-lab", "./fixture.zip", workflow="lab")
+        assessment = self.manager.create(
+            "network-review", "10.0.0.0/24", workflow="assessment"
+        )
         h1 = self.manager.create(
             "h1-program", "https://example.invalid", workflow="bug-bounty", platform="hackerone"
         )
         self.assertTrue((ctf / "notes" / "solve-log.md").is_file())
         self.assertTrue((lab / "notes" / "experiment-log.md").is_file())
+        self.assertTrue((assessment / "notes" / "findings-live.md").is_file())
+        self.assertEqual(
+            self.manager.validate(assessment)["platform"], "authorized-assessment"
+        )
         h1_state = self.manager.validate(h1)
         self.assertEqual(ctf.parent, self.paths.engagements_root)
         self.assertTrue(h1_state["identity"]["request_identification"]["enabled"])

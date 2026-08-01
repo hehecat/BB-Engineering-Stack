@@ -1,0 +1,5 @@
+schema_version: 1
+name: assessment-ios
+orchestrator: security-orchestrator
+required: [security-orchestrator, ios-pentest]
+optional: [api-security, api-hacking, auth-hacking, information-disclosure]

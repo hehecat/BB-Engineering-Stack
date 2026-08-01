@@ -1,0 +1,5 @@
+schema_version: 1
+name: assessment-llm
+orchestrator: security-orchestrator
+required: [security-orchestrator, llm-security]
+optional: [api-security, browser-js-orchestrator, information-disclosure, threat-modeling]

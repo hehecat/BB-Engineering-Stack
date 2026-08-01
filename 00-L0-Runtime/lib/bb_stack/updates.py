@@ -73,6 +73,18 @@ class UpdateManager:
         if not isinstance(dependencies, dict):
             raise ValidationError("MCP package manifest dependencies must be an object")
 
+        npm_targets = {
+            component["target"]
+            for component in components.values()
+            if component["checker"] == "npm"
+        }
+        missing_npm_targets = sorted(npm_targets - set(dependencies))
+        if missing_npm_targets:
+            raise ValidationError(
+                "npm upstream is not pinned in node runtime: "
+                + ", ".join(missing_npm_targets)
+            )
+
         seen_targets: set[tuple[str, str]] = set()
         mcp_providers: set[str] = set()
         for name, component in components.items():
@@ -187,6 +199,15 @@ class UpdateManager:
             for item in items.values():
                 if item["category"] == "mcp":
                     item["current"] = str(dependencies[item["target"]])
+
+        npm_items = [item for item in items.values() if item["checker"] == "npm"]
+        if npm_items:
+            package_json = load_json(
+                self.paths.root / config["inventory"]["mcp_packages"]
+            )
+            dependencies = package_json["dependencies"]
+            for item in npm_items:
+                item["current"] = str(dependencies[item["target"]])
 
         if "tools" in selected:
             manifest = load_yaml(self.paths.root / config["inventory"]["tools"])

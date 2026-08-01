@@ -1,0 +1,5 @@
+schema_version: 1
+name: browser-js
+orchestrator: browser-js-orchestrator
+required: [browser-js-orchestrator]
+optional: [ctf-web, api-security, reverse-orchestrator, security-arsenal]

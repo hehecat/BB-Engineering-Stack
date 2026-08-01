@@ -2,8 +2,9 @@
 
 简体中文 | [English](README.md)
 
-面向 Claude Code 的可移植、Headless 优先安全测试工作栈，覆盖 CTF Web、
-Bug Bounty、VDP、授权 Web/API 测试、Android 静态分析和二进制逆向。
+面向 Claude Code 的可移植、Headless 优先安全工作 Harness。覆盖 CTF、Bug
+Bounty/VDP、授权 Web/API、Android、iOS、内网、云、LLM/Agent、源码与供应链
+评估，以及 Browser-JS 和二进制逆向分析。
 
 项目把执行环境、Prompt、Skill、MCP/CLI 和测试状态分开管理。换电脑后只需
 克隆仓库、执行 bootstrap、恢复机器配置，即可使用相同流程启动 Claude Code。
@@ -11,10 +12,12 @@ Bug Bounty、VDP、授权 Web/API 测试、Android 静态分析和二进制逆�
 ## 核心能力
 
 - 使用 `bb-stack` 统一完成安装、配置、检查、创建任务、启动 Claude 和更新组件。
-- 为 CTF、HackerOne、补天、通用 VDP 和本地 Lab 组合不同 Prompt Overlay。
+- 为 CTF、Bug Bounty、授权安全评估、独立分析和本地 Lab 组合不同 Prompt Overlay。
 - 使用独立 Engagement 保存范围、状态、证据、脚本、报告和会话交接信息。
 - 通过主编排 Skill 将任务路由到当前需要的漏洞类或分析 Skill。
-- 集成 Playwright MCP、HTTP/Recon CLI、OTP 邮箱、Android 和 Reverse 工具。
+- 集成 Playwright/Chrome DevTools MCP、HTTP/Recon、移动端、网络、源码和 Reverse CLI。
+- 集成 Chrome DevTools MCP/CLI 与 `webcrack`，支持浏览器运行时观察、请求调用链
+  还原、解混淆、Webpack/Browserify 拆包和最小本地复现。
 - 支持 Headless VPS，不要求桌面环境。
 - Skill、MCP 和 CLI 使用固定版本，更新需要显式检查、验证和确认。
 - 提供静态合同测试和隔离的真实 Claude 行为评测，包括 BB Scope、Lead
@@ -48,7 +51,7 @@ BB_CONFIG_HOME=$HOME/.config/bb-stack
 | --- | --- | --- |
 | L0 | `00-L0-Runtime/` | bootstrap、PATH、代理、运行时和启动器 |
 | L1 | `01-L1-Global-Prompt/` | 与平台无关的全局执行约定 |
-| L2 | `02-L2-Workflow-Profiles/` | CTF/BB 工作流、领域 Prompt 和平台 Overlay |
+| L2 | `02-L2-Workflow-Profiles/` | 工作流 × 领域 × 平台 Prompt 组合 |
 | L3 | `03-L3-Engagement-State/` | Scope、STATUS、HANDOFF、生命周期和模板 |
 | L4 | `04-L4-Skills/` | Skill 清单、主编排器和专项 Skill |
 | L5 | `05-L5-MCP-CLI/` | MCP、CLI、能力注册表和 Doctor 检查 |
@@ -66,18 +69,26 @@ BB_CONFIG_HOME=$HOME/.config/bb-stack
 | --- | --- | --- |
 | `ctf-web` | CTF Web/API | `ctf-quick`、`ctf-replacement` |
 | `web` | Bug Bounty/VDP Web/API | `bb-interactive`、`bb-continuous` |
-| `android` | APK 静态或动态分析 | `ctf-android` |
-| `reverse` | 本地二进制和未知文件逆向 | `ctf-reverse` |
+| `assessment-web` | 合同或书面授权的 Web/API 评估 | `assessment-web` |
+| `android` | Android CTF | `ctf-android` |
+| `assessment-android` / `analysis-android` | Android 安全评估 / 纯分析 | 同名 Prompt |
+| `assessment-ios` | iOS/IPA 安全评估 | `assessment-ios` |
+| `assessment-network` / `assessment-cloud` | 内网与云安全评估 | 同名 Prompt |
+| `assessment-llm` / `assessment-source` | LLM/Agent 与源码供应链评估 | 同名 Prompt |
+| `reverse` / `analysis-reverse` | CTF 逆向 / 独立逆向分析 | 对应 Reverse Prompt |
+| `browser-js` | 浏览器 JavaScript 分析、运行时逆向和行为改造 | `browser-js` |
 | `minimal` | 本地 Lab 和最小运行环境 | `lab-replacement` |
 
 ## 环境要求
 
 - Linux x86_64 或 arm64
 - Python 3.11+
+- Node.js 22 或 24（缺失或版本过旧时 bootstrap 安装固定版本）
 - 已安装并完成登录的 Claude Code
 - 能使用 `apt`、Git 和网络下载依赖
 
-桌面环境不是必需条件。浏览器工作默认使用 Headless Chromium 和 Playwright MCP。
+桌面环境不是必需条件。普通自然语言会话使用 CLI；严格 Web/Browser-JS Profile
+按任务加载 Headless Playwright 或 Chrome DevTools MCP。
 
 ## 快速安装
 
@@ -136,23 +147,30 @@ claude
 ```text
 这是一个 CTF Web 题目：https://challenge.example
 对 https://target.example 做授权 Web 渗透测试
+对 inbox/product.apk 做 Android 安全审计
+反编译 inbox/library.apk 并还原算法，不做漏洞测试
+对书面授权的 10.20.0.0/24 做内网和 AD 安全评估
+审计这个 AWS 账户的 IAM 和 S3
+测试这个 RAG Agent 的 Prompt Injection、MCP 和 Memory 边界
+审计 inbox/repository 的源码、IaC、容器和依赖安全
 继续 example-bb
-逆向 inbox/demo.apk，先做静态分析
 分析 inbox/challenge.bin
+分析 https://app.example 的请求签名，并交付可复用 Node 模块
+还原 inbox/app.bundle.js 的混淆和 Webpack 模块结构
 ```
 
 工作根的 `CLAUDE.md` 会识别任务并调用 `bb-stack workspace route`，自动：
 
 1. 创建或恢复 `engagements/<slug>/`。
-2. 选择 CTF Web、Bug Bounty、Android、Reverse 或 Lab 路由。
+2. 先判断 CTF、BB、授权评估、独立分析或 Lab，再选择安全领域。
 3. 读取专用 Prompt、Scope、STATUS 和 HANDOFF。
 4. 选择主编排 Skill 和当前专项 Skill。
 5. 将证据、脚本和报告限制在当前 Engagement。
 
-项目 `.mcp.json` 只加载精简的 Headless 通用 MCP。高上下文 MCP 或需要严格
-隔离和复现时，再使用 `bb-stack launch --profile ...`。
-首次进入新工作根时，Claude Code 可能要求确认项目级 `.mcp.json`；确认的是
-bootstrap 生成的通用 MCP 配置，可先用 `bb-stack workspace status` 查看服务名。
+项目 `.mcp.json` 不常驻任何领域 MCP，避免网络、云、源码等任务承担几十个无关
+浏览器工具 Schema。需要浏览器的普通会话使用路由结果中的 `browser_start` 命令和
+受管 `chrome-devtools` CLI；严格启动只加载当前 Profile 的 MCP。运行中的 Claude
+无法热加载 MCP，因此该分工同时保留自然入口和工具隔离。
 
 私有仓库需要当前机器的 GitHub 身份具有访问权限。
 
@@ -241,9 +259,40 @@ Lead 默认一次最小状态变更、一个不超过 1 KiB 的惰性上传、�
 
 只有在需要整理提交材料时才进入 SHIP 和报告 Skill。
 
-## Android 和 Reverse
+## 全域授权安全评估
 
-Android APK：
+非 Bug Bounty 的书面授权评估使用 `assessment` 工作流，由
+`security-orchestrator` 管理 Scope、证据、跨领域交接和检查点。自然语言会自动
+选择 Web/API、Android、iOS、Network/AD、Cloud、LLM/Agent 或 Source Profile。
+
+显式安装示例：
+
+```bash
+bb-stack bootstrap --profile assessment-android
+bb-stack bootstrap --profile assessment-network
+bb-stack bootstrap --profile assessment-source
+```
+
+Profile 不互相继承。跨领域 Lead 只调用可选 Skill：例如移动端发现 API 越权时，
+仍保留 Android Engagement 的 Scope 和报告规则；Bug Bounty 中分析前端签名时，
+也不会切换成独立 Browser-JS 工作流。只有主要目标或授权边界变化才创建新的
+Engagement。
+
+Cloud Provider CLI、iOS 真机、Frida、Prowler、Steampipe、Checkov、Trivy 等依赖
+按 Profile 报告为可选外部能力；没有相应账户、设备或工具时，静态和基础流程仍可
+使用，Doctor 会明确列出缺口。
+
+## Android、iOS 和 Reverse
+
+同一 APK 根据用户目标走不同工作流：
+
+```text
+Android CTF        -> ctf-android
+Android 安全评估   -> assessment-android
+反编译/算法还原    -> analysis-android
+```
+
+Android CTF 的显式启动：
 
 ```bash
 bb-stack bootstrap --profile android
@@ -257,6 +306,9 @@ Android 静态分析安装 Java、ADB、Apktool、固定版本 JADX，并使用
 提取和调用链分析。需要组件安全、设备、Frida、TLS 或运行时验证时切换到
 `android-pentest`；连接设备、Frida 和 Objection 属于动态分析可选项。
 
+iOS 授权审计使用 `assessment-ios`，静态分析可在 Linux Headless 环境进行；真机、
+越狱、Frida 和 libimobiledevice 能力由 Doctor 单独检查。
+
 二进制逆向：
 
 ```bash
@@ -265,6 +317,46 @@ bb-stack status --profile reverse --strict
 bb-stack new reverse-challenge ./challenge.bin --workflow ctf --platform standalone-ctf
 bb-stack launch --profile ctf-reverse --engagement reverse-challenge
 ```
+
+## 浏览器 JavaScript 分析
+
+通常直接在工作根启动 `claude`，描述目标和希望得到的结果：
+
+```text
+分析这个网页的前端签名逻辑，最终给我一个 Node 模块
+定位页面限制的实现并做可维护的浏览器扩展
+还原这个 bundle 的模块结构和关键协议
+分析运行时行为，先不要预设最终产物
+```
+
+自然语言路由会创建 `analysis` Engagement，并选择：
+
+```text
+browser-js-orchestrator
+  -> Chrome DevTools CLI/MCP（运行时）
+  -> webcrack（选择性静态还原）
+  -> ctf-web / api-security / reverse-orchestrator（仅在 Lead 需要时）
+```
+
+该流程不预设任务是 CTF、漏洞测试、油猴脚本或浏览器扩展。可能交付解混淆源码、
+调用链和协议文档、Node 复现模块、Hook、patched bundle、扩展、用户脚本或其他
+直接满足目标的产物。
+
+显式安装和严格启动：
+
+```bash
+bb-stack bootstrap --profile browser-js
+bb-stack workspace route --kind browser-js \
+  --target https://app.example --slug app-js
+bb-stack launch --profile browser-js --engagement app-js
+bb-stack doctor --profile browser-js --strict --probe-mcp
+bb-stack browser status
+bb-stack browser stop
+```
+
+方法默认从网络、Console、Source Map、脚本和请求 initiator 的运行时基线开始；
+优先窄 Hook，断点作为回退；只对高信号 bundle 使用 `webcrack`，避免先处理全部
+vendor 代码或盲目搭建完整浏览器补环境。
 
 ## Engagement 目录
 
@@ -401,12 +493,17 @@ bb-stack status --profile ctf-web --require-agent-eval --strict
 
 bb-stack eval agent --profile bb-interactive
 bb-stack status --profile web --require-agent-eval --strict
+
+bb-stack eval agent --profile browser-js
+bb-stack status --profile browser-js --require-agent-eval --strict
 ```
 
 评测只允许 Claude 读取和写入本地合成 Engagement，不访问测试目标。
 `bb-interactive` 评测还会检查相邻资产不自扩 Scope、业务签名 Lead 优先级、
 Primitive 与 Impact 区分、跨系统拼链拒绝、最小动作计划、规范日志路径以及
 合成 Secret 不泄露。更换模型或修改 Harness 后可用同一命令做 A/B 对比。
+`browser-js` 评测检查运行时观察优先、高信号调用链、Hook 优先、最小依赖复现、
+差分验证，以及根据目标选择产物而不是固定输出用户脚本。
 
 ## Skill、MCP 和工具更新
 
@@ -458,8 +555,8 @@ Engagement 目录和本地凭据由使用者按自己的存储方式复制；por
 
 ## 项目状态
 
-当前版本：`0.9.0`
+当前版本：`0.11.0`
 
-CTF Web、Bug Bounty、Android 静态分析和 Reverse Profile 已通过严格状态检查。
-CTF Web、Bug Bounty、Android Profile 及普通 `claude` 的 Android 自动路由均已
-通过隔离行为评测；Bug Bounty 评测同时覆盖 Harness 决策合同。
+17 个运行 Profile 和 52 个固定 Skill 已通过静态合同。真实 Sonnet 路由评测覆盖
+13 个自然语言场景；Browser-JS 继续通过 Chrome DevTools MCP、`webcrack` 和隔离
+决策评测，Bug Bounty 继续覆盖 Scope、Lead、证据与动作合同。

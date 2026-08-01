@@ -28,8 +28,8 @@ claude
 `$HOME/BB-Workspaces` is a recommendation, not a fixed location. Select any
 dedicated directory with `--work-root`; bootstrap persists the resolved value
 in `$BB_CONFIG_HOME/env.sh` and generates the project router there.
-Claude Code may request one-time approval for the generated project
-`.mcp.json`; inspect its server list with `bb-stack workspace status` first.
+The generated project `.mcp.json` contains no domain MCP; strict launches load
+only the selected Profile's MCP.
 
 After a new-machine restore or Prompt change, run the bounded real-Agent gate:
 
@@ -69,6 +69,33 @@ validation. ADB device and Frida/Objection capabilities remain optional until
 dynamic analysis is needed.
 The Reverse profile installs pinned Radare2; JADX and Apktool are optional mixed
 artifact providers.
+
+## Authorized Security Assessment
+
+Use normal conversation; the router distinguishes workflow and domain:
+
+```text
+对 product.apk 做 Android 安全审计
+反编译 library.apk 并还原算法，不做漏洞测试
+对书面授权的 10.20.0.0/24 做内网和 AD 安全评估
+审计授权 AWS 账户的 IAM 和存储配置
+测试 RAG Agent 的 Prompt Injection、MCP 和 Memory 边界
+审计 repository 的源码、IaC、容器和依赖安全
+```
+
+Explicit profile setup is available when needed:
+
+```bash
+bb-stack bootstrap --profile assessment-android
+bb-stack bootstrap --profile assessment-ios
+bb-stack bootstrap --profile assessment-network
+bb-stack bootstrap --profile assessment-cloud
+bb-stack bootstrap --profile assessment-llm
+bb-stack bootstrap --profile assessment-source
+```
+
+Provider credentials, iOS devices, Frida, cloud CLIs, and specialized scanners
+remain optional machine capabilities and are reported by Doctor.
 
 ## Bug Bounty Or VDP
 
@@ -147,6 +174,12 @@ The normal entry is `cd "$BB_WORK_ROOT" && claude`. The workspace `CLAUDE.md`
 routes natural-language tasks and continuations. From inside an Engagement,
 `bb-stack status --profile web` detects that work unit automatically.
 `bb-claude` remains available for explicit Prompt and MCP isolation.
+
+Validate the natural-language matrix after a Prompt or model change:
+
+```bash
+./99-Verification/scripts/router-agent-smoke.sh
+```
 
 ## Update Audit
 

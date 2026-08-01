@@ -157,7 +157,13 @@ class RuntimeManager:
         source = self.config / "node-runtime"
         stamp = self.paths.runtime / "node.stamp"
         registry_state_path = self.paths.runtime / "npm-registry.json"
-        digest = self._digest_files([source / "package.json", source / "package-lock.json"])
+        digest = self._digest_files(
+            [
+                source / "package.json",
+                source / "package-lock.json",
+                self.paths.root / "05-L5-MCP-CLI" / "lib" / "mcp_probe.mjs",
+            ]
+        )
         if dry_run:
             return {
                 "component": "node-runtime",
@@ -496,6 +502,8 @@ class RuntimeManager:
                 f"export BB_STACK_ROOT={shlex.quote(str(self.paths.root))}",
                 f"export BB_WORK_ROOT={shlex.quote(str(self.paths.work_root))}",
                 f"export PATH={shlex.quote(self.paths.runtime_path(effective['BB_EXTRA_PATH']))}",
+                "export CHROME_DEVTOOLS_MCP_NO_USAGE_STATISTICS=1",
+                "export CHROME_DEVTOOLS_MCP_NO_UPDATE_CHECKS=1",
                 'case "${BB_PROXY_MODE:-direct}" in',
                 "  mihomo)",
                 '    export HTTP_PROXY="${BB_HTTP_PROXY:-http://127.0.0.1:7890}"',
@@ -880,6 +888,12 @@ class RuntimeManager:
         }
         if dry_run:
             return result
+        if render.l5_profile == "browser-js":
+            if engagement is None:
+                raise CommandError("Browser-JS launch requires an Engagement")
+            from .browser import BrowserRuntimeManager
+
+            BrowserRuntimeManager(self.paths).start(engagement)
         env = self.paths.environment(artifact_root)
         env["PATH"] = self.paths.runtime_path()
         os.chdir(cwd)

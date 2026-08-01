@@ -2,8 +2,9 @@
 
 [简体中文](README.zh-CN.md) | English
 
-Portable, headless-first Claude Code environment for CTF Web, Bug Bounty, VDP,
-authorized Web/API testing, Android static analysis, and reverse engineering.
+Portable, headless-first Claude Code security harness for CTF, Bug Bounty/VDP,
+authorized Web/API, Android, iOS, network, cloud, LLM/agent, source and supply
+chain assessment, browser JavaScript analysis, and reverse engineering.
 
 ## Boundaries
 
@@ -27,7 +28,7 @@ BB_CONFIG_HOME=$HOME/.config/bb-stack
 | --- | --- |
 | `00-L0-Runtime/` | bootstrap, runtime, proxy, PATH, launchers |
 | `01-L1-Global-Prompt/` | platform-neutral personal behavior |
-| `02-L2-Workflow-Profiles/` | CTF/BB workflows and platform profiles |
+| `02-L2-Workflow-Profiles/` | workflow x domain x platform Prompt composition |
 | `03-L3-Engagement-State/` | scope, state, templates, lifecycle |
 | `04-L4-Skills/` | manifest, orchestrators, specialist Skills |
 | `05-L5-MCP-CLI/` | capability registry, MCP render, doctor |
@@ -54,6 +55,30 @@ workspace router creates or resumes `engagements/<slug>/` from normal Claude
 conversation. Explicit `new` and `launch` commands remain available for strict
 reproduction and profile-specific MCP isolation.
 
+Browser JavaScript tasks route independently from CTF and Bug Bounty. The
+workflow uses the managed Chrome DevTools CLI in normal workspace sessions,
+Chrome DevTools MCP in strict launches, and `webcrack` for selected static
+reconstruction. Deliverables are selected from the requested outcome rather
+than fixed to a user script or browser extension.
+
+Normal use remains plain conversation:
+
+```bash
+cd "$BB_WORK_ROOT"
+claude
+```
+
+The workspace router first selects Bug Bounty, authorized assessment, CTF,
+standalone analysis, or Lab, then selects Web/API, Android, iOS, network, cloud,
+LLM/agent, source, Browser-JS, or reverse. The same APK therefore routes
+differently for a CTF solve, a mobile assessment, and algorithm reconstruction.
+
+```bash
+bb-stack bootstrap --profile browser-js
+bb-stack workspace route --kind browser-js --target https://app.example
+bb-stack doctor --profile browser-js --strict --probe-mcp
+```
+
 `bb-stack` is the control plane for the complete lifecycle. `bb-claude` is only
 a convenience wrapper around `bb-stack launch`.
 
@@ -67,11 +92,15 @@ resolved roots, Prompt composition, Engagement state, Claude/Codex Skills,
 MCP/CLI providers, proxy application, personal integrations, and exact repair
 actions.
 
-Android and native reverse profiles use the same CTF Engagement lifecycle:
+Android and native reverse work no longer assumes CTF. Explicit examples:
 
 ```bash
 bb-stack bootstrap --profile android
 bb-stack launch --profile ctf-android --engagement APK-SLUG
+bb-stack bootstrap --profile assessment-android
+bb-stack launch --profile assessment-android --engagement MOBILE-SLUG
+bb-stack bootstrap --profile analysis-android
+bb-stack launch --profile analysis-android --engagement ANALYSIS-SLUG
 bb-stack bootstrap --profile reverse
 bb-stack launch --profile ctf-reverse --engagement BINARY-SLUG
 ```
@@ -80,6 +109,13 @@ Android static routing uses `android-reverse-engineering` for APK/XAPK/JAR/AAR
 fingerprinting, decompilation, Kotlin/R8 name recovery, API extraction, and call
 flows. `android-pentest` remains the security specialist for components, ADB,
 Frida, storage, TLS, and runtime validation.
+
+Authorized non-BB assessments use `security-orchestrator` and one domain
+specialist. Profiles are isolated: cross-domain leads may load an optional
+Skill, but workflow, scope, platform policy, and MCP composition do not switch.
+The root `.mcp.json` intentionally contains no domain MCP; strict launches load
+only the current Profile's MCP, while normal browser work uses the managed
+`chrome-devtools` CLI.
 
 Run a real, isolated Claude behavior check after moving machines or changing
 Prompt routing:

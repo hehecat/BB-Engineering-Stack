@@ -93,6 +93,8 @@ class StackPaths:
             env.pop("CLAUDE_CONFIG_DIR", None)
         if artifact_root:
             env["BB_ARTIFACT_ROOT"] = str(artifact_root.resolve())
+        env["CHROME_DEVTOOLS_MCP_NO_USAGE_STATISTICS"] = "1"
+        env["CHROME_DEVTOOLS_MCP_NO_UPDATE_CHECKS"] = "1"
         return env
 
     def runtime_path(self, extra_path: str | None = None) -> str:

@@ -1,0 +1,4 @@
+schema_version: 1
+name: assessment-web
+required: [http.raw, data.json, runtime.python, browser.stateful]
+optional: [tls.inspect, web.probe, web.crawl, web.fuzz, source.audit, analysis.javascript, oob.callback, proxy.http]

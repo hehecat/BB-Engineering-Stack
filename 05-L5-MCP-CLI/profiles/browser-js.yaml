@@ -1,0 +1,11 @@
+schema_version: 1
+name: browser-js
+required:
+  - http.raw
+  - data.json
+  - browser.devtools
+  - analysis.javascript
+optional:
+  - runtime.python
+  - analysis.javascript-extended
+  - proxy.http

@@ -12,6 +12,10 @@ bb-stack updates check --skills
 bb-stack updates check --mcp
 bb-stack updates check --tools
 bb-stack updates check --name skill.ctf-web
+bb-stack updates check --name skill.ios-pentest
+bb-stack updates check --name skill.cloud-security
+bb-stack updates check --name mcp.chrome-devtools
+bb-stack updates check --name tool.webcrack
 ```
 
 Important states:
@@ -77,6 +81,11 @@ different rollback semantics.
 
 Without a verified upstream entry, the Skill remains usable and appears as
 `manual`; it is not silently replaced.
+
+The full-security iOS, network, cloud, SAST, IaC, container, SCA, and
+threat-model Skills are pinned as independent subtrees of one recorded
+`ai-security-arsenal` revision. An unrelated commit or a change to another
+subtree does not become an update for the selected Skill.
 
 ## Add An MCP
 

@@ -1,0 +1,5 @@
+schema_version: 1
+name: assessment-network
+orchestrator: security-orchestrator
+required: [security-orchestrator, network-pentest]
+optional: [information-disclosure, security-arsenal]

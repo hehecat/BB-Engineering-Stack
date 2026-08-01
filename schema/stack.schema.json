@@ -47,24 +47,36 @@
         "profile": {"type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"},
         "workflow_profiles": {
           "type": "object",
-          "required": ["bug-bounty", "ctf", "lab"],
+          "required": ["bug-bounty", "assessment", "ctf", "lab", "analysis"],
           "additionalProperties": false,
           "properties": {
             "bug-bounty": {"type": "string"},
+            "assessment": {"type": "string"},
             "ctf": {"type": "string"},
-            "lab": {"type": "string"}
+            "lab": {"type": "string"},
+            "analysis": {"type": "string"}
           }
         },
         "capability_profiles": {
           "type": "object",
-          "required": ["minimal", "ctf-web", "web", "android", "reverse"],
+          "required": ["minimal", "ctf-web", "web", "android", "reverse", "browser-js", "assessment-web", "assessment-android", "assessment-ios", "assessment-network", "assessment-cloud", "assessment-llm", "assessment-source", "analysis-android", "analysis-reverse"],
           "additionalProperties": false,
           "properties": {
             "minimal": {"type": "string"},
             "ctf-web": {"type": "string"},
             "web": {"type": "string"},
             "android": {"type": "string"},
-            "reverse": {"type": "string"}
+            "reverse": {"type": "string"},
+            "browser-js": {"type": "string"},
+            "assessment-web": {"type": "string"},
+            "assessment-android": {"type": "string"},
+            "assessment-ios": {"type": "string"},
+            "assessment-network": {"type": "string"},
+            "assessment-cloud": {"type": "string"},
+            "assessment-llm": {"type": "string"},
+            "assessment-source": {"type": "string"},
+            "analysis-android": {"type": "string"},
+            "analysis-reverse": {"type": "string"}
           }
         },
         "work_root": {"type": "string", "minLength": 1},

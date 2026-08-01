@@ -53,7 +53,7 @@
       "minLength": 1
     },
     "workflow": {
-      "enum": ["bug-bounty", "ctf", "lab"]
+      "enum": ["bug-bounty", "assessment", "ctf", "lab", "analysis"]
     },
     "platform": {
       "type": "string",
@@ -233,7 +233,7 @@
       "required": ["kind"],
       "properties": {
         "kind": {
-          "enum": ["ctf-web", "web", "android", "reverse", "lab"]
+          "enum": ["ctf-web", "web", "web-assessment", "ctf-android", "android", "android-assessment", "android-analysis", "ios-assessment", "ctf-reverse", "reverse", "reverse-analysis", "network-assessment", "cloud-assessment", "llm-assessment", "source-audit", "browser-js", "lab"]
         }
       }
     }
@@ -292,6 +292,22 @@
       "if": {
         "properties": {
           "workflow": {
+            "const": "assessment"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "phase": {
+            "enum": ["scope", "test", "report"]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "workflow": {
             "const": "ctf"
           }
         }
@@ -316,6 +332,22 @@
         "properties": {
           "phase": {
             "enum": ["reproduce", "develop", "verify"]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "workflow": {
+            "const": "analysis"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "phase": {
+            "enum": ["inspect", "reconstruct", "deliver"]
           }
         }
       }

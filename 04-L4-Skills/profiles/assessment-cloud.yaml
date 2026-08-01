@@ -1,0 +1,5 @@
+schema_version: 1
+name: assessment-cloud
+orchestrator: security-orchestrator
+required: [security-orchestrator, cloud-security]
+optional: [api-security, information-disclosure, llm-security, threat-modeling]

@@ -12,8 +12,9 @@ control, root-cause cluster, cleanup, and redacted secret references.
 
 New work units live under `$BB_WORK_ROOT/engagements/<slug>/`. The optional
 `routing.kind` field records whether the natural workspace selected CTF Web,
-Web/BB, Android, Reverse, or Lab so a later plain-Claude session resumes the
-same domain Profile. Legacy work units directly under `$BB_WORK_ROOT` remain
+Web/BB, assessment domain, Browser-JS, Android, Reverse, or Lab so a later
+plain-Claude session resumes the same Profile. Legacy work units directly under
+`$BB_WORK_ROOT` remain
 readable but new data is never created there.
 
 ## Lifecycle
@@ -28,8 +29,10 @@ Workflow phases:
 
 ```text
 bug-bounty: explore, prove, ship
+assessment: scope, test, report
 ctf:        triage, solve, writeup
 lab:        reproduce, develop, verify
+analysis:   inspect, reconstruct, deliver
 ```
 
 Checkpoint order is evidence, hypotheses/findings, STATUS, HANDOFF, then YAML.

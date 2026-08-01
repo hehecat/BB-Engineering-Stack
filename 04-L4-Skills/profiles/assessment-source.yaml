@@ -1,0 +1,5 @@
+schema_version: 1
+name: assessment-source
+orchestrator: security-orchestrator
+required: [security-orchestrator, sast-orchestration]
+optional: [iac-security, container-security, sca-security, threat-modeling, information-disclosure]

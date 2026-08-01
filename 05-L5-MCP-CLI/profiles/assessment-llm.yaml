@@ -1,0 +1,4 @@
+schema_version: 1
+name: assessment-llm
+required: [http.raw, data.json, runtime.python, browser.stateful]
+optional: [oob.callback, proxy.http]

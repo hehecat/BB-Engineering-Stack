@@ -42,6 +42,11 @@ bb-stack validate --json >/dev/null
 bb-stack eval contracts --json >/dev/null
 bb-stack doctor --profile minimal --strict --json >/dev/null
 bb-stack status --profile minimal --strict --json >/dev/null
+(
+  cd "$ROOT/.runtime"
+  node --input-type=module -e \
+    "import {webcrack} from 'webcrack'; const r=await webcrack('var x=[\"ok\"];console.log(x[0]);'); if (!r.code.includes('console.log')) process.exit(1)"
+)
 command -v mail-otp >/dev/null
 bb-stack mail --help >/dev/null
 bb-stack configure --h1-username fresh-operator --json >/dev/null

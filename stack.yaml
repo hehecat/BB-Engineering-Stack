@@ -3,7 +3,7 @@ name: bb-engineering-stack
 version_file: VERSION
 minimum_runtime:
   python: "3.11"
-  node: "20"
+  node: "22"
   claude_code: "2.1"
 
 paths:
@@ -20,14 +20,26 @@ defaults:
   profile: ctf-quick
   workflow_profiles:
     bug-bounty: bb-interactive
+    assessment: assessment-web
     ctf: ctf-quick
     lab: lab-replacement
+    analysis: browser-js
   capability_profiles:
     minimal: lab-replacement
     ctf-web: ctf-quick
     web: bb-interactive
     android: ctf-android
     reverse: ctf-reverse
+    browser-js: browser-js
+    assessment-web: assessment-web
+    assessment-android: assessment-android
+    assessment-ios: assessment-ios
+    assessment-network: assessment-network
+    assessment-cloud: assessment-cloud
+    assessment-llm: assessment-llm
+    assessment-source: assessment-source
+    analysis-android: analysis-android
+    analysis-reverse: analysis-reverse
   work_root: "${HOME}/BB-Workspaces"
   config_home: "${HOME}/.config/bb-stack"
   claude_config_dir: "${HOME}/.claude"

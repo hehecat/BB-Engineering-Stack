@@ -18,7 +18,7 @@
     "schema_version": {"const": 1},
     "name": {"type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"},
     "prompt_mode": {"enum": ["append", "replacement"]},
-    "workflow": {"enum": ["bug-bounty", "ctf", "lab"]},
+    "workflow": {"enum": ["bug-bounty", "assessment", "ctf", "lab", "analysis"]},
     "platform": {"type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"},
     "default_mode": {"enum": ["interactive", "continuous"]},
     "l5_profile": {"type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"},

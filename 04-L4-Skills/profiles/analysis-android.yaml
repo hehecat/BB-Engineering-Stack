@@ -1,0 +1,5 @@
+schema_version: 1
+name: analysis-android
+orchestrator: reverse-orchestrator
+required: [reverse-orchestrator, android-reverse-engineering]
+optional: [android-pentest, api-security, information-disclosure]

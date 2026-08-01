@@ -6,6 +6,12 @@ platforms:
     request_identification: optional
     identity_value_from: null
     delivery_overlay: generic-vdp
+  authorized-assessment:
+    workflows: [assessment]
+    report_language: operator-defined
+    request_identification: program-defined
+    identity_value_from: null
+    delivery_overlay: assessment-report
   hackerone:
     workflows: [bug-bounty]
     report_language: en
@@ -30,3 +36,9 @@ platforms:
     request_identification: disabled
     identity_value_from: null
     delivery_overlay: lab-notes
+  standalone-analysis:
+    workflows: [analysis]
+    report_language: operator-defined
+    request_identification: disabled
+    identity_value_from: null
+    delivery_overlay: analysis-deliverable

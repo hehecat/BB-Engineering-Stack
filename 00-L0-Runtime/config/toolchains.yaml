@@ -2,7 +2,7 @@ schema_version: 1
 toolchains:
   node:
     version: 22.23.2
-    minimum_major: 20
+    minimum_major: 22
     files:
       x86_64:
         archive: node-v22.23.2-linux-x64.tar.xz

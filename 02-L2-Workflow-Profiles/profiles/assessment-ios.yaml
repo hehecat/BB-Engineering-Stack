@@ -1,0 +1,10 @@
+schema_version: 1
+name: assessment-ios
+prompt_mode: append
+workflow: assessment
+platform: authorized-assessment
+default_mode: interactive
+domain_prompt: ios
+l5_profile: assessment-ios
+skill_profile: assessment-ios
+max_custom_tokens: 1900

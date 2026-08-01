@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "bb-engineering-stack"
-version = "0.9.0"
-description = "Portable Claude Code workflow for CTF Web and authorized Web/API testing"
+version = "0.11.0"
+description = "Portable Claude Code workflow for Web security and browser JavaScript analysis"
 requires-python = ">=3.11"
 dependencies = [
   "jsonschema[format]>=4.18,<5",

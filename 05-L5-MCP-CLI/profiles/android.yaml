@@ -5,6 +5,6 @@ required:
   - android.static
 optional:
   - android.device
-  - android.dynamic
+  - mobile.dynamic
   - http.raw
   - proxy.http

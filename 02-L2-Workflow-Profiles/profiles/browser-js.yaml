@@ -1,0 +1,10 @@
+schema_version: 1
+name: browser-js
+prompt_mode: append
+workflow: analysis
+platform: standalone-analysis
+default_mode: interactive
+domain_prompt: browser-javascript
+l5_profile: browser-js
+skill_profile: browser-js
+max_custom_tokens: 1700

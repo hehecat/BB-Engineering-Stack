@@ -1,0 +1,10 @@
+schema_version: 1
+name: assessment-cloud
+prompt_mode: append
+workflow: assessment
+platform: authorized-assessment
+default_mode: interactive
+domain_prompt: cloud
+l5_profile: assessment-cloud
+skill_profile: assessment-cloud
+max_custom_tokens: 1900

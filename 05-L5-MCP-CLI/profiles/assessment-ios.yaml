@@ -1,0 +1,4 @@
+schema_version: 1
+name: assessment-ios
+required: [runtime.python, ios.static]
+optional: [ios.device, mobile.dynamic, http.raw, proxy.http]

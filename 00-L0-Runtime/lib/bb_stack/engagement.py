@@ -15,11 +15,19 @@ from .validation import validate
 
 
 SLUG_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
-WORKFLOW_PHASE = {"bug-bounty": "explore", "ctf": "triage", "lab": "reproduce"}
+WORKFLOW_PHASE = {
+    "bug-bounty": "explore",
+    "assessment": "scope",
+    "ctf": "triage",
+    "lab": "reproduce",
+    "analysis": "inspect",
+}
 WORKFLOW_PLATFORM = {
     "bug-bounty": "generic-vdp",
+    "assessment": "authorized-assessment",
     "ctf": "standalone-ctf",
     "lab": "local-lab",
+    "analysis": "standalone-analysis",
 }
 TRANSITIONS = {
     "active": {"paused", "blocked", "closed"},
@@ -93,11 +101,17 @@ class EngagementManager:
         if workflow not in platform_contract["workflows"]:
             raise ValidationError(f"platform {platform} does not support workflow {workflow}")
         asset = infer_asset(target)
-        authorization_status = "confirmed" if workflow == "bug-bounty" else "not-required"
+        authorization_status = (
+            "confirmed" if workflow in {"bug-bounty", "assessment"} else "not-required"
+        )
         authorization_source = authorization_source or (
             "User instruction and written program rules captured in notes/SCOPE.md"
-            if workflow == "bug-bounty"
-            else "Competition challenge statement or local fixture captured in notes/SCOPE.md"
+            if workflow in {"bug-bounty", "assessment"}
+            else (
+                "User-supplied analysis target and requested outcome captured in notes/SCOPE.md"
+                if workflow == "analysis"
+                else "Competition challenge statement or local fixture captured in notes/SCOPE.md"
+            )
         )
         state: dict[str, Any] = {
             "schema_version": 1,
@@ -149,23 +163,38 @@ class EngagementManager:
 
     @staticmethod
     def _default_title(workflow: str, slug: str) -> str:
-        prefix = {"bug-bounty": "Bug Bounty", "ctf": "CTF", "lab": "Lab"}[workflow]
+        prefix = {
+            "bug-bounty": "Bug Bounty",
+            "assessment": "Security Assessment",
+            "ctf": "CTF",
+            "lab": "Lab",
+            "analysis": "Security Analysis",
+        }[workflow]
         return f"{prefix}: {slug}"
 
     @staticmethod
     def _first_action(workflow: str) -> str:
         return {
             "bug-bounty": "Read notes/SCOPE.md and select the first in-scope lead",
+            "assessment": "Read notes/SCOPE.md and select the first scoped assessment lead",
             "ctf": "Read the challenge statement, inventory artifacts, and classify the solve path",
             "lab": "Read notes/SCOPE.md and reproduce the supplied behavior",
+            "analysis": "Inventory the supplied input and identify the smallest relevant behavior or call chain",
         }[workflow]
 
     def _make_directories(self, root: Path, workflow: str) -> None:
         common = ["notes", "artifacts", "scripts", "reports", "deliverables"]
         specific = {
             "bug-bounty": ["recon/findings", "recon/js", "h1-packages", "lab"],
+            "assessment": ["artifacts/evidence"],
             "ctf": ["challenge", "artifacts/http", "artifacts/browser"],
             "lab": ["fixture", "artifacts/logs", "artifacts/browser"],
+            "analysis": [
+                "input",
+                "artifacts/browser",
+                "artifacts/network",
+                "artifacts/javascript",
+            ],
         }[workflow]
         for relative in common + specific:
             (root / relative).mkdir(parents=True, exist_ok=True)
@@ -179,14 +208,25 @@ class EngagementManager:
             + ".bb-stack/\n",
             encoding="utf-8",
         )
+        boundary_rule = (
+            "Discovered adjacent assets remain candidates until written Scope promotes them. "
+            if workflow in {"bug-bounty", "assessment"}
+            else "Keep work within the supplied challenge, fixture, or analysis boundary. "
+        )
+        findings_rule = (
+            "Bug Bounty findings use `notes/findings-live.md`; do not create a parallel "
+            "findings log.\n"
+            if workflow in {"bug-bounty", "assessment"}
+            else "Use the workflow-specific log under `notes/`.\n"
+        )
         (root / "CLAUDE.md").write_text(
-            "# Active Security Work Unit\n\n"
+            "# Active Work Unit\n\n"
             "Read `engagement.yaml`, `notes/SCOPE.md`, `SESSION-HANDOFF.md`, and "
             "`STATUS.md` before acting. Keep evidence and generated output in this work "
             "unit. Never put credentials or complete tokens in Prompt, reports, shared "
-            "artifacts, or version control. Discovered adjacent assets remain candidates "
-            "until written Scope promotes them. Bug Bounty findings use "
-            "`notes/findings-live.md`; do not create a parallel findings log.\n",
+            "artifacts, or version control. "
+            + boundary_rule
+            + findings_rule,
             encoding="utf-8",
         )
         (root / "notes" / "SCOPE.md").write_text(
@@ -198,7 +238,7 @@ class EngagementManager:
         (root / "SESSION-HANDOFF.md").write_text(
             self._handoff_markdown(state, timestamp), encoding="utf-8"
         )
-        if workflow == "bug-bounty":
+        if workflow in {"bug-bounty", "assessment"}:
             for name in ("hypotheses.md",):
                 shutil.copy2(self.templates / name, root / name)
             shutil.copy2(self.templates / "notes" / "findings-live.md", root / "notes" / "findings-live.md")
@@ -208,9 +248,16 @@ class EngagementManager:
                 "| --- | --- | --- | --- | --- |\n",
                 encoding="utf-8",
             )
-        else:
+        elif workflow == "lab":
             (root / "notes" / "experiment-log.md").write_text(
                 "# Experiment Log\n\n| Time | Baseline | Change | Result | Evidence | Conclusion |\n"
+                "| --- | --- | --- | --- | --- | --- |\n",
+                encoding="utf-8",
+            )
+        else:
+            (root / "notes" / "analysis-log.md").write_text(
+                "# Analysis Log\n\n"
+                "| Time | Runtime observation | Static lead | Experiment | Evidence | Next action |\n"
                 "| --- | --- | --- | --- | --- | --- |\n",
                 encoding="utf-8",
             )
@@ -219,7 +266,25 @@ class EngagementManager:
 
     @staticmethod
     def _scope_markdown(state: dict[str, Any], target: str, timestamp: str) -> str:
-        return (
+        if state["workflow"] == "analysis":
+            return (
+                "# Analysis Boundary And Outcome\n\n"
+                f"Reviewed: {timestamp}\n"
+                "Revision: 1\n\n"
+                "## Supplied Input\n\n"
+                "| Input | Type | Conditions |\n"
+                "| --- | --- | --- |\n"
+                f"| `{target}` | {state['scope']['in_scope'][0]['type']} | Initial supplied target |\n\n"
+                "## Requested Outcome\n\n"
+                "Record the requested behavior, acceptance criteria, and preferred integration "
+                "surface here as they become known. The output format is not predetermined.\n\n"
+                "## Operating Rules\n\n"
+                "- Preserve original files and captured baselines.\n"
+                "- Treat scripts and subresources loaded by the supplied page as analysis inputs, "
+                "not as independent security-test targets.\n"
+                "- Keep exact evidence paths and separate observed, inferred, and verified claims.\n"
+            )
+        content = (
             "# Scope And Rules\n\n"
             f"Reviewed: {timestamp}\n"
             "Revision: 1\n\n"
@@ -243,6 +308,10 @@ class EngagementManager:
             "- Record current rate, identity, side-effect, and disclosure rules before testing.\n"
             "- Keep requests inside the assets and conditions above.\n"
             "- Preserve exact evidence paths and redact secrets from shareable output.\n\n"
+        )
+        if state["workflow"] != "bug-bounty":
+            return content
+        return content + (
             "## Default Production Action Budget\n\n"
             "Written program rules and explicit Scope revisions override these defaults.\n\n"
             "| Action | Per-lead ceiling |\n"
@@ -256,7 +325,23 @@ class EngagementManager:
 
     @staticmethod
     def _status_markdown(state: dict[str, Any], timestamp: str) -> str:
-        return (
+        scope_section = (
+            "## Scope Candidates\n\nNone recorded. Candidate assets are not active "
+            "targets until a Scope revision records their authorization source.\n\n"
+            if state["workflow"] in {"bug-bounty", "assessment"}
+            else ""
+        )
+        objective = (
+            "Inventory the supplied input and identify the smallest relevant behavior or call chain."
+            if state["workflow"] == "analysis"
+            else "Establish the first reproducible in-scope lead."
+        )
+        initial_surface = (
+            "Supplied input | Not observed | Inventory and capture a baseline"
+            if state["workflow"] == "analysis"
+            else "Initial target | Not inventoried | Inventory supplied surface"
+        )
+        prefix = (
             "# Status\n\n"
             f"Last checkpoint: {timestamp}\n\n"
             "## Control Snapshot\n\n"
@@ -267,19 +352,25 @@ class EngagementManager:
             "| Scope revision | 1 |\n"
             "| Current lead | none |\n"
             "| Current finding | none |\n\n"
-            "## Current Objective\n\nEstablish the first reproducible in-scope lead.\n\n"
-            "## Scope Candidates\n\nNone recorded. Candidate assets are not active "
-            "targets until a Scope revision records their authorization source.\n\n"
+            f"## Current Objective\n\n{objective}\n\n"
+        )
+        return prefix + scope_section + (
             f"## Exact Next Action\n\n{state['current']['next_action']}.\n\n"
             "## Queue\n\n| Priority | ID | Surface | Signal | Next test |\n"
             "| --- | --- | --- | --- | --- |\n"
-            "| 1 | none | Initial target | Not inventoried | Inventory supplied surface |\n\n"
+            f"| 1 | none | {initial_surface} |\n\n"
             "## Blockers\n\nNone.\n"
         )
 
     @staticmethod
     def _handoff_markdown(state: dict[str, Any], timestamp: str) -> str:
-        return (
+        scope_section = (
+            "## Scope Candidates\n\nNone recorded. Do not actively test discovered adjacent "
+            "assets unless the written Scope has promoted them.\n\n"
+            if state["workflow"] in {"bug-bounty", "assessment"}
+            else ""
+        )
+        prefix = (
             "# Session Handoff\n\n"
             f"Updated: {timestamp}\n\n"
             "## Resume Order\n\n"
@@ -294,8 +385,8 @@ class EngagementManager:
             "- Current lead: none\n"
             "- Current finding: none\n\n"
             "## Established Facts\n\n- Work unit initialized; no technical conclusion yet.\n\n"
-            "## Scope Candidates\n\nNone recorded. Do not actively test discovered adjacent "
-            "assets unless the written Scope has promoted them.\n\n"
+        )
+        return prefix + scope_section + (
             "## Evidence To Open\n\nNo evidence files yet.\n\n"
             "## Exact Next Actions\n\n"
             f"1. {state['current']['next_action']}.\n\n"

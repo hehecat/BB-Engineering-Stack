@@ -32,6 +32,8 @@ MANAGED_ENV_KEYS = {
     "BB_FILECODEBOX_URL",
     "BB_AGENT_LANGUAGE",
     "BB_NPM_REGISTRY",
+    "CHROME_DEVTOOLS_MCP_NO_USAGE_STATISTICS",
+    "CHROME_DEVTOOLS_MCP_NO_UPDATE_CHECKS",
     "PATH",
     "HTTP_PROXY",
     "HTTPS_PROXY",
@@ -59,6 +61,24 @@ ROUTES: dict[str, dict[str, Any]] = {
         "skill_route": ["bb-orchestrator"],
         "slug_suffix": "bb",
     },
+    "web-assessment": {
+        "workflow": "assessment",
+        "platform": "authorized-assessment",
+        "profile": "assessment-web",
+        "skill_profile": "assessment-web",
+        "l5_profile": "assessment-web",
+        "skill_route": ["security-orchestrator", "api-security"],
+        "slug_suffix": "pentest",
+    },
+    "ctf-android": {
+        "workflow": "ctf",
+        "platform": "standalone-ctf",
+        "profile": "ctf-android",
+        "skill_profile": "android",
+        "l5_profile": "android",
+        "skill_route": ["reverse-orchestrator", "android-reverse-engineering"],
+        "slug_suffix": "apk-ctf",
+    },
     "android": {
         "workflow": "ctf",
         "platform": "standalone-ctf",
@@ -68,6 +88,46 @@ ROUTES: dict[str, dict[str, Any]] = {
         "skill_route": ["reverse-orchestrator", "android-reverse-engineering"],
         "slug_suffix": "apk",
     },
+    "android-assessment": {
+        "workflow": "assessment",
+        "platform": "authorized-assessment",
+        "profile": "assessment-android",
+        "skill_profile": "assessment-android",
+        "l5_profile": "assessment-android",
+        "skill_route": [
+            "security-orchestrator",
+            "android-reverse-engineering",
+            "android-pentest",
+        ],
+        "slug_suffix": "android",
+    },
+    "android-analysis": {
+        "workflow": "analysis",
+        "platform": "standalone-analysis",
+        "profile": "analysis-android",
+        "skill_profile": "analysis-android",
+        "l5_profile": "analysis-android",
+        "skill_route": ["reverse-orchestrator", "android-reverse-engineering"],
+        "slug_suffix": "apk-analysis",
+    },
+    "ios-assessment": {
+        "workflow": "assessment",
+        "platform": "authorized-assessment",
+        "profile": "assessment-ios",
+        "skill_profile": "assessment-ios",
+        "l5_profile": "assessment-ios",
+        "skill_route": ["security-orchestrator", "ios-pentest"],
+        "slug_suffix": "ios",
+    },
+    "ctf-reverse": {
+        "workflow": "ctf",
+        "platform": "standalone-ctf",
+        "profile": "ctf-reverse",
+        "skill_profile": "reverse",
+        "l5_profile": "reverse",
+        "skill_route": ["reverse-orchestrator"],
+        "slug_suffix": "reverse-ctf",
+    },
     "reverse": {
         "workflow": "ctf",
         "platform": "standalone-ctf",
@@ -76,6 +136,60 @@ ROUTES: dict[str, dict[str, Any]] = {
         "l5_profile": "reverse",
         "skill_route": ["reverse-orchestrator"],
         "slug_suffix": "reverse",
+    },
+    "reverse-analysis": {
+        "workflow": "analysis",
+        "platform": "standalone-analysis",
+        "profile": "analysis-reverse",
+        "skill_profile": "analysis-reverse",
+        "l5_profile": "analysis-reverse",
+        "skill_route": ["reverse-orchestrator"],
+        "slug_suffix": "analysis",
+    },
+    "network-assessment": {
+        "workflow": "assessment",
+        "platform": "authorized-assessment",
+        "profile": "assessment-network",
+        "skill_profile": "assessment-network",
+        "l5_profile": "assessment-network",
+        "skill_route": ["security-orchestrator", "network-pentest"],
+        "slug_suffix": "network",
+    },
+    "cloud-assessment": {
+        "workflow": "assessment",
+        "platform": "authorized-assessment",
+        "profile": "assessment-cloud",
+        "skill_profile": "assessment-cloud",
+        "l5_profile": "assessment-cloud",
+        "skill_route": ["security-orchestrator", "cloud-security"],
+        "slug_suffix": "cloud",
+    },
+    "llm-assessment": {
+        "workflow": "assessment",
+        "platform": "authorized-assessment",
+        "profile": "assessment-llm",
+        "skill_profile": "assessment-llm",
+        "l5_profile": "assessment-llm",
+        "skill_route": ["security-orchestrator", "llm-security"],
+        "slug_suffix": "llm",
+    },
+    "source-audit": {
+        "workflow": "assessment",
+        "platform": "authorized-assessment",
+        "profile": "assessment-source",
+        "skill_profile": "assessment-source",
+        "l5_profile": "assessment-source",
+        "skill_route": ["security-orchestrator", "sast-orchestration"],
+        "slug_suffix": "audit",
+    },
+    "browser-js": {
+        "workflow": "analysis",
+        "platform": "standalone-analysis",
+        "profile": "browser-js",
+        "skill_profile": "browser-js",
+        "l5_profile": "browser-js",
+        "skill_route": ["browser-js-orchestrator"],
+        "slug_suffix": "js",
     },
     "lab": {
         "workflow": "lab",
@@ -366,6 +480,10 @@ class WorkspaceManager:
                 f"bb-stack launch --profile {shlex.quote(profile_name)} "
                 f"--engagement {shlex.quote(state['slug'])}"
             ),
+            "browser_start": (
+                "bb-stack browser start --engagement "
+                + shlex.quote(state["slug"])
+            ),
             "next_action": state["current"]["next_action"],
         }
 
@@ -398,6 +516,8 @@ class WorkspaceManager:
             "BB_FILECODEBOX_URL": machine["BB_FILECODEBOX_URL"],
             "BB_AGENT_LANGUAGE": machine["BB_AGENT_LANGUAGE"],
             "BB_NPM_REGISTRY": machine["BB_NPM_REGISTRY"],
+            "CHROME_DEVTOOLS_MCP_NO_USAGE_STATISTICS": "1",
+            "CHROME_DEVTOOLS_MCP_NO_UPDATE_CHECKS": "1",
             "PATH": self.paths.runtime_path(
                 machine.get("BB_EXTRA_PATH", "")
             ),
@@ -551,14 +671,36 @@ class WorkspaceManager:
     def _infer_kind(state: dict[str, Any]) -> str:
         if state["workflow"] == "bug-bounty":
             return "web"
+        pattern = state["scope"]["in_scope"][0]["pattern"].lower()
+        suffix = Path(pattern).suffix
+        if state["workflow"] == "assessment":
+            asset_type = state["scope"]["in_scope"][0]["type"]
+            if suffix in {".apk", ".xapk", ".aab", ".jar", ".aar"}:
+                return "android-assessment"
+            if suffix == ".ipa":
+                return "ios-assessment"
+            if asset_type == "cidr":
+                return "network-assessment"
+            if asset_type == "repository":
+                return "source-audit"
+            return "web-assessment"
         if state["workflow"] == "lab":
             return "lab"
-        pattern = state["scope"]["in_scope"][0]["pattern"].lower()
+        if state["workflow"] == "analysis":
+            if suffix in {".apk", ".xapk", ".aab", ".jar", ".aar"}:
+                return "android-analysis"
+            if pattern.startswith(("http://", "https://")) or suffix in {
+                ".js",
+                ".mjs",
+                ".cjs",
+            }:
+                return "browser-js"
+            return "reverse-analysis"
         if pattern.startswith(("http://", "https://")):
             return "ctf-web"
-        if Path(pattern).suffix in {".apk", ".xapk", ".aab", ".jar", ".aar"}:
-            return "android"
-        return "reverse"
+        if suffix in {".apk", ".xapk", ".aab", ".jar", ".aar"}:
+            return "ctf-android"
+        return "ctf-reverse"
 
     @staticmethod
     def _digest(path: Path) -> str:

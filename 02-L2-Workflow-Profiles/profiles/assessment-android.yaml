@@ -1,0 +1,10 @@
+schema_version: 1
+name: assessment-android
+prompt_mode: append
+workflow: assessment
+platform: authorized-assessment
+default_mode: interactive
+domain_prompt: android
+l5_profile: assessment-android
+skill_profile: assessment-android
+max_custom_tokens: 1900

@@ -80,7 +80,7 @@
         "required": ["slug", "workflow", "platform", "mode", "lifecycle", "phase", "checkpoint"],
         "properties": {
           "slug": {"type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"},
-          "workflow": {"enum": ["bug-bounty", "ctf", "lab"]},
+          "workflow": {"enum": ["bug-bounty", "assessment", "ctf", "lab", "analysis"]},
           "platform": {"type": "string"},
           "mode": {"enum": ["interactive", "continuous"]},
           "lifecycle": {"enum": ["active", "paused", "blocked", "closed"]},

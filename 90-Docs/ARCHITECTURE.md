@@ -37,17 +37,36 @@ to this source repository.
 ## Natural Claude Entry
 
 `cd "$BB_WORK_ROOT" && claude` loads the generated project `CLAUDE.md`. The
-router classifies CTF Web, Web/BB/VDP, Android, Reverse, or Lab intent and calls
-`bb-stack workspace route`. That command creates or resumes the isolated
+router first classifies Bug Bounty, authorized assessment, CTF, standalone
+analysis, or Lab, then selects Web/API, Browser-JS, Android, iOS, Reverse,
+network, cloud, LLM/agent, or source intent and calls `bb-stack workspace route`.
+That command creates or resumes the isolated
 Engagement, renders its exact L2 Prompt, reports the ordered Skill route, and
 returns the four L3 state files to read.
 
-The project `.mcp.json` contains only the low-context Headless baseline. MCP
-servers are selected when Claude starts, so strict per-profile MCP composition
-continues to use `bb-stack launch`. This preserves a simple default entry
-without pretending that a running Claude process can hot-load arbitrary MCPs.
+The project `.mcp.json` intentionally contains no domain MCP. MCP servers are
+selected when Claude starts, so strict per-profile MCP composition uses
+`bb-stack launch`. This preserves a simple default entry without exposing
+Playwright or DevTools schemas to unrelated network, cloud, source, or mobile
+tasks. Browser work uses the Chrome DevTools CLI in this natural entry and the
+matching MCP provider in a strict Profile launch. `bb-stack browser start` owns an
+Engagement-local Chromium profile and exposes one loopback CDP endpoint to both.
 
 ## Prompt Composition
+
+L2 is a composition matrix, not a linear inheritance tree:
+
+```text
+workflow policy (BB | assessment | CTF | analysis | lab)
++ domain method (Web | mobile | network | cloud | LLM | source | reverse | Browser-JS)
++ platform overlay (HackerOne | Butian | generic VDP | authorized assessment | standalone)
++ active mode (interactive | continuous)
+```
+
+Every runtime Profile selects exactly one value from each applicable axis.
+Cross-domain evidence can load an optional Skill, but it does not switch the
+workflow, platform, state tree, or MCP Profile. This preserves useful linkage
+without policy leakage.
 
 Append profile:
 
@@ -76,6 +95,13 @@ The Web profile also applies the current `bb-orchestrator` snapshot to a local
 decision fixture and scores candidate-asset handling, high-signal Lead choice,
 proof labels, root-cause clustering, action counts, canonical logs, and a
 synthetic secret canary.
+The Browser-JS profile uses a separate local decision fixture to score runtime
+observation, narrow call-chain selection, Hook-before-breakpoint behavior,
+minimal environment reconstruction, differential validation, and outcome-led
+deliverable selection.
+The router Agent smoke classifies 13 natural-language tasks across the full
+matrix without naming an internal Profile. Static contracts also reject
+assessment/CTF/analysis policy leakage and required cross-domain handoffs.
 Prompt and evaluation-contract SHA256 values prevent a prior pass from
 validating changed behavior. The contract digest includes the routed Skill
 trees, fixture builder, and scorer, so updating an orchestrator, terminal

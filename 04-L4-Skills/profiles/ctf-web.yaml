@@ -2,4 +2,4 @@ schema_version: 1
 name: ctf-web
 orchestrator: ctf-orchestrator
 required: [ctf-orchestrator, solve-challenge, ctf-web, security-arsenal]
-optional: [ctf-writeup, sqli, ssrf, ssti, xss, xxe, file-reading, file-upload, request-smuggling, oauth, openid-sso, graphql-audit]
+optional: [browser-js-orchestrator, ctf-writeup, sqli, ssrf, ssti, xss, xxe, file-reading, file-upload, request-smuggling, oauth, openid-sso, graphql-audit]

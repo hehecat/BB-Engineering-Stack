@@ -14,6 +14,7 @@ ROOT = Path(__file__).resolve().parents[2]
 os.environ["BB_STACK_ROOT"] = str(ROOT)
 
 from bb_stack.evaluation import EvaluationManager
+from bb_stack.evaluation import BROWSER_JS_BEHAVIOR_EXPECTED
 from bb_stack.evaluation import WEB_BEHAVIOR_EXPECTED
 from bb_stack.paths import StackPaths
 from bb_stack.skills import SkillRegistry
@@ -38,8 +39,29 @@ class EvaluationTests(unittest.TestCase):
     def test_contract_suite_covers_every_runtime_profile(self) -> None:
         report = EvaluationManager(self.paths).contracts()
         self.assertTrue(report["passed"])
-        self.assertEqual(report["profile_count"], 7)
-        self.assertEqual(report["check_count"], 42)
+        self.assertEqual(report["profile_count"], 17)
+        self.assertEqual(report["check_count"], 102)
+
+    def test_browser_js_decision_contract_is_scored(self) -> None:
+        manager = EvaluationManager(self.paths)
+        artifact = Path(self.temporary.name) / "browser-js-result.json"
+        result = {
+            "scope_marker": "scope-marker",
+            "handoff_marker": "handoff-marker",
+            "status_marker": "status-marker",
+            "next_action": "inspect-fixture",
+            "selected_skill_route": ["browser-js-orchestrator"],
+            "artifact_policy": "artifacts/",
+            "analysis_decision": BROWSER_JS_BEHAVIOR_EXPECTED,
+        }
+        artifact.write_text(json.dumps(result), encoding="utf-8")
+        checks = manager._score_agent(
+            artifact,
+            result,
+            exit_code=0,
+            stdout="BB_AGENT_EVAL_DONE",
+        )
+        self.assertTrue(all(item["passed"] for item in checks))
 
     def test_agent_suite_scores_real_process_artifact(self) -> None:
         SkillRegistry(self.paths).install(

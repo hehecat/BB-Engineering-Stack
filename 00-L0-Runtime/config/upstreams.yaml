@@ -23,6 +23,94 @@ components:
     current_digest: 116ad26f7deb2fde82b3d90cb9f5b6f791496a1ff1f79b739e831e90b123845c
     license: MIT
 
+  skill.ios-pentest:
+    category: skills
+    target: ios-pentest
+    checker: github-tree
+    repository: https://github.com/hardw00t/ai-security-arsenal
+    branch: main
+    subpath: skills/ios-pentest
+    current_revision: a1a68f7010a9c97b22336dcbcfde539c492a7109
+    current_digest: 138320c3bbbf846d5a204c18d2bbb9f4212b33c419f5de483ab726c1ef528cdc
+    license: NOASSERTION
+
+  skill.network-pentest:
+    category: skills
+    target: network-pentest
+    checker: github-tree
+    repository: https://github.com/hardw00t/ai-security-arsenal
+    branch: main
+    subpath: skills/network-pentest
+    current_revision: a1a68f7010a9c97b22336dcbcfde539c492a7109
+    current_digest: 2b8787a7b75ceecb16daba3b8fca929d8e76e22155da2fc11e82af92bd34e267
+    license: NOASSERTION
+
+  skill.cloud-security:
+    category: skills
+    target: cloud-security
+    checker: github-tree
+    repository: https://github.com/hardw00t/ai-security-arsenal
+    branch: main
+    subpath: skills/cloud-security
+    current_revision: a1a68f7010a9c97b22336dcbcfde539c492a7109
+    current_digest: abab7d3ee8fc367a4375c77b1ab7ea2fd17d0be407a13d91284fa4d878e62df6
+    license: NOASSERTION
+
+  skill.sast-orchestration:
+    category: skills
+    target: sast-orchestration
+    checker: github-tree
+    repository: https://github.com/hardw00t/ai-security-arsenal
+    branch: main
+    subpath: skills/sast-orchestration
+    current_revision: a1a68f7010a9c97b22336dcbcfde539c492a7109
+    current_digest: fac233fb734314f5d4fd345ec4bb762379ed3aea7f8a98872c9ad6a5d9bbf6a0
+    license: NOASSERTION
+
+  skill.iac-security:
+    category: skills
+    target: iac-security
+    checker: github-tree
+    repository: https://github.com/hardw00t/ai-security-arsenal
+    branch: main
+    subpath: skills/iac-security
+    current_revision: a1a68f7010a9c97b22336dcbcfde539c492a7109
+    current_digest: 7dc1eac1d3de07c5b3e3db84c6dff26f7d54ad93af14e60e2e670cee6420c4a2
+    license: NOASSERTION
+
+  skill.container-security:
+    category: skills
+    target: container-security
+    checker: github-tree
+    repository: https://github.com/hardw00t/ai-security-arsenal
+    branch: main
+    subpath: skills/container-security
+    current_revision: a1a68f7010a9c97b22336dcbcfde539c492a7109
+    current_digest: a1c7b9f2f8b04d6fbfc8f076f774e9744960087c030d2badf699c9e984f50d93
+    license: NOASSERTION
+
+  skill.sca-security:
+    category: skills
+    target: sca-security
+    checker: github-tree
+    repository: https://github.com/hardw00t/ai-security-arsenal
+    branch: main
+    subpath: skills/sca-security
+    current_revision: a1a68f7010a9c97b22336dcbcfde539c492a7109
+    current_digest: 3ccbbee28fbc32ffdd183dfa0b292f1fc8df2da6aba9adf99ee696993a93c6aa
+    license: NOASSERTION
+
+  skill.threat-modeling:
+    category: skills
+    target: threat-modeling
+    checker: github-tree
+    repository: https://github.com/hardw00t/ai-security-arsenal
+    branch: main
+    subpath: skills/threat-modeling
+    current_revision: a1a68f7010a9c97b22336dcbcfde539c492a7109
+    current_digest: 9abaf91e097036c96c2883c972b0e287c22bf1e448e085de5e8e10ea22909d84
+    license: NOASSERTION
+
   mcp.playwright:
     category: mcp
     target: "@playwright/mcp"
@@ -42,6 +130,19 @@ components:
     target: osint-mcp-server
     checker: npm
     provider: osint-mcp
+    license: MIT
+
+  mcp.chrome-devtools:
+    category: mcp
+    target: chrome-devtools-mcp
+    checker: npm
+    provider: chrome-devtools-mcp
+    license: Apache-2.0
+
+  tool.webcrack:
+    category: tools
+    target: webcrack
+    checker: npm
     license: MIT
 
   tool.keysmith:

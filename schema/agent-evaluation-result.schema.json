@@ -20,7 +20,7 @@
     "selected_skill_route": {
       "type": "array",
       "minItems": 1,
-      "maxItems": 2,
+      "maxItems": 4,
       "uniqueItems": true,
       "items": {
         "type": "string",
@@ -28,6 +28,42 @@
       }
     },
     "artifact_policy": {"type": "string", "minLength": 1},
+    "analysis_decision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "first_method",
+        "static_target",
+        "instrumentation",
+        "breakpoint_policy",
+        "environment_strategy",
+        "deliverable",
+        "validation"
+      ],
+      "properties": {
+        "first_method": {
+          "enum": ["runtime-observation", "whole-bundle-deobfuscation", "environment-shim"]
+        },
+        "static_target": {
+          "enum": ["app-call-chain", "vendor-bundle", "all-loaded-scripts"]
+        },
+        "instrumentation": {
+          "enum": ["hook", "breakpoint-first", "none"]
+        },
+        "breakpoint_policy": {
+          "enum": ["fallback", "primary", "never"]
+        },
+        "environment_strategy": {
+          "enum": ["minimal-observed-inputs", "full-browser-shim", "guess-and-patch"]
+        },
+        "deliverable": {
+          "enum": ["node-module", "user-script", "patched-bundle", "browser-extension"]
+        },
+        "validation": {
+          "enum": ["captured-vector-and-differential-replay", "static-inspection-only", "page-load-only"]
+        }
+      }
+    },
     "behavior_decision": {
       "type": "object",
       "additionalProperties": false,
