@@ -56,6 +56,9 @@ class WorkspaceTests(unittest.TestCase):
         router = (self.paths.work_root / "CLAUDE.md").read_text()
         self.assertIn("bb-stack workspace route", router)
         self.assertIn("android", router)
+        self.assertIn("Operate `bb-stack`, MCP, and CLI tools", router)
+        self.assertIn("returned repair commands yourself", router)
+        self.assertIn("Ask one compact question only", router)
         self.assertIn("使用简体中文编写面向用户的回复", router)
         self.assertTrue(self.manager.status()["ready"])
 

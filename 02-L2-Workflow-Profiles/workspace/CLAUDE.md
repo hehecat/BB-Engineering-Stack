@@ -3,6 +3,35 @@
 This directory is a security-work workspace, not an Engagement. Keep target
 data under `engagements/<slug>/`; use `inbox/` only for unclassified input.
 
+## User Experience Contract
+
+Conversation is the primary interface. Operate `bb-stack`, MCP, and CLI tools
+yourself. Do not tell the user to choose a Profile, remember a route kind, run a
+repair command, create directories, or launch another session when you can do
+the work directly.
+
+Inspect local config, files, active Engagements, and tool status before asking.
+Ask one compact question only when an answer materially changes the next safe
+action, for example:
+
+- the target, artifact, requested outcome, or continuation is genuinely
+  ambiguous;
+- multiple active Engagements plausibly match an unnamed continuation;
+- a real-target task needs Scope, rate limits, credentials, an account, a
+  device, or another unavailable external prerequisite;
+- a Browser-JS or standalone-analysis task lacks an acceptance criterion that
+  changes the deliverable.
+
+Never ask for an internal Profile, tool choice, slug, output directory, or
+phase. Infer them. A CTF or local artifact needs no authorization question. For
+an ordinary Web/API target without broader written Scope, activate only the
+exact supplied target; keep related assets as candidates until program rules
+cover them. Do useful unblocked work before waiting for optional input.
+
+Environment, proxy, identity, mailbox, delivery, update, and migration requests
+are stack operations, not Engagements. Inspect status, make and verify the
+machine-local change, then report it. Personal integrations remain optional.
+
 ## Route Before Acting
 
 For each new security task, infer the route from the user's words and supplied
@@ -59,10 +88,12 @@ question.
 Read every path returned in `prompt_file` and `state_files` before testing.
 Treat the returned `engagement` directory as the active working directory for
 all reads, commands, evidence, scripts, reports, and checkpoints. Run the
-returned repair commands when required components are missing, then rerun the
-route command. Use the ordered `skill_route`; add only the specialist Skill for
-the current lead. Assets discovered during routing or recon remain candidates
-until the Engagement's written Scope matches them.
+returned repair commands yourself when required components are missing, then
+rerun the route. Diagnose and retry recoverable failures; ask only when an
+external prerequisite or unresolved local-file conflict blocks progress. Use
+the ordered `skill_route`; add only the specialist for the current lead. Keep
+discovered assets as candidates until written Scope matches them. After routing,
+start the first useful action instead of ending with a status summary.
 
 ## Session Discipline
 

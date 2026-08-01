@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)"
+ROOT="$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)"
 WORK="$(mktemp -d /tmp/bb-router-agent.XXXXXX)"
 cleanup() {
   rm -rf -- "$WORK"
@@ -13,7 +13,7 @@ export BB_WORK_ROOT="$WORK/work"
 export BB_CONFIG_HOME="$WORK/config"
 "$ROOT/00-L0-Runtime/bin/bb-stack" workspace init --json >/dev/null
 
-PROMPT='Classify each independent user request using the workspace router. Do not run tools or create Engagements. Return one JSON object whose keys are the case ids and values are objects with exactly kind and platform.
+PROMPT='Classify each independent user request using the workspace router. Do not run tools or create Engagements. Return one JSON object whose keys are the case ids and values are objects with exactly kind and platform. For a stack operation that must not create an Engagement, use kind stack-operation and platform none.
 
 web_ctf: 这是一个 Web CTF 题目：https://challenge.example
 hackerone: 测试 HackerOne 项目 https://target.example
@@ -27,7 +27,8 @@ cloud: 审计授权 AWS 账户的 IAM、S3 和权限提升路径
 llm: 测试这个 RAG Agent 的间接 Prompt Injection、MCP 和 Memory 边界
 source: 审计 inbox/repository 的源码、IaC、容器和依赖安全
 browser_js: 分析 https://app.example 的前端签名并交付 Node 模块
-lab: 在本地 fixture 中复现这个受控漏洞。'
+lab: 在本地 fixture 中复现这个受控漏洞。
+stack_status: 检查当前环境、代理、Skill 和 MCP 是否正常，缺少必要的个人配置时再问我。'
 
 OUTPUT="$WORK/output.json"
 (
@@ -61,6 +62,7 @@ expected = {
     "source": ("source-audit", "authorized-assessment"),
     "browser_js": ("browser-js", "standalone-analysis"),
     "lab": ("lab", "local-lab"),
+    "stack_status": ("stack-operation", "none"),
 }
 failures = []
 for key, (kind, platform) in expected.items():

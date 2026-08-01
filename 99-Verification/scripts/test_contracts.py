@@ -214,6 +214,10 @@ class ContractTests(unittest.TestCase):
         self.assertLess(len(router.split()), 1000)
         self.assertIn("bb-stack workspace route", router)
         self.assertIn("Do not ask the user to choose an internal Profile", router)
+        self.assertIn("Operate `bb-stack`, MCP, and CLI tools", router)
+        self.assertIn("Ask one compact question only", router)
+        self.assertIn("returned repair commands yourself", router)
+        self.assertIn("stack operations, not Engagements", router)
         for kind in (
             "ctf-web",
             "ctf-android",
@@ -232,6 +236,14 @@ class ContractTests(unittest.TestCase):
             "lab",
         ):
             self.assertIn(f"`{kind}`", router)
+
+    def test_source_claude_owns_setup_and_workspace_handoff(self) -> None:
+        prompt = (ROOT / "CLAUDE.md").read_text(encoding="utf-8")
+        self.assertLess(len(prompt.split()), 600)
+        self.assertIn("Bootstrap `minimal` first", prompt)
+        self.assertIn("Operate the stack commands yourself", prompt)
+        self.assertIn("read its generated", prompt)
+        self.assertIn("Do not perform target work in the source tree", prompt)
 
     def test_yaml_duplicate_keys_are_rejected(self) -> None:
         duplicate = Path(self.temporary.name) / "duplicate.yaml"

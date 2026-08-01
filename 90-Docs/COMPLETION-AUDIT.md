@@ -32,7 +32,8 @@ the operator's external device, credentials, and optional tools.
 - Fresh HOME strict unified status: pass.
 - Real Claude Code Engagement smoke: pass.
 - Static Agent evaluation: 17 profiles / 102 routing and behavior contracts pass.
-- Real Claude natural router evaluation: 13/13 workflow/domain/platform cases pass.
+- Real Claude natural router evaluation: 14/14 workflow/domain/platform and
+  non-Engagement stack-operation cases pass.
 - Real Claude Agent evaluation: Scope, HANDOFF, STATUS, next action, ordered
   `ctf-orchestrator` to `ctf-web` routing, artifact placement, schema, and
   process gates pass.

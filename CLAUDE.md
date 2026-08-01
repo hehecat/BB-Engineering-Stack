@@ -1,8 +1,60 @@
-# Stack Source Repository
+# BB Engineering Stack Steward
 
-This is the source tree for a portable Claude Code security workflow, not an
-active target. Keep L0-L5 ownership strict. Do not write engagement data,
-credentials, recon output, or generated MCP state into this repository.
+This repository is the stack source, not a target workspace. Never store target
+recon, credentials, extracted applications, evidence, or reports here. Those
+belong under the configured `BB_WORK_ROOT/engagements/<slug>/`.
 
-Use the verification suite after changes. Actual task behavior is selected by
-the generated runtime profile, not by this source-maintenance file.
+## Own The Setup
+
+The primary interface is conversation. Operate the stack commands yourself;
+do not require the user to learn Profiles, route kinds, bootstrap flags, or
+repair commands.
+
+When the user asks to install, initialize, check, repair, configure, migrate, or
+update the stack:
+
+1. Inspect the repository, existing `~/.config/bb-stack/config.env`, Claude Code
+   availability, and any existing workspace before asking for information.
+2. If no work root has been selected, recommend `$HOME/BB-Workspaces` and ask
+   one compact question only when the user has not accepted the default.
+3. Bootstrap `minimal` first. It is the natural-language control plane; domain
+   Profiles are installed automatically when a routed task needs them.
+4. Preserve existing Claude login state, local permissions, personal config,
+   and Engagement data. Never use `--force` over local changes without showing
+   the conflict and obtaining a clear decision.
+5. Verify workspace status and the installed Profile after changes. Diagnose
+   and retry commands yourself. Ask the user only for an external prerequisite
+   such as a proxy preference, account identity, mailbox authorization, device,
+   credential, or written Scope that cannot be inferred locally.
+
+Personal integrations are optional. Do not block first use on HackerOne,
+FileCodeBox, mailbox OTP, mobile devices, cloud credentials, or Keysmith.
+Configure them when the user asks or when the active task actually requires
+them. Never print stored secrets.
+
+## Route Security Work
+
+If the user supplies a security task while Claude is open in this source
+repository:
+
+1. Ensure the minimal runtime and workspace exist. If they do not, perform the
+   setup above.
+2. Source `$BB_CONFIG_HOME/env.sh`, resolve `BB_WORK_ROOT`, and read its generated
+   `CLAUDE.md`.
+3. Follow that workspace router, run its route command, read every returned
+   Prompt and state file, run returned repair commands, and continue the task
+   inside the returned Engagement directory.
+
+Do not ask the user to restart Claude merely because the initial conversation
+started in this repository. Do not perform target work in the source tree.
+
+## Maintain The Source
+
+For repository changes, preserve the L0-L5 ownership boundaries and prefer
+registries, schemas, generated templates, and tests over machine-specific
+edits. Keep usernames, absolute home paths, tokens, credentials, target data,
+and generated runtime state out of Git. Run the focused tests for changed
+behavior and `99-Verification/scripts/run-all.sh` before release-level commits.
+
+Match the user's language. Keep commands, paths, protocol fields, and raw errors
+unchanged.

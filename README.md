@@ -2,149 +2,154 @@
 
 [简体中文](README.zh-CN.md) | English
 
-Portable, headless-first Claude Code security harness for CTF, Bug Bounty/VDP,
-authorized Web/API, Android, iOS, network, cloud, LLM/agent, source and supply
-chain assessment, browser JavaScript analysis, and reverse engineering.
+A portable Claude Code workflow for security work. After one initialization,
+the primary interface is normal conversation: the user provides a target or
+artifact and an objective; Claude selects the workflow, domain, Prompt, Skills,
+MCP/CLI capabilities, Scope state, and evidence directory.
 
-## Boundaries
+It covers Web/API, CTF, Bug Bounty/VDP, Android, iOS, Browser JavaScript,
+reverse engineering, network/AD, cloud, LLM/agent, source, IaC, container, and
+supply-chain work.
 
-```text
-$BB_STACK_ROOT   system source, profiles, Skills, schemas, tests
-$BB_WORK_ROOT    user-selected Claude security workspace root
-$BB_CONFIG_HOME  machine-local configuration, no secrets in source
-```
+## Start Once
 
-Defaults:
-
-```text
-BB_STACK_ROOT=$HOME/BB-Engineering-Stack
-BB_WORK_ROOT=$HOME/BB-Workspaces
-BB_CONFIG_HOME=$HOME/.config/bb-stack
-```
-
-## Layers
-
-| Directory | Owner |
-| --- | --- |
-| `00-L0-Runtime/` | bootstrap, runtime, proxy, PATH, launchers |
-| `01-L1-Global-Prompt/` | platform-neutral personal behavior |
-| `02-L2-Workflow-Profiles/` | workflow x domain x platform Prompt composition |
-| `03-L3-Engagement-State/` | scope, state, templates, lifecycle |
-| `04-L4-Skills/` | manifest, orchestrators, specialist Skills |
-| `05-L5-MCP-CLI/` | capability registry, MCP render, doctor |
-| `90-Docs/` | user and maintainer documentation |
-| `99-Verification/` | isolated behavioral and contract tests |
-
-## Quick Start
+Install and authenticate Claude Code, then either ask Claude to initialize the
+stack:
 
 ```bash
-./00-L0-Runtime/bin/bootstrap --profile ctf-web \
+git clone YOUR_PRIVATE_REMOTE "$HOME/BB-Engineering-Stack"
+cd "$HOME/BB-Engineering-Stack"
+claude
+```
+
+```text
+Initialize this security workflow with the recommended defaults. Inspect the
+existing machine first and ask one compact question only for decisions I must make.
+```
+
+The source-root `CLAUDE.md` owns setup, detects existing state, recommends
+`$HOME/BB-Workspaces`, performs bootstrap, and verifies the result.
+
+For a deterministic one-command setup:
+
+```bash
+./00-L0-Runtime/bin/bootstrap --profile minimal \
   --work-root "$HOME/BB-Workspaces"
-source "$HOME/.config/bb-stack/env.sh"
-bb-stack configure
-source "$HOME/.config/bb-stack/env.sh"
-bb-stack status --profile ctf-web --strict --probe-mcp
-bb-stack eval contracts
-cd "$BB_WORK_ROOT"
+```
+
+`minimal` installs the natural-language control plane. Claude installs a domain
+Profile only when a routed task needs it.
+
+## Use Conversation
+
+Start Claude from the selected work root:
+
+```bash
+cd "$HOME/BB-Workspaces"
 claude
 ```
 
-No engagement data belongs in this source repository. The suggested work root
-is not fixed; select another dedicated directory with `--work-root`. The
-workspace router creates or resumes `engagements/<slug>/` from normal Claude
-conversation. Explicit `new` and `launch` commands remain available for strict
-reproduction and profile-specific MCP isolation.
-
-Browser JavaScript tasks route independently from CTF and Bug Bounty. The
-workflow uses the managed Chrome DevTools CLI in normal workspace sessions,
-Chrome DevTools MCP in strict launches, and `webcrack` for selected static
-reconstruction. Deliverables are selected from the requested outcome rather
-than fixed to a user script or browser extension.
-
-Normal use remains plain conversation:
-
-```bash
-cd "$BB_WORK_ROOT"
-claude
-```
-
-The workspace router first selects Bug Bounty, authorized assessment, CTF,
-standalone analysis, or Lab, then selects Web/API, Android, iOS, network, cloud,
-LLM/agent, source, Browser-JS, or reverse. The same APK therefore routes
-differently for a CTF solve, a mobile assessment, and algorithm reconstruction.
-
-```bash
-bb-stack bootstrap --profile browser-js
-bb-stack workspace route --kind browser-js --target https://app.example
-bb-stack doctor --profile browser-js --strict --probe-mcp
-```
-
-`bb-stack` is the control plane for the complete lifecycle. `bb-claude` is only
-a convenience wrapper around `bb-stack launch`.
+Examples:
 
 ```text
-bootstrap -> configure -> status -> eval -> new -> launch -> checkpoint -> portable export
+Solve this Web CTF: https://challenge.example
+Test https://target.example as a continuous Bug Bounty engagement
+Assess inbox/product.apk as an authorized Android application
+Decompile inbox/library.apk and reconstruct its signing algorithm
+Analyze https://app.example request signing and deliver a reusable Node module
+Assess the authorized 10.20.0.0/24 network and Active Directory
+Audit this AWS account's IAM and object storage
+Test this RAG agent's prompt-injection, MCP, and memory boundaries
+Audit inbox/repository source, IaC, containers, and dependencies
+Continue example-bb
+Check whether my environment, proxy, Skills, and MCP are ready
 ```
 
-For Bug Bounty use `bootstrap --profile web`, create a `bug-bounty` Engagement,
-then launch `bb-interactive` or `bb-continuous`. The unified status view reports
-resolved roots, Prompt composition, Engagement state, Claude/Codex Skills,
-MCP/CLI providers, proxy application, personal integrations, and exact repair
-actions.
+Users do not need to remember Profile names, route kinds, Engagement commands,
+MCP launch modes, or repair commands.
 
-Android and native reverse work no longer assumes CTF. Explicit examples:
+## Agent Contract
+
+The generated workspace `CLAUDE.md` makes Claude:
+
+1. Infer workflow, domain, and platform from intent.
+2. Create or resume an isolated `engagements/<slug>/`.
+3. Read the routed Prompt, Scope, STATUS, and HANDOFF before domain work.
+4. Install or repair missing capabilities itself and verify them.
+5. Load only the orchestrator and specialist needed for the active lead.
+6. Keep target artifacts and state outside the source repository.
+7. Treat setup, proxy, identity, mailbox, delivery, and updates as stack
+   operations rather than target Engagements.
+
+Claude inspects local state before asking. It asks one compact question only
+when missing target intent, ambiguous continuation, written Scope, credentials,
+a device, an account, or a material acceptance criterion blocks the next
+action. It never asks the user to choose an internal Profile. CTF and local
+analysis do not trigger repeated authorization questions. Without broader
+written Scope, an ordinary remote target is limited to the exact supplied
+target and related assets remain candidates.
+
+## Personal Configuration
+
+Optional integrations do not block first use. Ask Claude to configure them when
+needed:
+
+```text
+Use local mihomo on HTTP 7890 and SOCKS 7891
+Set my HackerOne username
+Use my FileCodeBox instance for delivery
+Configure the lab mailbox for OTP retrieval
+Check pinned Skill, MCP, and tool updates without upgrading
+```
+
+Secrets remain in machine-local restricted files, not Prompts, Git, reports, or
+normal chat. Keysmith remains opt-in and is not modified during ordinary work.
+
+## Storage Boundaries
+
+```text
+$BB_STACK_ROOT/                 source, Prompts, Skills, schemas, tests
+$BB_WORK_ROOT/
+  CLAUDE.md                     natural-language router
+  inbox/                        unclassified inputs
+  engagements/<slug>/          isolated target state and artifacts
+$BB_CONFIG_HOME/                machine-local config and generated state
+```
+
+No engagement data belongs in the source repository.
+
+## L0-L5
+
+| Layer | Directory | Responsibility |
+| --- | --- | --- |
+| L0 | `00-L0-Runtime/` | bootstrap, PATH, proxy, runtime, launchers |
+| L1 | `01-L1-Global-Prompt/` | language and global operating behavior |
+| L2 | `02-L2-Workflow-Profiles/` | workflow/domain/platform Prompts and routing |
+| L3 | `03-L3-Engagement-State/` | Scope, status, evidence index, handoff |
+| L4 | `04-L4-Skills/` | orchestrators and specialist knowledge |
+| L5 | `05-L5-MCP-CLI/` | browser, HTTP, mobile, reverse, and other execution |
+
+Prompt owns policy and continuity, Skills provide methodology, MCP/CLI executes,
+and files preserve cross-session state. Cross-domain leads may call another
+specialist without silently changing workflow, Scope, or report policy.
+
+## Operator Documentation
+
+Normal users do not need the CLI lifecycle. These references are for explicit
+automation, migration, troubleshooting, or maintenance:
+
+- [Explicit quick start](90-Docs/QUICKSTART.md)
+- [Machine configuration](90-Docs/CONFIGURATION.md)
+- [Architecture and routing](90-Docs/ARCHITECTURE.md)
+- [Engagement operations](90-Docs/OPERATIONS.md)
+- [Migration](90-Docs/MIGRATION.md)
+- [Updates](90-Docs/UPDATES.md)
+- [Verification](90-Docs/VERIFICATION.md)
+- [Optional Keysmith integration](90-Docs/KEYSMITH.md)
+
+Maintainers run:
 
 ```bash
-bb-stack bootstrap --profile android
-bb-stack launch --profile ctf-android --engagement APK-SLUG
-bb-stack bootstrap --profile assessment-android
-bb-stack launch --profile assessment-android --engagement MOBILE-SLUG
-bb-stack bootstrap --profile analysis-android
-bb-stack launch --profile analysis-android --engagement ANALYSIS-SLUG
-bb-stack bootstrap --profile reverse
-bb-stack launch --profile ctf-reverse --engagement BINARY-SLUG
+./99-Verification/scripts/run-all.sh
+./99-Verification/scripts/fresh-machine.sh
 ```
-
-Android static routing uses `android-reverse-engineering` for APK/XAPK/JAR/AAR
-fingerprinting, decompilation, Kotlin/R8 name recovery, API extraction, and call
-flows. `android-pentest` remains the security specialist for components, ADB,
-Frida, storage, TLS, and runtime validation.
-
-Authorized non-BB assessments use `security-orchestrator` and one domain
-specialist. Profiles are isolated: cross-domain leads may load an optional
-Skill, but workflow, scope, platform policy, and MCP composition do not switch.
-The root `.mcp.json` intentionally contains no domain MCP; strict launches load
-only the current Profile's MCP, while normal browser work uses the managed
-`chrome-devtools` CLI.
-
-Run a real, isolated Claude behavior check after moving machines or changing
-Prompt routing:
-
-```bash
-bb-stack eval agent --profile ctf-quick
-bb-stack status --profile ctf-web --require-agent-eval --strict
-```
-
-See [`90-Docs/QUICKSTART.md`](90-Docs/QUICKSTART.md) for the end-to-end flow and
-[`90-Docs/CONFIGURATION.md`](90-Docs/CONFIGURATION.md) for machine-local roots,
-proxy, HackerOne identity, OTP, file delivery, and Keysmith.
-
-Check pinned dependencies without changing them:
-
-```bash
-bb-stack updates check --all
-```
-
-See [`90-Docs/UPDATES.md`](90-Docs/UPDATES.md) for staging, validation,
-promotion, rollback, and extension contracts.
-
-Before switching computers, export only portable non-secret intent and back up
-Engagements separately:
-
-```bash
-bb-stack portable export "$HOME/bb-stack-portable.json"
-bb-stack portable inspect "$HOME/bb-stack-portable.json"
-```
-
-See [`90-Docs/MIGRATION.md`](90-Docs/MIGRATION.md) for preview-first restore and
-the explicit secret restoration checklist.

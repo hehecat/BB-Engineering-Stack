@@ -49,5 +49,6 @@ and scorer, so changing evaluation logic also invalidates an earlier pass.
 The unit suite also covers the generated workspace router, a user-selected
 work root, the nested Engagement boundary, the project MCP baseline, and
 managed-file drift. `router-agent-smoke.sh` starts real Claude against an
-isolated generated workspace and requires 13 natural-language tasks to select
-the expected workflow/domain route and platform without naming a Profile.
+isolated generated workspace and requires 14 natural-language tasks to select
+the expected workflow/domain route and platform, including a stack operation
+that must not create an Engagement, without naming a Profile.

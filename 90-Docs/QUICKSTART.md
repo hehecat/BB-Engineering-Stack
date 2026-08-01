@@ -1,4 +1,9 @@
-# Fresh Machine Quick Start
+# Explicit Operator Quick Start
+
+This is the CLI reference for deterministic setup and automation. Normal users
+may start Claude in the cloned source repository and ask it to initialize with
+recommended defaults; after that, normal work starts as conversation from the
+selected workspace. See the top-level README for that path.
 
 Supported primary environment: Linux x86_64 or arm64, Python 3.11+, headless or
 desktop. Claude Code authentication must already work.
@@ -7,7 +12,7 @@ The stack does not export `CLAUDE_CONFIG_DIR` by default, preserving Claude
 Code's existing state location. Set it before bootstrap only when the existing
 Claude installation already uses a custom config directory.
 
-## CTF Web
+## CTF Web Explicit Setup
 
 ```bash
 git clone YOUR_STACK_REMOTE "$HOME/BB-Engineering-Stack"
