@@ -192,6 +192,8 @@ installers:
     repository: https://github.com/danielmiessler/SecLists.git
     revision: aeb36e9df937d1b77042e5667780e8156cd419f7
     destination: "${BB_STACK_ROOT}/.runtime/data/SecLists"
+    network_timeout_seconds: 600
+    retry_attempts: 3
     sparse_paths:
       - Ai/LLM_Testing
       - Discovery/Web-Content

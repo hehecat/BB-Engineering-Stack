@@ -121,6 +121,106 @@ class RuntimeInstallerTests(unittest.TestCase):
                 "https://registry.npmmirror.com",
             )
 
+    def test_git_data_retries_and_cleans_partial_clone(self) -> None:
+        destination = self.paths.runtime / "data" / "fixture"
+        spec = {
+            "kind": "git-data",
+            "checks": [],
+            "repository": "https://example.invalid/fixture.git",
+            "revision": "a" * 40,
+            "destination": str(destination),
+            "sparse_paths": ["Discovery/Web-Content"],
+            "network_timeout_seconds": 45,
+            "retry_attempts": 3,
+        }
+        fetch_attempts = 0
+        fetch_timeouts: list[int | None] = []
+
+        def run(command: list[str], **kwargs: object) -> None:
+            nonlocal fetch_attempts
+            if "init" in command:
+                (destination / ".git").mkdir(parents=True)
+            if "fetch" in command:
+                fetch_attempts += 1
+                fetch_timeouts.append(kwargs.get("timeout"))
+                if fetch_attempts == 1:
+                    raise CommandError("transient clone failure")
+
+        with (
+            patch.object(self.manager, "_run", side_effect=run),
+            patch("bb_stack.runtime.time.sleep") as sleep,
+        ):
+            self.manager._install_tool("fixture", spec, {"PATH": "/usr/bin:/bin"})
+
+        self.assertEqual(fetch_attempts, 2)
+        self.assertEqual(fetch_timeouts, [45, 45])
+        sleep.assert_called_once_with(2)
+        self.assertTrue((destination / ".git").is_dir())
+        self.assertFalse(
+            destination.with_name(".fixture.bb-stack-installing").exists()
+        )
+
+    def test_git_data_preserves_unknown_existing_directory(self) -> None:
+        destination = self.paths.runtime / "data" / "fixture"
+        destination.mkdir(parents=True)
+        spec = {
+            "kind": "git-data",
+            "checks": [],
+            "repository": "https://example.invalid/fixture.git",
+            "revision": "a" * 40,
+            "destination": str(destination),
+        }
+        with self.assertRaises(CommandError):
+            self.manager._install_tool("fixture", spec, {"PATH": "/usr/bin:/bin"})
+        self.assertTrue(destination.is_dir())
+
+    def test_tool_install_uses_configured_proxy_without_lowercase_residue(self) -> None:
+        document = {
+            "profiles": {"fixture": {"required": ["demo"], "optional": []}},
+            "installers": {
+                "demo": {
+                    "kind": "git-data",
+                    "checks": [],
+                    "repository": "https://example.invalid/demo.git",
+                    "revision": "a" * 40,
+                    "destination": str(self.paths.runtime / "data" / "demo"),
+                }
+            },
+        }
+        machine = {
+            "BB_PROXY_MODE": "mihomo",
+            "BB_HTTP_PROXY": "http://127.0.0.1:17890",
+            "BB_SOCKS_PROXY": "socks5://127.0.0.1:17891",
+        }
+        with (
+            patch("bb_stack.runtime.load_yaml", return_value=document),
+            patch("bb_stack.runtime.validate"),
+            patch(
+                "bb_stack.runtime.ConfigurationManager.effective",
+                return_value=machine,
+            ),
+            patch.dict(
+                os.environ,
+                {
+                    "http_proxy": "http://stale.invalid",
+                    "HTTPS_PROXY": "http://old.invalid",
+                },
+                clear=False,
+            ),
+            patch.object(self.manager, "_tool_ready", side_effect=[False, True]),
+            patch.object(self.manager, "_install_tool") as install,
+        ):
+            result = self.manager.install_tools("fixture", False, dry_run=False)
+
+        self.assertEqual(result, [{"component": "tool:demo", "state": "installed"}])
+        env = install.call_args.args[2]
+        self.assertEqual(env["HTTP_PROXY"], machine["BB_HTTP_PROXY"])
+        self.assertEqual(env["HTTPS_PROXY"], machine["BB_HTTP_PROXY"])
+        self.assertEqual(env["ALL_PROXY"], machine["BB_SOCKS_PROXY"])
+        self.assertNotIn("http_proxy", env)
+        self.assertNotIn("https_proxy", env)
+        self.assertNotIn("all_proxy", env)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

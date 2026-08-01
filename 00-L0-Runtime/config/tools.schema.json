@@ -55,6 +55,8 @@
           "revision": {"type": "string"},
           "destination": {"type": "string"},
           "sparse_paths": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},
+          "network_timeout_seconds": {"type": "integer", "minimum": 30, "maximum": 1800},
+          "retry_attempts": {"type": "integer", "minimum": 1, "maximum": 5},
           "post_install": {"type": "array", "items": {"type": "string"}},
           "post_check": {"type": "string"},
           "host": {"type": "string"},

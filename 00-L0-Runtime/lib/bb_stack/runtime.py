@@ -572,6 +572,25 @@ class RuntimeManager:
             selected.extend(document["profiles"][profile]["optional"])
         selected = list(dict.fromkeys(selected))
         env = self.paths.environment()
+        machine = ConfigurationManager(self.paths).effective()
+        proxy_names = {
+            "HTTP_PROXY",
+            "HTTPS_PROXY",
+            "ALL_PROXY",
+            "http_proxy",
+            "https_proxy",
+            "all_proxy",
+        }
+        for key in proxy_names:
+            env.pop(key, None)
+        if machine["BB_PROXY_MODE"] == "mihomo":
+            env.update(
+                {
+                    "HTTP_PROXY": machine["BB_HTTP_PROXY"],
+                    "HTTPS_PROXY": machine["BB_HTTP_PROXY"],
+                    "ALL_PROXY": machine["BB_SOCKS_PROXY"],
+                }
+            )
         if any(document["installers"][name]["kind"] == "go" for name in selected):
             self._ensure_toolchain("go")
         env["PATH"] = self.paths.runtime_path()
@@ -693,21 +712,7 @@ class RuntimeManager:
                     raise CommandError(f"pipx installation did not expose its command for {name}")
             self._run([pipx, "install", spec["package"]], env=env)
         elif kind == "git-data":
-            destination = Path(spec["destination"])
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            if destination.exists():
-                raise CommandError(f"non-managed data destination already exists: {destination}")
-            clone = ["git", "clone", "--filter=blob:none"]
-            if spec.get("sparse_paths"):
-                clone.append("--no-checkout")
-            clone.extend([spec["repository"], str(destination)])
-            self._run(clone, env=env)
-            if spec.get("sparse_paths"):
-                self._run(
-                    ["git", "-C", str(destination), "sparse-checkout", "set", *spec["sparse_paths"]],
-                    env=env,
-                )
-            self._run(["git", "-C", str(destination), "checkout", spec["revision"]], env=env)
+            self._install_git_data(name, spec, env)
         elif kind == "archive-binary":
             if platform.system() != "Linux" or platform.machine() not in spec["files"]:
                 raise CommandError(f"archive installer for {name} supports Linux x86_64/aarch64")
@@ -788,6 +793,112 @@ class RuntimeManager:
             raise CommandError(f"unsupported installer kind for {name}: {kind}")
         if spec.get("post_install") and not Path(str(spec.get("post_check", ""))).exists():
             self._run(list(spec["post_install"]), env=env)
+
+    def _install_git_data(
+        self, name: str, spec: dict[str, Any], env: dict[str, str]
+    ) -> None:
+        destination = Path(spec["destination"])
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        marker = destination.with_name(f".{destination.name}.bb-stack-installing")
+        repository = spec["repository"]
+
+        if destination.exists():
+            marker_repository = (
+                marker.read_text(encoding="utf-8").strip()
+                if marker.is_file()
+                else None
+            )
+            if marker_repository != repository:
+                raise CommandError(
+                    f"non-managed data destination already exists: {destination}"
+                )
+            shutil.rmtree(destination)
+
+        atomic_write(marker, repository + "\n")
+        attempts = int(spec.get("retry_attempts", 3))
+        timeout = int(spec.get("network_timeout_seconds", 600))
+        sparse_paths = list(spec.get("sparse_paths", []))
+
+        for attempt in range(1, attempts + 1):
+            try:
+                transport = [
+                    "git",
+                    "-c",
+                    "protocol.version=2",
+                    "-c",
+                    "http.lowSpeedLimit=1024",
+                    "-c",
+                    "http.lowSpeedTime=60",
+                ]
+                if attempt == 2:
+                    transport.extend(["-c", "http.version=HTTP/1.1"])
+                self._run(
+                    [*transport, "init", "--quiet", str(destination)],
+                    env=env,
+                    timeout=timeout,
+                )
+                self._run(
+                    [
+                        *transport,
+                        "-C",
+                        str(destination),
+                        "remote",
+                        "add",
+                        "origin",
+                        repository,
+                    ],
+                    env=env,
+                    timeout=timeout,
+                )
+                if sparse_paths:
+                    self._run(
+                        [
+                            *transport,
+                            "-C",
+                            str(destination),
+                            "sparse-checkout",
+                            "set",
+                            *sparse_paths,
+                        ],
+                        env=env,
+                        timeout=timeout,
+                    )
+                self._run(
+                    [
+                        *transport,
+                        "-C",
+                        str(destination),
+                        "fetch",
+                        "--depth",
+                        "1",
+                        "--filter=blob:none",
+                        "--no-tags",
+                        "origin",
+                        spec["revision"],
+                    ],
+                    env=env,
+                    timeout=timeout,
+                )
+                self._run(
+                    [
+                        *transport,
+                        "-C",
+                        str(destination),
+                        "checkout",
+                        "--detach",
+                        "FETCH_HEAD",
+                    ],
+                    env=env,
+                    timeout=timeout,
+                )
+            except CommandError:
+                shutil.rmtree(destination, ignore_errors=True)
+                if attempt == attempts:
+                    raise
+                time.sleep(attempt * 2)
+                continue
+            marker.unlink(missing_ok=True)
+            return
 
     def _download_tool_archive(self, name: str, spec: dict[str, Any]) -> Path:
         if platform.system() != "Linux" or platform.machine() not in spec["files"]:
