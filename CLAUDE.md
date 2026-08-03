@@ -27,6 +27,12 @@ update the stack:
    such as a proxy preference, account identity, mailbox authorization, device,
    credential, or written Scope that cannot be inferred locally.
 
+Treat SecLists, PayloadsAllTheThings, and Trickest wordlists as managed data,
+not generic tool directories. Use `bb-stack data status` and the reported
+`bb-stack data ensure` action; directory existence alone is not readiness.
+Never move catalog pins in the background. Review the upstream change and
+sentinels first.
+
 Personal integrations are optional. Do not block first use on HackerOne,
 FileCodeBox, mailbox OTP, mobile devices, cloud credentials, or Keysmith.
 Configure them when the user asks or when the active task actually requires
@@ -55,6 +61,9 @@ registries, schemas, generated templates, and tests over machine-specific
 edits. Keep usernames, absolute home paths, tokens, credentials, target data,
 and generated runtime state out of Git. Run the focused tests for changed
 behavior and `99-Verification/scripts/run-all.sh` before release-level commits.
+For managed component updates, stage and validate first, show the candidate
+diff, and do not run `updates approve` or `updates promote` until an explicit
+reviewer identity and review note apply to that exact candidate.
 
 Match the user's language. Keep commands, paths, protocol fields, and raw errors
 unchanged.

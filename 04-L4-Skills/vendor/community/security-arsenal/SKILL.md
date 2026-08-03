@@ -270,7 +270,7 @@ payload = base64.b64encode(json.dumps({"sub":"1","role":"admin"}).encode()).deco
 token = f"{header}.{payload}."
 
 # Secret bruteforce
-hashcat -a 0 -m 16500 jwt.txt ~/wordlists/rockyou.txt
+hashcat -a 0 -m 16500 jwt.txt "${BB_DATA_ROOT}/seclists/Passwords/Common-Credentials/10k-most-common.txt"
 ```
 
 ### OAuth Attacks
@@ -1316,14 +1316,14 @@ These are valid ONLY when combined with a chain that proves real impact:
 
 ---
 
-## WORDLISTS (Installed in ~/wordlists/)
+## WORDLISTS (Installed below `${BB_DATA_ROOT}`)
 
 ```
-common.txt         # Common directories and files
-params.txt         # Parameter names (id, user_id, file, etc.)
-api-endpoints.txt  # API endpoint paths (/api/v1/users, etc.)
-dirs.txt           # Directory names
-sensitive.txt      # Sensitive paths (.env, config.json, backup, etc.)
+seclists/Discovery/Web-Content/common.txt
+seclists/Discovery/Web-Content/burp-parameter-names.txt
+seclists/Discovery/Web-Content/api/api-endpoints.txt
+seclists/Discovery/Web-Content/raft-medium-directories.txt
+payloads-all-the-things/
 ```
 
 ### Built-in Paths Worth Fuzzing

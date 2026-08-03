@@ -15,15 +15,40 @@ trap cleanup EXIT
 ROOT="$SANDBOX/BB-Engineering-Stack"
 HOME_TEST="$SANDBOX/home"
 mkdir -p "$ROOT" "$HOME_TEST"
-if git -C "$SOURCE" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-  (
-    cd "$SOURCE"
-    git ls-files --cached --others --exclude-standard -z |
-      rsync -a --from0 --files-from=- ./ "$ROOT/"
-  )
-else
-  rsync -a --exclude='.git' --exclude='.runtime' "$SOURCE/" "$ROOT/"
-fi
+python3 - "$SOURCE" "$ROOT" <<'PY'
+from pathlib import Path
+import os
+import shutil
+import subprocess
+import sys
+
+source = Path(sys.argv[1]).resolve()
+destination = Path(sys.argv[2]).resolve()
+tracked = subprocess.run(
+    ["git", "-C", str(source), "ls-files", "--cached", "--others", "--exclude-standard", "-z"],
+    stdout=subprocess.PIPE,
+    check=False,
+).stdout.split(b"\0")
+if tracked and tracked[0]:
+    relatives = [Path(value.decode()) for value in tracked if value]
+else:
+    relatives = [
+        path.relative_to(source)
+        for path in source.rglob("*")
+        if ".git" not in path.parts and ".runtime" not in path.parts
+    ]
+for relative in relatives:
+    origin = source / relative
+    target = destination / relative
+    if origin.is_symlink():
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.symlink_to(os.readlink(origin), target_is_directory=origin.is_dir())
+    elif origin.is_dir():
+        target.mkdir(parents=True, exist_ok=True)
+    elif origin.is_file():
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(origin, target)
+PY
 
 export HOME="$HOME_TEST"
 export BB_STACK_ROOT="$ROOT"
@@ -38,10 +63,20 @@ source "$BB_CONFIG_HOME/env.sh"
 [[ -f "$BB_WORK_ROOT/.mcp.json" ]]
 [[ -f "$BB_WORK_ROOT/.claude/settings.json" ]]
 [[ -d "$BB_WORK_ROOT/engagements" ]]
+cat > "$ROOT/.runtime/bin/claude" <<'SH'
+#!/usr/bin/env sh
+printf '%s\n' 'claude-test-fixture 0.0.0'
+SH
+chmod 0755 "$ROOT/.runtime/bin/claude"
 bb-stack validate --json >/dev/null
 bb-stack eval contracts --json >/dev/null
 bb-stack doctor --profile minimal --strict --json >/dev/null
-bb-stack status --profile minimal --strict --json >/dev/null
+STATUS_REPORT="$(bb-stack status --profile minimal --json)"
+if ! printf '%s' "$STATUS_REPORT" | python3 -c \
+  'import json, sys; raise SystemExit(not json.load(sys.stdin)["ready"])'; then
+  printf '%s\n' 'fresh-machine status is not ready:' "$STATUS_REPORT" >&2
+  exit 1
+fi
 (
   cd "$ROOT/.runtime"
   node --input-type=module -e \

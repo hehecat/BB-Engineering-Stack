@@ -7,6 +7,7 @@ Last checkpoint: 2026-01-01T00:00:00Z
 | Field | Value |
 | --- | --- |
 | Lifecycle | active |
+| Authorization | pending |
 | Mode | interactive |
 | Phase | explore |
 | Scope revision | 1 |
@@ -15,7 +16,7 @@ Last checkpoint: 2026-01-01T00:00:00Z
 
 ## Current Objective
 
-Select and test the highest-value in-scope lead.
+Record and verify the written authorization source before active testing.
 
 ## Scope Candidates
 
@@ -24,8 +25,7 @@ records their authorization source.
 
 ## Exact Next Action
 
-Read `notes/SCOPE.md`, inventory the supplied target, and create `H-001` in
-`hypotheses.md`.
+Record the written authorization source and change authorization to `verified`.
 
 ## Hot Queue
 
@@ -45,7 +45,7 @@ Read `notes/SCOPE.md`, inventory the supplied target, and create `H-001` in
 
 ## Blockers
 
-None.
+Authorization verification is required before active testing.
 
 ## Recent Material Progress
 

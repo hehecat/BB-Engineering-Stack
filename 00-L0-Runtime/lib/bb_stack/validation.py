@@ -24,7 +24,9 @@ def validate(instance: Any, schema_path: Path, label: str | None = None) -> None
     if len(errors) > 20:
         lines.append(f"... {len(errors) - 20} more validation errors")
     prefix = label or str(schema_path)
-    raise ValidationError(prefix + " failed schema validation:\n  " + "\n  ".join(lines))
+    raise ValidationError(
+        prefix + " failed schema validation:\n  " + "\n  ".join(lines)
+    )
 
 
 def require_file(path: Path, label: str | None = None) -> None:

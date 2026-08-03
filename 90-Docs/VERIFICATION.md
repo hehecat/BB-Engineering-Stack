@@ -2,6 +2,7 @@
 
 ```bash
 ./99-Verification/scripts/run-all.sh
+./99-Verification/scripts/audit-dependencies.sh
 ./99-Verification/scripts/fresh-machine.sh
 ./99-Verification/scripts/full-fresh-machine.sh
 ./99-Verification/scripts/keysmith-smoke.sh
@@ -22,6 +23,10 @@ gate that installs and checks every profile. Fresh-machine verification also
 requires `bb-stack status --strict` and the `mail-otp` wrapper to pass in an
 isolated HOME. The other scripts isolate HOME and work roots. Claude smoke
 requires working Claude authentication and consumes one small model request.
+
+`audit-dependencies.sh` checks the hash-pinned Python runtime with pip-audit and
+the committed npm lock against the official npm advisory endpoint. It does not
+change local registry configuration.
 
 `full-fresh-machine.sh` is a manual, network-heavy acceptance test. It installs
 every capability profile in an isolated HOME, validates all natural-language

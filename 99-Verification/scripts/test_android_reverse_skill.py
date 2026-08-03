@@ -2,13 +2,12 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path
 import shutil
 import subprocess
 import tempfile
 import unittest
 import zipfile
-
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 os.environ["BB_STACK_ROOT"] = str(ROOT)
@@ -22,22 +21,20 @@ class AndroidReverseSkillTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory(prefix="bb-android-skill-")
         self.workspace = Path(self.temporary.name)
-        self.skill = (
-            ROOT
-            / "04-L4-Skills/vendor/community/android-reverse-engineering"
-        )
+        self.skill = ROOT / "04-L4-Skills/vendor/community/android-reverse-engineering"
         self.scripts = self.skill / "scripts"
 
     def tearDown(self) -> None:
         self.temporary.cleanup()
 
-    def run_script(self, name: str, *arguments: str) -> subprocess.CompletedProcess[str]:
+    def run_script(
+        self, name: str, *arguments: str
+    ) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
             ["bash", str(self.scripts / name), *arguments],
             cwd=self.workspace,
             text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
             timeout=30,
             check=False,
         )
@@ -65,21 +62,20 @@ class AndroidReverseSkillTests(unittest.TestCase):
         ]
         self.assertEqual(update["checker"], "manual")
         self.assertEqual(update["license"], "Apache-2.0")
-        self.assertEqual(
-            update["current"], "e8dde9d058badbd5a62265d5d23e81f0ea8f04dd"
-        )
+        self.assertEqual(update["current"], "e8dde9d058badbd5a62265d5d23e81f0ea8f04dd")
 
     def test_shell_scripts_parse(self) -> None:
         for script in sorted(self.scripts.glob("*.sh")):
             completed = subprocess.run(
                 ["bash", "-n", str(script)],
                 text=True,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
+                capture_output=True,
                 timeout=10,
                 check=False,
             )
-            self.assertEqual(completed.returncode, 0, f"{script.name}: {completed.stderr}")
+            self.assertEqual(
+                completed.returncode, 0, f"{script.name}: {completed.stderr}"
+            )
 
     @unittest.skipUnless(
         shutil.which("unzip") and shutil.which("strings"),

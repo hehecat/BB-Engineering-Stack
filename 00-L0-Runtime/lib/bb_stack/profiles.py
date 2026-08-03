@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
 import math
-from pathlib import Path
 import re
+from dataclasses import asdict, dataclass
+from pathlib import Path
 from typing import Any
 
 from .configuration import ConfigurationManager
@@ -11,7 +11,6 @@ from .errors import ValidationError
 from .io import dump_json, load_yaml, read_fragments
 from .paths import StackPaths
 from .validation import validate
-
 
 WORKFLOW_FILES = {
     "bug-bounty": "bb-core.md",
@@ -81,7 +80,9 @@ class ProfileRegistry:
                 ".md",
                 "domain Prompt",
             )
-        self._require_named_file(self.platform_dir, profile["platform"], ".md", "platform")
+        self._require_named_file(
+            self.platform_dir, profile["platform"], ".md", "platform"
+        )
         self._require_named_file(
             self.paths.root / "05-L5-MCP-CLI" / "profiles",
             profile["l5_profile"],
@@ -107,7 +108,9 @@ class ProfileRegistry:
         allow_missing_registry: bool = False,
     ) -> Path:
         path = directory / f"{name}{suffix}"
-        if not path.is_file() and not (allow_missing_registry and not any(directory.glob("*"))):
+        if not path.is_file() and not (
+            allow_missing_registry and not any(directory.glob("*"))
+        ):
             raise ValidationError(f"unknown {label}: {name}")
         return path
 
@@ -116,7 +119,9 @@ class ProfileRegistry:
         validate(platforms, self.platform_schema, "platform registry")
         for name in platforms["platforms"]:
             if not (self.platform_dir / f"{name}.md").is_file():
-                raise ValidationError(f"platform registry is missing Prompt overlay: {name}.md")
+                raise ValidationError(
+                    f"platform registry is missing Prompt overlay: {name}.md"
+                )
         names = self.names()
         if not names:
             raise ValidationError("no runtime profiles found")
@@ -155,7 +160,10 @@ class ProfileRegistry:
         validate(platform_registry, self.platform_schema, "platform registry")
         if platform not in platform_registry["platforms"]:
             raise ValidationError(f"platform is not registered: {platform}")
-        if profile["workflow"] not in platform_registry["platforms"][platform]["workflows"]:
+        if (
+            profile["workflow"]
+            not in platform_registry["platforms"][platform]["workflows"]
+        ):
             raise ValidationError(
                 f"workflow {profile['workflow']} is incompatible with platform {platform}"
             )
@@ -207,7 +215,9 @@ class ProfileRegistry:
         scope = engagement.name if engagement else "global"
         target_dir = output_dir or self.paths.generated / "profiles" / scope / name
         target_dir.mkdir(parents=True, exist_ok=True)
-        filename = "system.md" if profile["prompt_mode"] == "replacement" else "append.md"
+        filename = (
+            "system.md" if profile["prompt_mode"] == "replacement" else "append.md"
+        )
         output = target_dir / filename
         output.write_text(content, encoding="utf-8")
         result = RenderResult(
@@ -220,7 +230,9 @@ class ProfileRegistry:
             domain_prompt=profile.get("domain_prompt"),
             l5_profile=str(profile["l5_profile"]),
             skill_profile=str(profile["skill_profile"]),
-            source_fragments=[str(path.relative_to(self.paths.root)) for path in fragments],
+            source_fragments=[
+                str(path.relative_to(self.paths.root)) for path in fragments
+            ],
             token_estimate=token_estimate,
             budget=budget,
             output_file=str(output),

@@ -6,6 +6,10 @@ required:
   - runtime.python
   - web.fuzz
   - browser.stateful
+  - data.wordlists.web
+  - data.wordlists.fuzzing
+  - data.wordlists.credentials
+  - data.payloads.web
 optional:
   - tls.inspect
   - web.probe
@@ -15,4 +19,4 @@ optional:
   - analysis.javascript
   - oob.callback
   - proxy.http
-  - data.wordlists
+  - data.wordlists.recon

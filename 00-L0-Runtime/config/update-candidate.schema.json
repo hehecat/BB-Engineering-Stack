@@ -32,7 +32,11 @@
         "stage-failed",
         "validation-failed",
         "validated",
+        "promoting",
+        "promotion-failed",
         "promoted",
+        "rolling-back",
+        "rollback-failed",
         "rolled-back"
       ]
     },
@@ -43,6 +47,17 @@
     "error": {"type": "string", "minLength": 1},
     "validation": {"type": "object"},
     "validated_at": {"type": "string", "format": "date-time"},
+    "approval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reviewer", "approved_at", "content_digest"],
+      "properties": {
+        "reviewer": {"type": "string", "minLength": 1, "maxLength": 120},
+        "approved_at": {"type": "string", "format": "date-time"},
+        "content_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "note": {"type": "string", "minLength": 1, "maxLength": 500}
+      }
+    },
     "promoted_at": {"type": "string", "format": "date-time"},
     "backup": {"type": "string", "minLength": 1},
     "rolled_back_at": {"type": "string", "format": "date-time"}

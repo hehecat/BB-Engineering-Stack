@@ -20,6 +20,20 @@ if ! python3 -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 11) e
   exit 2
 fi
 
+DRY_RUN=0
+for ARG in "$@"; do
+  if [ "$ARG" = "--dry-run" ]; then
+    DRY_RUN=1
+    break
+  fi
+done
+
+if [ "$DRY_RUN" -eq 1 ] && [ ! -x "$VENV/bin/python" ]; then
+  PYTHONPATH="$ROOT/00-L0-Runtime/lib${PYTHONPATH:+:$PYTHONPATH}"
+  export PYTHONPATH
+  exec python3 -m bb_stack.cli bootstrap "$@"
+fi
+
 if [ ! -x "$VENV/bin/python" ]; then
   if command -v apt-get >/dev/null 2>&1 && ! dpkg-query -W -f='${Status}' python3-venv 2>/dev/null | grep -q 'ok installed'; then
     if [ "$(id -u)" -eq 0 ]; then SUDO=""; elif command -v sudo >/dev/null 2>&1; then SUDO="sudo"; else
@@ -31,6 +45,7 @@ if [ ! -x "$VENV/bin/python" ]; then
   fi
   python3 -m venv "$VENV"
   "$VENV/bin/python" -m pip install --disable-pip-version-check \
+    --require-hashes \
     -r "$ROOT/00-L0-Runtime/config/requirements.lock"
   "$VENV/bin/python" -m pip install --no-deps -e "$ROOT"
 fi

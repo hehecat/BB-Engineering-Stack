@@ -1,12 +1,10 @@
 from __future__ import annotations
 
-import importlib.util
 import json
-import os
-from pathlib import Path
 import shutil
 import socket
 import subprocess
+from pathlib import Path
 from typing import Any
 
 from .errors import CommandError, ValidationError
@@ -80,6 +78,23 @@ class CapabilityRegistry:
                 )
         return names
 
+    def side_effects(self, profile_name: str) -> list[str]:
+        registry = self.registry()
+        profile = self.profile(profile_name)
+        selected = profile["required"] + profile["optional"]
+        provider_names = {
+            provider
+            for capability in selected
+            for provider in registry["capabilities"][capability]["providers"]
+        }
+        return sorted(
+            {
+                effect
+                for provider in provider_names
+                for effect in registry["providers"][provider]["side_effects"]
+            }
+        )
+
     def _environment(self, artifact_root: Path | None) -> dict[str, str]:
         env = self.paths.environment(artifact_root)
         env["PATH"] = self.paths.runtime_path()
@@ -91,6 +106,17 @@ class CapabilityRegistry:
             )
             if chromium:
                 env["BB_CHROMIUM_BIN"] = chromium
+        if artifact_root:
+            engagement = artifact_root.resolve().parent
+            state_path = engagement / ".bb-stack" / "browser" / "runtime.json"
+            if state_path.is_file():
+                try:
+                    state = load_json(state_path)
+                except ValidationError:
+                    state = {}
+                browser_url = state.get("browser_url")
+                if isinstance(browser_url, str):
+                    env["BB_BROWSER_URL"] = browser_url
         return env
 
     def provider_status(
@@ -98,7 +124,9 @@ class CapabilityRegistry:
     ) -> dict[str, Any]:
         locator = expand(provider["locator"], env, strict=False)
         present, resolved, detail = self._locate(locator, env)
-        config_state, config_detail = self._configuration(provider.get("configuration"), env)
+        config_state, config_detail = self._configuration(
+            provider.get("configuration"), env
+        )
         usable = present and config_state != "missing"
         return {
             "name": name,
@@ -185,7 +213,9 @@ class CapabilityRegistry:
             return "ready", details
         return ("missing" if config.get("required") else "optional-missing"), details
 
-    def doctor(self, profile_name: str, artifact_root: Path | None = None) -> dict[str, Any]:
+    def doctor(
+        self, profile_name: str, artifact_root: Path | None = None
+    ) -> dict[str, Any]:
         self.validate_all()
         registry = self.registry()
         profile = self.profile(profile_name)
@@ -193,7 +223,9 @@ class CapabilityRegistry:
         provider_names: set[str] = set()
         selected_capabilities = profile["required"] + profile["optional"]
         for capability_name in selected_capabilities:
-            provider_names.update(registry["capabilities"][capability_name]["providers"])
+            provider_names.update(
+                registry["capabilities"][capability_name]["providers"]
+            )
         providers = {
             name: self.provider_status(name, registry["providers"][name], env)
             for name in sorted(provider_names)
@@ -210,9 +242,7 @@ class CapabilityRegistry:
                 "ready": ready,
             }
         missing_required = sorted(
-            name
-            for name in profile["required"]
-            if not capabilities[name]["ready"]
+            name for name in profile["required"] if not capabilities[name]["ready"]
         )
         return {
             "schema_version": 1,
@@ -282,8 +312,7 @@ class CapabilityRegistry:
                     [node, str(probe), json.dumps(launch)],
                     env=env,
                     text=True,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
+                    capture_output=True,
                     timeout=timeout,
                     check=False,
                 )

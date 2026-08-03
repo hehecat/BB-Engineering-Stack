@@ -89,10 +89,10 @@
       "required": ["status", "source"],
       "properties": {
         "status": {
-          "enum": ["confirmed", "not-required"]
+          "enum": ["pending", "user-asserted", "verified", "exempt", "revoked"]
         },
         "source": {
-          "type": "string",
+          "type": ["string", "null"],
           "minLength": 1
         }
       }
@@ -131,6 +131,9 @@
           "items": {
             "$ref": "#/$defs/scopeAsset"
           }
+        },
+        "sensitive_target_ref": {
+          "const": "notes/TARGET.local.json"
         }
       }
     },

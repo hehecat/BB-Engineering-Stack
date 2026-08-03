@@ -1,17 +1,16 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path
 import re
 import shlex
 import sys
+from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
 from .errors import StackError, ValidationError
 from .io import atomic_write
 from .paths import StackPaths
-
 
 MACHINE_CONFIG_DEFAULTS = {
     "BB_PROXY_MODE": "direct",
@@ -123,8 +122,15 @@ class ConfigurationManager:
         ]
         lines.extend(f"{key}={shlex.quote(known[key])}" for key in MACHINE_CONFIG_KEYS)
         if unknown:
-            lines.extend(["", "# Preserved extension settings (not exported by bb-stack portable)."])
-            lines.extend(f"{key}={shlex.quote(unknown[key])}" for key in sorted(unknown))
+            lines.extend(
+                [
+                    "",
+                    "# Preserved extension settings (not exported by bb-stack portable).",
+                ]
+            )
+            lines.extend(
+                f"{key}={shlex.quote(unknown[key])}" for key in sorted(unknown)
+            )
         atomic_write(self.path, "\n".join(lines) + "\n", 0o600)
 
     def snapshot(self) -> dict[str, Any]:
@@ -133,9 +139,7 @@ class ConfigurationManager:
             "path": str(self.path),
             "values": {
                 "BB_PROXY_MODE": values["BB_PROXY_MODE"],
-                "BB_HTTP_PROXY": url_origin(
-                    values["BB_HTTP_PROXY"], {"http", "https"}
-                ),
+                "BB_HTTP_PROXY": url_origin(values["BB_HTTP_PROXY"], {"http", "https"}),
                 "BB_SOCKS_PROXY": url_origin(
                     values["BB_SOCKS_PROXY"], {"socks5", "socks5h"}
                 ),
@@ -180,7 +184,9 @@ class ConfigurationManager:
                 )
         username = values.get("BB_H1_USERNAME", "")
         if any(character.isspace() or ord(character) < 32 for character in username):
-            raise ValidationError("BB_H1_USERNAME must not contain whitespace or control characters")
+            raise ValidationError(
+                "BB_H1_USERNAME must not contain whitespace or control characters"
+            )
         if len(username) > 100:
             raise ValidationError("BB_H1_USERNAME is too long")
         if values.get("BB_AGENT_LANGUAGE") not in {"zh-CN", "en"}:
@@ -204,11 +210,15 @@ class ConfigurationManager:
         except ValueError as error:
             raise ValidationError(f"{name} is invalid") from error
         if url_origin(value, schemes) is None:
-            raise ValidationError(f"{name} must use one of: {', '.join(sorted(schemes))}")
+            raise ValidationError(
+                f"{name} must use one of: {', '.join(sorted(schemes))}"
+            )
         if parsed.username is not None or parsed.password is not None:
             raise ValidationError(f"{name} must not contain credentials")
         if parsed.path not in {"", "/"} or parsed.query or parsed.fragment:
-            raise ValidationError(f"{name} must be an endpoint origin without path, query, or fragment")
+            raise ValidationError(
+                f"{name} must be an endpoint origin without path, query, or fragment"
+            )
 
     def interactive_updates(self) -> dict[str, str]:
         if not sys.stdin.isatty():
@@ -225,9 +235,7 @@ class ConfigurationManager:
             "BB_SOCKS_PROXY": ask("SOCKS proxy origin", "BB_SOCKS_PROXY"),
             "BB_H1_USERNAME": ask("HackerOne username", "BB_H1_USERNAME"),
             "BB_FILECODEBOX_URL": ask("FileCodeBox origin", "BB_FILECODEBOX_URL"),
-            "BB_AGENT_LANGUAGE": ask(
-                "Agent language (zh-CN/en)", "BB_AGENT_LANGUAGE"
-            ),
+            "BB_AGENT_LANGUAGE": ask("Agent language (zh-CN/en)", "BB_AGENT_LANGUAGE"),
             "BB_NPM_REGISTRY": ask(
                 "npm registry (auto/npmjs/npmmirror/HTTPS URL)",
                 "BB_NPM_REGISTRY",

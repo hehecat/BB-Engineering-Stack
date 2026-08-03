@@ -169,6 +169,8 @@ bb-stack mail test
 
 ```bash
 bb-stack engagement validate example-bb
+bb-stack engagement authorize example-bb --status verified \
+  --source 'Signed rules of engagement dated YYYY-MM-DD'
 bb-stack launch --profile bb-interactive --engagement example-bb
 bb-stack engagement checkpoint example-bb
 bb-stack engagement pause example-bb --reason 'switching machine'

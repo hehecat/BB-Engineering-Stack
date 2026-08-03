@@ -1,18 +1,17 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
 import ipaddress
-from pathlib import Path
 import re
 import shutil
+from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlunsplit
 
 from .errors import StackError, ValidationError
-from .io import dump_yaml, load_yaml
+from .io import atomic_write, dump_json, dump_yaml, load_yaml
 from .paths import StackPaths
 from .validation import validate
-
 
 SLUG_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 WORKFLOW_PHASE = {
@@ -35,26 +34,57 @@ TRANSITIONS = {
     "blocked": {"active", "closed"},
     "closed": {"active"},
 }
+PROTECTED_WORKFLOWS = {"bug-bounty", "assessment"}
+AUTHORIZATION_STATUSES = {"pending", "user-asserted", "verified", "exempt", "revoked"}
 
 
 def now() -> str:
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    return datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
-def infer_asset(target: str) -> dict[str, str]:
+def _validated_text(value: str, label: str) -> str:
+    if not value or any(
+        ord(character) < 32 or ord(character) == 127 for character in value
+    ):
+        raise ValidationError(f"{label} contains empty or control characters")
+    return value
+
+
+def _markdown_text(value: str) -> str:
+    return value.replace("\\", "\\\\").replace("|", "\\|").replace("`", "\\`")
+
+
+def normalize_target(target: str) -> tuple[dict[str, str], str | None]:
+    target = _validated_text(target, "target")
     if target.startswith(("http://", "https://")):
         parsed = urlparse(target)
         if not parsed.hostname:
             raise ValidationError(f"invalid target URL: {target}")
-        return {"type": "url-prefix", "pattern": target.rstrip("/")}
+        try:
+            port = parsed.port
+        except ValueError as error:
+            raise ValidationError(f"invalid target URL port: {target}") from error
+        host = parsed.hostname.lower()
+        if ":" in host:
+            host = f"[{host}]"
+        netloc = host if port is None else f"{host}:{port}"
+        public_target = urlunsplit(
+            (parsed.scheme.lower(), netloc, parsed.path or "/", "", "")
+        )
+        sensitive_target = target if target != public_target else None
+        return {"type": "url-prefix", "pattern": public_target}, sensitive_target
     try:
         ipaddress.ip_network(target, strict=False)
-        return {"type": "cidr" if "/" in target else "host", "pattern": target}
+        return {"type": "cidr" if "/" in target else "host", "pattern": target}, None
     except ValueError:
         pass
     if target.startswith(("./", "../", "/", "~/")) or Path(target).suffix:
-        return {"type": "other", "pattern": target}
-    return {"type": "host", "pattern": target}
+        return {"type": "other", "pattern": target}, None
+    return {"type": "host", "pattern": target}, None
+
+
+def infer_asset(target: str) -> dict[str, str]:
+    return normalize_target(target)[0]
 
 
 class EngagementManager:
@@ -77,10 +107,13 @@ class EngagementManager:
         mode: str = "interactive",
         title: str | None = None,
         authorization_source: str | None = None,
+        authorization_status: str | None = None,
         route_kind: str | None = None,
     ) -> Path:
         if not SLUG_RE.fullmatch(slug):
-            raise ValidationError("slug must use lowercase letters, digits, and single hyphens")
+            raise ValidationError(
+                "slug must use lowercase letters, digits, and single hyphens"
+            )
         if workflow not in WORKFLOW_PHASE:
             raise ValidationError(f"unsupported workflow: {workflow}")
         if mode not in {"interactive", "continuous"}:
@@ -89,7 +122,9 @@ class EngagementManager:
         try:
             root.relative_to(self.paths.engagements_root.resolve())
         except ValueError as error:
-            raise ValidationError("engagement path escapes the workspace engagements directory") from error
+            raise ValidationError(
+                "engagement path escapes the workspace engagements directory"
+            ) from error
         if root.exists():
             raise StackError(f"engagement already exists: {root}")
 
@@ -99,20 +134,41 @@ class EngagementManager:
             raise ValidationError(f"unknown platform: {platform}")
         platform_contract = self.platform_registry[platform]
         if workflow not in platform_contract["workflows"]:
-            raise ValidationError(f"platform {platform} does not support workflow {workflow}")
-        asset = infer_asset(target)
-        authorization_status = (
-            "confirmed" if workflow in {"bug-bounty", "assessment"} else "not-required"
-        )
-        authorization_source = authorization_source or (
-            "User instruction and written program rules captured in notes/SCOPE.md"
-            if workflow in {"bug-bounty", "assessment"}
-            else (
-                "User-supplied analysis target and requested outcome captured in notes/SCOPE.md"
-                if workflow == "analysis"
-                else "Competition challenge statement or local fixture captured in notes/SCOPE.md"
+            raise ValidationError(
+                f"platform {platform} does not support workflow {workflow}"
             )
+        asset, sensitive_target = normalize_target(target)
+        authorization_source = (
+            _validated_text(authorization_source, "authorization source")
+            if authorization_source
+            else None
         )
+        if workflow in PROTECTED_WORKFLOWS:
+            authorization_status = authorization_status or (
+                "user-asserted" if authorization_source else "pending"
+            )
+            if authorization_status not in {"pending", "user-asserted", "verified"}:
+                raise ValidationError(
+                    "protected workflows require pending, user-asserted, or verified authorization"
+                )
+            if (
+                authorization_status in {"user-asserted", "verified"}
+                and not authorization_source
+            ):
+                raise ValidationError(
+                    f"authorization source is required for status {authorization_status}"
+                )
+        else:
+            if authorization_status not in {None, "exempt"}:
+                raise ValidationError(
+                    f"workflow {workflow} uses exempt authorization status"
+                )
+            authorization_status = "exempt"
+            authorization_source = authorization_source or (
+                "User-supplied analysis input and requested outcome"
+                if workflow == "analysis"
+                else "Competition challenge or local fixture"
+            )
         state: dict[str, Any] = {
             "schema_version": 1,
             "slug": slug,
@@ -138,7 +194,8 @@ class EngagementManager:
             "overlays": {"delivery": [platform_contract["delivery_overlay"]]},
             "identity": {
                 "request_identification": {
-                    "enabled": platform_contract["request_identification"] == "required",
+                    "enabled": platform_contract["request_identification"]
+                    == "required",
                     "value_from": platform_contract["identity_value_from"],
                 },
                 "contexts": [],
@@ -149,15 +206,30 @@ class EngagementManager:
                 "next_action": self._first_action(workflow),
                 "stop_reason": None,
             },
-            "checkpoint": {"handoff_file": "SESSION-HANDOFF.md", "updated_at": timestamp},
+            "checkpoint": {
+                "handoff_file": "SESSION-HANDOFF.md",
+                "updated_at": timestamp,
+            },
         }
+        if sensitive_target:
+            state["scope"]["sensitive_target_ref"] = "notes/TARGET.local.json"
+        if workflow in PROTECTED_WORKFLOWS and authorization_status != "verified":
+            state["current"]["next_action"] = (
+                "Record and verify the written authorization source before active testing"
+            )
         if route_kind is not None:
             state["routing"] = {"kind": route_kind}
         validate(state, self.schema, "new engagement")
 
         self._make_directories(root, workflow)
         dump_yaml(root / "engagement.yaml", state)
-        self._write_control_files(root, state, target, timestamp)
+        self._write_control_files(
+            root,
+            state,
+            asset["pattern"],
+            timestamp,
+            sensitive_target=sensitive_target,
+        )
         self.validate(root)
         return root
 
@@ -200,7 +272,13 @@ class EngagementManager:
             (root / relative).mkdir(parents=True, exist_ok=True)
 
     def _write_control_files(
-        self, root: Path, state: dict[str, Any], target: str, timestamp: str
+        self,
+        root: Path,
+        state: dict[str, Any],
+        target: str,
+        timestamp: str,
+        *,
+        sensitive_target: str | None = None,
     ) -> None:
         workflow = state["workflow"]
         (root / ".gitignore").write_text(
@@ -219,12 +297,22 @@ class EngagementManager:
             if workflow in {"bug-bounty", "assessment"}
             else "Use the workflow-specific log under `notes/`.\n"
         )
+        authorization_rule = (
+            "For this protected workflow, active target traffic requires the current "
+            "lifecycle to be `active` and `authorization.status` to be `verified`; "
+            "never infer verification from access or ownership. "
+            if workflow in PROTECTED_WORKFLOWS
+            else "This workflow uses exempt authorization; do not request an authorization "
+            "change unless the work is rerouted to a protected workflow. "
+        )
         (root / "CLAUDE.md").write_text(
             "# Active Work Unit\n\n"
             "Read `engagement.yaml`, `notes/SCOPE.md`, `SESSION-HANDOFF.md`, and "
-            "`STATUS.md` before acting. Keep evidence and generated output in this work "
-            "unit. Never put credentials or complete tokens in Prompt, reports, shared "
-            "artifacts, or version control. "
+            "`STATUS.md` before acting. Act only while the current lifecycle is `active`; "
+            "a paused, blocked, or closed lifecycle stops execution. "
+            + authorization_rule
+            + "Keep evidence and generated output in this work unit. Never put credentials "
+            "or complete tokens in Prompt, reports, shared artifacts, or version control. "
             + boundary_rule
             + findings_rule,
             encoding="utf-8",
@@ -232,6 +320,12 @@ class EngagementManager:
         (root / "notes" / "SCOPE.md").write_text(
             self._scope_markdown(state, target, timestamp), encoding="utf-8"
         )
+        if sensitive_target:
+            dump_json(
+                root / "notes" / "TARGET.local.json",
+                {"target": sensitive_target},
+                mode=0o600,
+            )
         (root / "STATUS.md").write_text(
             self._status_markdown(state, timestamp), encoding="utf-8"
         )
@@ -241,7 +335,10 @@ class EngagementManager:
         if workflow in {"bug-bounty", "assessment"}:
             for name in ("hypotheses.md",):
                 shutil.copy2(self.templates / name, root / name)
-            shutil.copy2(self.templates / "notes" / "findings-live.md", root / "notes" / "findings-live.md")
+            shutil.copy2(
+                self.templates / "notes" / "findings-live.md",
+                root / "notes" / "findings-live.md",
+            )
         elif workflow == "ctf":
             (root / "notes" / "solve-log.md").write_text(
                 "# Solve Log\n\n| Time | Observation | Hypothesis | Evidence | Next action |\n"
@@ -266,15 +363,19 @@ class EngagementManager:
 
     @staticmethod
     def _scope_markdown(state: dict[str, Any], target: str, timestamp: str) -> str:
+        visible_target = _markdown_text(target)
+        authorization_source = state["authorization"]["source"] or "Not supplied"
+        visible_source = _markdown_text(authorization_source)
+        revision = state["scope"]["revision"]
         if state["workflow"] == "analysis":
             return (
                 "# Analysis Boundary And Outcome\n\n"
                 f"Reviewed: {timestamp}\n"
-                "Revision: 1\n\n"
+                f"Revision: {revision}\n\n"
                 "## Supplied Input\n\n"
                 "| Input | Type | Conditions |\n"
                 "| --- | --- | --- |\n"
-                f"| `{target}` | {state['scope']['in_scope'][0]['type']} | Initial supplied target |\n\n"
+                f"| `{visible_target}` | {state['scope']['in_scope'][0]['type']} | Initial supplied target |\n\n"
                 "## Requested Outcome\n\n"
                 "Record the requested behavior, acceptance criteria, and preferred integration "
                 "surface here as they become known. The output format is not predetermined.\n\n"
@@ -287,16 +388,16 @@ class EngagementManager:
         content = (
             "# Scope And Rules\n\n"
             f"Reviewed: {timestamp}\n"
-            "Revision: 1\n\n"
+            f"Revision: {revision}\n\n"
             "## Authorization Source\n\n"
             f"- Status: {state['authorization']['status']}\n"
-            f"- Source: {state['authorization']['source']}\n"
+            f"- Source: {visible_source}\n"
             f"- Workflow: {state['workflow']}\n"
             f"- Platform: {state['platform']}\n\n"
             "## In-Scope Assets\n\n"
             "| Asset or pattern | Type | Conditions |\n"
             "| --- | --- | --- |\n"
-            f"| `{target}` | {state['scope']['in_scope'][0]['type']} | Initial supplied target |\n\n"
+            f"| `{visible_target}` | {state['scope']['in_scope'][0]['type']} | Initial supplied target |\n\n"
             "## Out-Of-Scope Assets\n\nNone recorded.\n\n"
             "## Candidate Assets\n\n"
             "Discovered relationship is not authorization. Record provenance here and "
@@ -325,16 +426,25 @@ class EngagementManager:
 
     @staticmethod
     def _status_markdown(state: dict[str, Any], timestamp: str) -> str:
+        protected_unverified = bool(
+            state["workflow"] in PROTECTED_WORKFLOWS
+            and state["authorization"]["status"] != "verified"
+        )
         scope_section = (
             "## Scope Candidates\n\nNone recorded. Candidate assets are not active "
             "targets until a Scope revision records their authorization source.\n\n"
             if state["workflow"] in {"bug-bounty", "assessment"}
             else ""
         )
-        objective = (
-            "Inventory the supplied input and identify the smallest relevant behavior or call chain."
-            if state["workflow"] == "analysis"
-            else "Establish the first reproducible in-scope lead."
+        objective = state["current"]["next_action"]
+        blocker = (
+            "Authorization is revoked; active testing is prohibited."
+            if state["authorization"]["status"] == "revoked"
+            else (
+                "Authorization verification is required before active testing."
+                if protected_unverified
+                else "None."
+            )
         )
         initial_surface = (
             "Supplied input | Not observed | Inventory and capture a baseline"
@@ -347,23 +457,41 @@ class EngagementManager:
             "## Control Snapshot\n\n"
             "| Field | Value |\n| --- | --- |\n"
             f"| Lifecycle | {state['lifecycle']} |\n"
+            f"| Authorization | {state['authorization']['status']} |\n"
             f"| Mode | {state['mode']} |\n"
             f"| Phase | {state['phase']} |\n"
-            "| Scope revision | 1 |\n"
+            f"| Scope revision | {state['scope']['revision']} |\n"
             "| Current lead | none |\n"
             "| Current finding | none |\n\n"
             f"## Current Objective\n\n{objective}\n\n"
         )
-        return prefix + scope_section + (
-            f"## Exact Next Action\n\n{state['current']['next_action']}.\n\n"
-            "## Queue\n\n| Priority | ID | Surface | Signal | Next test |\n"
-            "| --- | --- | --- | --- | --- |\n"
-            f"| 1 | none | {initial_surface} |\n\n"
-            "## Blockers\n\nNone.\n"
+        return (
+            prefix
+            + scope_section
+            + (
+                f"## Exact Next Action\n\n{state['current']['next_action']}.\n\n"
+                "## Queue\n\n| Priority | ID | Surface | Signal | Next test |\n"
+                "| --- | --- | --- | --- | --- |\n"
+                f"| 1 | none | {initial_surface} |\n\n"
+                f"## Blockers\n\n{blocker}\n"
+            )
         )
 
     @staticmethod
     def _handoff_markdown(state: dict[str, Any], timestamp: str) -> str:
+        protected_unverified = bool(
+            state["workflow"] in PROTECTED_WORKFLOWS
+            and state["authorization"]["status"] != "verified"
+        )
+        external_dependency = (
+            "Renewed written authorization and verification."
+            if state["authorization"]["status"] == "revoked"
+            else (
+                "Written authorization source and verification."
+                if protected_unverified
+                else "None."
+            )
+        )
         scope_section = (
             "## Scope Candidates\n\nNone recorded. Do not actively test discovered adjacent "
             "assets unless the written Scope has promoted them.\n\n"
@@ -379,19 +507,140 @@ class EngagementManager:
             "3. Open referenced evidence and execute the exact next action.\n\n"
             "## Current State\n\n"
             f"- Lifecycle: {state['lifecycle']}\n"
+            f"- Authorization: {state['authorization']['status']}\n"
             f"- Mode: {state['mode']}\n"
             f"- Phase: {state['phase']}\n"
-            "- Scope revision: 1\n"
+            f"- Scope revision: {state['scope']['revision']}\n"
             "- Current lead: none\n"
             "- Current finding: none\n\n"
             "## Established Facts\n\n- Work unit initialized; no technical conclusion yet.\n\n"
         )
-        return prefix + scope_section + (
-            "## Evidence To Open\n\nNo evidence files yet.\n\n"
-            "## Exact Next Actions\n\n"
-            f"1. {state['current']['next_action']}.\n\n"
-            "## External Dependency\n\nNone.\n"
+        return (
+            prefix
+            + scope_section
+            + (
+                "## Evidence To Open\n\nNo evidence files yet.\n\n"
+                "## Exact Next Actions\n\n"
+                f"1. {state['current']['next_action']}.\n\n"
+                f"## External Dependency\n\n{external_dependency}\n"
+            )
         )
+
+    @staticmethod
+    def _sync_control_snapshots(root: Path, state: dict[str, Any]) -> None:
+        status_path = root / "STATUS.md"
+        status = status_path.read_text(encoding="utf-8")
+        status = re.sub(
+            r"^\| Lifecycle \| .+ \|$",
+            lambda _: f"| Lifecycle | {state['lifecycle']} |",
+            status,
+            count=1,
+            flags=re.MULTILINE,
+        )
+        if "| Authorization |" not in status:
+            lifecycle_line = f"| Lifecycle | {state['lifecycle']} |\n"
+            status = status.replace(
+                lifecycle_line,
+                lifecycle_line
+                + f"| Authorization | {state['authorization']['status']} |\n",
+                1,
+            )
+        status = re.sub(
+            r"^\| Authorization \| .+ \|$",
+            lambda _: f"| Authorization | {state['authorization']['status']} |",
+            status,
+            count=1,
+            flags=re.MULTILINE,
+        )
+        status = re.sub(
+            r"^\| Scope revision \| [0-9]+ \|$",
+            lambda _: f"| Scope revision | {state['scope']['revision']} |",
+            status,
+            count=1,
+            flags=re.MULTILINE,
+        )
+        status = re.sub(
+            r"^## Exact Next Action\n\n.+$",
+            lambda _: f"## Exact Next Action\n\n{state['current']['next_action']}.",
+            status,
+            count=1,
+            flags=re.MULTILINE,
+        )
+        status_blocker = (
+            "Authorization is revoked; active testing is prohibited."
+            if state["authorization"]["status"] == "revoked"
+            else (
+                "Authorization verification is required before active testing."
+                if state["workflow"] in PROTECTED_WORKFLOWS
+                and state["authorization"]["status"] != "verified"
+                else "None."
+            )
+        )
+        status = re.sub(
+            r"^## Blockers\n\n(?:None\.|Authorization verification is required before active testing\.|Authorization is revoked; active testing is prohibited\.)$",
+            lambda _: f"## Blockers\n\n{status_blocker}",
+            status,
+            count=1,
+            flags=re.MULTILINE,
+        )
+        atomic_write(status_path, status)
+
+        handoff_path = root / "SESSION-HANDOFF.md"
+        handoff = handoff_path.read_text(encoding="utf-8")
+        handoff = re.sub(
+            r"^- Lifecycle: .+$",
+            lambda _: f"- Lifecycle: {state['lifecycle']}",
+            handoff,
+            count=1,
+            flags=re.MULTILINE,
+        )
+        if "- Authorization:" not in handoff:
+            lifecycle_line = f"- Lifecycle: {state['lifecycle']}\n"
+            handoff = handoff.replace(
+                lifecycle_line,
+                lifecycle_line
+                + f"- Authorization: {state['authorization']['status']}\n",
+                1,
+            )
+        handoff = re.sub(
+            r"^- Authorization: .+$",
+            lambda _: f"- Authorization: {state['authorization']['status']}",
+            handoff,
+            count=1,
+            flags=re.MULTILINE,
+        )
+        handoff = re.sub(
+            r"^- Scope revision: [0-9]+$",
+            lambda _: f"- Scope revision: {state['scope']['revision']}",
+            handoff,
+            count=1,
+            flags=re.MULTILINE,
+        )
+        handoff = re.sub(
+            r"^## Exact Next Actions\n\n1\. .+$",
+            lambda _: f"## Exact Next Actions\n\n1. {state['current']['next_action']}.",
+            handoff,
+            count=1,
+            flags=re.MULTILINE,
+        )
+        external_dependency = (
+            "Renewed written authorization and verification."
+            if state["authorization"]["status"] == "revoked"
+            else (
+                "Written authorization source and verification."
+                if state["workflow"] in PROTECTED_WORKFLOWS
+                and state["authorization"]["status"] != "verified"
+                else "None."
+            )
+        )
+        handoff = re.sub(
+            r"^## External Dependency\n\n(?:None\.|Written authorization source and verification\.|Renewed written authorization and verification\.)$",
+            lambda _: f"## External Dependency\n\n{external_dependency}",
+            handoff,
+            count=1,
+            flags=re.MULTILINE,
+        )
+        atomic_write(handoff_path, handoff)
 
     def validate(self, root: Path) -> dict[str, Any]:
         root = root.expanduser().resolve()
@@ -410,8 +659,88 @@ class EngagementManager:
                 raise ValidationError(f"missing engagement control file: {relative}")
         credentials = root / "notes" / "LAB-CREDS.local.md"
         if credentials.exists() and credentials.stat().st_mode & 0o077:
-            raise ValidationError(f"credential file permissions must be 600 or stricter: {credentials}")
+            raise ValidationError(
+                f"credential file permissions must be 600 or stricter: {credentials}"
+            )
+        sensitive_target_ref = state["scope"].get("sensitive_target_ref")
+        if sensitive_target_ref:
+            sensitive_target = root / sensitive_target_ref
+            if not sensitive_target.is_file():
+                raise ValidationError(
+                    f"missing sensitive target file: {sensitive_target_ref}"
+                )
+            if sensitive_target.stat().st_mode & 0o077:
+                raise ValidationError(
+                    f"sensitive target file permissions must be 600 or stricter: {sensitive_target}"
+                )
         return state
+
+    def authorize(
+        self,
+        root: Path,
+        *,
+        status: str,
+        source: str | None,
+    ) -> dict[str, Any]:
+        state = self.validate(root)
+        if state["workflow"] not in PROTECTED_WORKFLOWS:
+            raise ValidationError(
+                f"workflow {state['workflow']} does not require authorization changes"
+            )
+        if status not in {"pending", "user-asserted", "verified", "revoked"}:
+            raise ValidationError(f"unsupported authorization status: {status}")
+        source = _validated_text(source, "authorization source") if source else None
+        if status in {"user-asserted", "verified", "revoked"} and not source:
+            raise ValidationError(
+                f"authorization source is required for status {status}"
+            )
+
+        timestamp = now()
+        state["authorization"] = {"status": status, "source": source}
+        state["scope"]["revision"] += 1
+        state["scope"]["reviewed_at"] = timestamp
+        state["timestamps"]["updated_at"] = timestamp
+        if status == "verified" and state["current"]["next_action"].startswith(
+            "Record and verify"
+        ):
+            state["current"]["next_action"] = self._first_action(state["workflow"])
+        elif status == "revoked":
+            state["lifecycle"] = "blocked"
+            state["current"]["stop_reason"] = "Authorization revoked"
+            state["current"]["next_action"] = (
+                "Stop active testing and preserve evidence"
+            )
+        dump_yaml(root / "engagement.yaml", state)
+
+        scope_path = root / "notes" / "SCOPE.md"
+        scope = scope_path.read_text(encoding="utf-8")
+        scope = re.sub(
+            r"^Reviewed: .+$",
+            f"Reviewed: {timestamp}",
+            scope,
+            count=1,
+            flags=re.MULTILINE,
+        )
+        scope = re.sub(
+            r"^Revision: [0-9]+$",
+            f"Revision: {state['scope']['revision']}",
+            scope,
+            count=1,
+            flags=re.MULTILINE,
+        )
+        scope = re.sub(
+            r"^- Status: .+$", f"- Status: {status}", scope, count=1, flags=re.MULTILINE
+        )
+        scope = re.sub(
+            r"^- Source: .+$",
+            f"- Source: {_markdown_text(source or 'Not supplied')}",
+            scope,
+            count=1,
+            flags=re.MULTILINE,
+        )
+        atomic_write(scope_path, scope)
+        self._sync_control_snapshots(root, state)
+        return self.validate(root)
 
     def list(self) -> list[dict[str, str]]:
         result = []
@@ -430,7 +759,9 @@ class EngagementManager:
                     }
                 )
             except ValidationError as error:
-                result.append({"slug": path.name, "error": str(error), "path": str(path)})
+                result.append(
+                    {"slug": path.name, "error": str(error), "path": str(path)}
+                )
         return result
 
     def roots(self) -> list[Path]:
@@ -453,19 +784,26 @@ class EngagementManager:
             )
         return roots
 
-    def transition(self, root: Path, lifecycle: str, reason: str | None = None) -> dict[str, Any]:
+    def transition(
+        self, root: Path, lifecycle: str, reason: str | None = None
+    ) -> dict[str, Any]:
         state = self.validate(root)
         current = state["lifecycle"]
         if lifecycle == current:
             return state
         if lifecycle not in TRANSITIONS.get(current, set()):
-            raise ValidationError(f"invalid lifecycle transition: {current} -> {lifecycle}")
+            raise ValidationError(
+                f"invalid lifecycle transition: {current} -> {lifecycle}"
+            )
         timestamp = now()
         state["lifecycle"] = lifecycle
         state["timestamps"]["updated_at"] = timestamp
         state["checkpoint"]["updated_at"] = timestamp
-        state["current"]["stop_reason"] = reason if lifecycle in {"paused", "blocked", "closed"} else None
+        state["current"]["stop_reason"] = (
+            reason if lifecycle in {"paused", "blocked", "closed"} else None
+        )
         dump_yaml(root / "engagement.yaml", state)
+        self._sync_control_snapshots(root, state)
         return state
 
     def checkpoint(self, root: Path) -> dict[str, Any]:

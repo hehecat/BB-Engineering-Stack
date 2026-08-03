@@ -16,6 +16,7 @@
           "version": {"type": ["string", "number"]},
           "minimum": {"type": ["string", "number"]},
           "minimum_major": {"type": "integer"},
+          "maximum_major": {"type": "integer"},
           "files": {
             "type": "object",
             "required": ["x86_64", "aarch64"],

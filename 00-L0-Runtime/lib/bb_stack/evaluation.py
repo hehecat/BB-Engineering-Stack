@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
 import hashlib
 import inspect
-from pathlib import Path
 import shutil
 import subprocess
 import time
+from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
@@ -20,7 +20,6 @@ from .profiles import ProfileRegistry
 from .runtime import RuntimeManager
 from .skills import SkillRegistry
 from .validation import validate
-
 
 STATE_FILES = (
     "engagement.yaml",
@@ -214,9 +213,7 @@ BROWSER_JS_BEHAVIOR_EXPECTED = {
 
 
 def _now() -> str:
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace(
-        "+00:00", "Z"
-    )
+    return datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
 class EvaluationManager:
@@ -344,6 +341,10 @@ class EvaluationManager:
             platform=str(definition["platform"]),
             mode=str(definition["default_mode"]),
             title=f"Agent Evaluation: {profile}",
+            authorization_source=(
+                "Isolated evaluation fixture" if capability_profile == "web" else None
+            ),
+            authorization_status=("verified" if capability_profile == "web" else None),
             route_kind=(
                 "web"
                 if capability_profile == "web"
@@ -403,8 +404,7 @@ class EvaluationManager:
                 cwd=engagement,
                 env=env,
                 text=True,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
+                capture_output=True,
                 timeout=timeout,
                 check=False,
             )
@@ -600,7 +600,9 @@ class EvaluationManager:
                     )
                     if key == "behavior_decision" and decision_key == "secret_handling":
                         passed = actual in WEB_SAFE_SECRET_HANDLING
-                        detail = "secret handling uses a local reference or redacted display"
+                        detail = (
+                            "secret handling uses a local reference or redacted display"
+                        )
                     else:
                         passed = actual == decision_value
                         detail = f"{decision_key} matches the {key} harness contract"
@@ -708,16 +710,17 @@ class EvaluationManager:
             inspect.getsource(self._score_agent),
         ]
         if capability_profile == "web":
-            values.extend(
-                [WEB_DECISION_SCENARIO, repr(WEB_BEHAVIOR_EXPECTED)]
-            )
+            values.extend([WEB_DECISION_SCENARIO, repr(WEB_BEHAVIOR_EXPECTED)])
         elif capability_profile == "browser-js":
             values.extend(
                 [BROWSER_JS_DECISION_SCENARIO, repr(BROWSER_JS_BEHAVIOR_EXPECTED)]
             )
         for name in skill_route:
             values.extend(
-                [name, self.skill_registry.tree_digest(self.skill_registry.source(name))]
+                [
+                    name,
+                    self.skill_registry.tree_digest(self.skill_registry.source(name)),
+                ]
             )
         for value in values:
             digest.update(value.encode("utf-8"))
@@ -733,9 +736,7 @@ class EvaluationManager:
         orchestrator = str(skill_profile["orchestrator"])
         route = [orchestrator]
         route.extend(
-            name
-            for name in ROUTE_SUFFIXES[capability_profile]
-            if name != orchestrator
+            name for name in ROUTE_SUFFIXES[capability_profile] if name != orchestrator
         )
         for name in route:
             self.skill_registry.source(name)

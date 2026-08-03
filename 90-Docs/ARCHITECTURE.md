@@ -30,6 +30,8 @@ contracts pass. It does not add attack knowledge or change workflow policy.
 - `04-L4-Skills/skills.yaml`: Skill inventory and source directory.
 - `05-L5-MCP-CLI/capabilities.yaml`: provider/capability mapping.
 - `00-L0-Runtime/config/upstreams.yaml`: verified update channels and pins.
+- `00-L0-Runtime/config/data-catalog.yaml`: data repositories, revisions,
+  bundles, sentinels, and Profile requirements.
 
 Generated strict-launch Prompt and MCP files live under
 `$BB_CONFIG_HOME/generated`. Bootstrap also renders a small project router,

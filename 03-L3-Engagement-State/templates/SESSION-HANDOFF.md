@@ -12,6 +12,7 @@ Updated: 2026-01-01T00:00:00Z
 ## Current State
 
 - Lifecycle: active
+- Authorization: pending
 - Mode: interactive
 - Phase: explore
 - Scope revision: 1
@@ -42,10 +43,9 @@ None.
 
 ## Exact Next Actions
 
-1. Read the scope record.
-2. Inventory the supplied target and existing artifacts.
-3. Create and execute the highest-value in-scope hypothesis.
+1. Record and verify the written authorization source.
+2. Resume target work only after authorization becomes `verified`.
 
 ## External Dependency
 
-None.
+Written authorization source and verification.

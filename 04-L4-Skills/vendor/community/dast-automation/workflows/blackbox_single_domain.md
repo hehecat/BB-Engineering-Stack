@@ -42,7 +42,7 @@ mkdir -p results/target/{crawl,evidence,screenshots}
 subfinder -d target.com -silent -o results/target/subs.txt &
 nmap -sV -sC -T4 target.com -oN results/target/nmap.txt &
 whatweb -a 3 https://target.com --log-json results/target/whatweb.json &
-ffuf -u https://target.com/FUZZ -w /usr/share/wordlists/dirb/common.txt \
+ffuf -u https://target.com/FUZZ -w "${BB_DATA_ROOT}/seclists/Discovery/Web-Content/common.txt" \
      -o results/target/ffuf.json -of json &
 nuclei -u https://target.com -severity critical,high,medium \
        -jsonl -o results/target/nuclei-root.jsonl &

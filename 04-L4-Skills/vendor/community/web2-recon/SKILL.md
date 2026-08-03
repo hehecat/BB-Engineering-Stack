@@ -196,7 +196,7 @@ deactivate
 ```bash
 # Directory discovery on a live host
 ffuf -u "https://target.com/FUZZ" \
-     -w ~/wordlists/common.txt \
+     -w "${BB_DATA_ROOT}/seclists/Discovery/Web-Content/common.txt" \
      -mc 200,201,204,301,302,307,401,403 \
      -ac \
      -t 40 \
@@ -204,7 +204,7 @@ ffuf -u "https://target.com/FUZZ" \
 
 # API endpoint discovery
 ffuf -u "https://target.com/api/FUZZ" \
-     -w ~/wordlists/api-endpoints.txt \
+     -w "${BB_DATA_ROOT}/seclists/Discovery/Web-Content/api/api-endpoints.txt" \
      -mc 200,201,204,301,302 \
      -ac \
      -t 20

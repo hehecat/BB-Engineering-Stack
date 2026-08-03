@@ -1,22 +1,23 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
-from contextlib import redirect_stderr, redirect_stdout
-from datetime import datetime, timezone
-from email.message import EmailMessage
-from email import policy as email_policy
-from email.parser import BytesParser
-from io import StringIO
 import json
 import os
-from pathlib import Path
 import tempfile
 import unittest
+from contextlib import redirect_stderr, redirect_stdout
+from datetime import UTC, datetime
+from email import policy as email_policy
+from email.message import EmailMessage
+from email.parser import BytesParser
+from io import StringIO
+from pathlib import Path
 from unittest.mock import patch
-
 
 ROOT = Path(__file__).resolve().parents[2]
 os.environ["BB_STACK_ROOT"] = str(ROOT)
+
+import argparse
 
 from bb_stack.mail_otp import (
     MailOtpClient,
@@ -32,8 +33,6 @@ from bb_stack.mail_otp import (
     run_mail_command,
     write_config,
 )
-
-import argparse
 
 
 class FakeImap:
@@ -63,9 +62,7 @@ class FakeImap:
         if command == "fetch":
             uid = args[0]
             assert isinstance(uid, bytes)
-            metadata = (
-                b'1 (UID ' + uid + b' INTERNALDATE "31-Jul-2026 10:00:00 +0000")'
-            )
+            metadata = b"1 (UID " + uid + b' INTERNALDATE "31-Jul-2026 10:00:00 +0000")'
             return "OK", [(metadata, self.messages[uid]), b")"]
         raise AssertionError(command)
 
@@ -76,7 +73,7 @@ class FakeImap:
 
 def make_message(subject: str, body: str, *, html: bool = False) -> bytes:
     message = EmailMessage()
-    message["Date"] = datetime.now(timezone.utc)
+    message["Date"] = datetime.now(UTC)
     message["From"] = "Lab Login <login@example.test>"
     message["To"] = "operator@example.test"
     message["Subject"] = subject
@@ -214,7 +211,10 @@ class MailOtpTests(unittest.TestCase):
             ]
         )
         stdout = StringIO()
-        with patch("sys.stdin", StringIO("super-private-app-password\n")), redirect_stdout(stdout):
+        with (
+            patch("sys.stdin", StringIO("super-private-app-password\n")),
+            redirect_stdout(stdout),
+        ):
             self.assertEqual(run_mail_command(args, self.home), 0)
         output = stdout.getvalue()
         self.assertNotIn("super-private-app-password", output)

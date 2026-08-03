@@ -20,3 +20,6 @@ package-dir = {"" = "00-L0-Runtime/lib"}
 
 [tool.setuptools.packages.find]
 where = ["00-L0-Runtime/lib"]
+
+[tool.ruff.lint.per-file-ignores]
+"99-Verification/scripts/test_*.py" = ["E402"]

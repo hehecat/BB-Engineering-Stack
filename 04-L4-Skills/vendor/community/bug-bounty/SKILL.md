@@ -276,10 +276,10 @@ seq 1 10000 | ffuf --request req.txt -w - -ac
 ffuf -u https://TARGET/api/FUZZ -w wordlist.txt -H "Cookie: session=TOKEN" -ac
 
 # Parameter discovery
-ffuf -w ~/wordlists/burp-parameter-names.txt -u "https://target.com/api/endpoint?FUZZ=test" -ac -mc 200
+ffuf -w "${BB_DATA_ROOT}/seclists/Discovery/Web-Content/burp-parameter-names.txt" -u "https://target.com/api/endpoint?FUZZ=test" -ac -mc 200
 
 # Hidden POST parameters
-ffuf -w ~/wordlists/burp-parameter-names.txt -X POST -d "FUZZ=test" -u "https://target.com/api/endpoint" -ac
+ffuf -w "${BB_DATA_ROOT}/seclists/Discovery/Web-Content/burp-parameter-names.txt" -X POST -d "FUZZ=test" -u "https://target.com/api/endpoint" -ac
 
 # Subdomain scan
 ffuf -w subs.txt -u https://FUZZ.target.com -ac
@@ -356,7 +356,7 @@ done
 ## API Endpoint Discovery
 ```bash
 # ffuf API endpoint brute
-ffuf -u https://TARGET/api/FUZZ -w /usr/share/seclists/Discovery/Web-Content/api/api-endpoints.txt -mc 200,201,301,302,403 -ac
+ffuf -u https://TARGET/api/FUZZ -w "${BB_DATA_ROOT}/seclists/Discovery/Web-Content/api/api-endpoints.txt" -mc 200,201,301,302,403 -ac
 ```
 
 ## HackerOne Scope Retrieval

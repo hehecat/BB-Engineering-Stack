@@ -1,0 +1,54 @@
+name: Verification
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verification-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: '3.11'
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22.23.2
+          cache: npm
+          cache-dependency-path: 00-L0-Runtime/config/node-runtime/package-lock.json
+      - name: Create test environment
+        run: |
+          python -m pip install uv==0.11.14
+          uv venv --python 3.11 .venv
+          uv pip install --python .venv/bin/python --require-hashes \
+            -r 00-L0-Runtime/config/requirements.lock
+          uv pip install --python .venv/bin/python --no-deps -e .
+      - name: Run contracts as non-root
+        env:
+          PATH: ${{ github.workspace }}/.venv/bin:/usr/local/bin:/usr/bin:/bin
+        run: ./99-Verification/scripts/run-all.sh
+      - name: Run Python static checks
+        run: |
+          uvx ruff==0.16.1 check --cache-dir "$HOME/.cache/bb-stack-ruff" \
+            00-L0-Runtime/lib/bb_stack 99-Verification/scripts
+          uvx ruff==0.16.1 format --check --cache-dir "$HOME/.cache/bb-stack-ruff" \
+            00-L0-Runtime/lib/bb_stack 99-Verification/scripts
+      - name: Audit dependency locks
+        run: ./99-Verification/scripts/audit-dependencies.sh
+      - name: Run isolated fresh-machine acceptance
+        env:
+          PATH: ${{ github.workspace }}/.venv/bin:/usr/local/bin:/usr/bin:/bin
+        run: ./99-Verification/scripts/fresh-machine.sh

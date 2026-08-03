@@ -43,6 +43,7 @@ bb-stack updates check --all --json > update-audit.json
 ```bash
 bb-stack updates stage skill.ctf-web
 bb-stack updates validate skill.ctf-web
+bb-stack updates approve skill.ctf-web --reviewer YOUR_ID --note "Reviewed source diff and validation report"
 bb-stack updates promote skill.ctf-web
 bb-stack updates rollback skill.ctf-web
 ```
@@ -51,6 +52,11 @@ Candidates live under `.runtime/update-candidates`; promotion backups live
 under `.runtime/update-backups`. Both are machine-local and ignored by Git.
 Restaging preserves the preceding candidate with a timestamp instead of
 deleting it.
+
+Validation and approval are separate gates. Approval records the reviewer,
+time, note, and a digest of the exact promotable files. Promotion recomputes
+that digest and rejects a candidate changed after approval. Per-component file
+locks serialize stage, validate, approve, promote, and rollback operations.
 
 GitHub tree checks compare only the registered Skill subdirectory. A commit to
 another directory does not create an update. Git commit and release checks use

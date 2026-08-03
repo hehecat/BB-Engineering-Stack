@@ -1,23 +1,24 @@
 from __future__ import annotations
 
 import argparse
-from dataclasses import asdict, dataclass
-from datetime import datetime, timedelta, timezone
-from email import policy
-from email.parser import BytesParser
-from email.utils import parsedate_to_datetime
 import getpass
-from html.parser import HTMLParser
 import imaplib
 import json
 import os
-from pathlib import Path
 import re
 import shlex
 import ssl
 import sys
 import time
-from typing import Any, Sequence
+from collections.abc import Sequence
+from dataclasses import asdict, dataclass
+from datetime import UTC, datetime, timedelta
+from email import policy
+from email.parser import BytesParser
+from email.utils import parsedate_to_datetime
+from html.parser import HTMLParser
+from pathlib import Path
+from typing import Any
 
 from .errors import StackError
 from .io import atomic_write
@@ -37,7 +38,20 @@ _CONTEXT_CODE = re.compile(
 )
 _SIX_DIGIT = re.compile(r"(?<!\d)(\d{6,8})(?!\d)")
 _SHORT_DIGIT = re.compile(r"(?<!\d)(\d{4,8})(?!\d)")
-_MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+_MONTHS = (
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "May",
+    "Jun",
+    "Jul",
+    "Aug",
+    "Sep",
+    "Oct",
+    "Nov",
+    "Dec",
+)
 _CONFIG_ORDER = (
     "MAIL_OTP_PROVIDER",
     "MAIL_OTP_HOST",
@@ -90,7 +104,9 @@ def load_config(path: Path, *, require_secure: bool = True) -> dict[str, str]:
         raise MailOtpError(f"mailbox config does not exist: {path}")
     mode = path.stat().st_mode & 0o777
     if require_secure and mode != 0o600:
-        raise MailOtpError(f"mailbox config must have mode 600, found {mode:03o}: {path}")
+        raise MailOtpError(
+            f"mailbox config must have mode 600, found {mode:03o}: {path}"
+        )
     return parse_config(path)
 
 
@@ -119,7 +135,7 @@ class MailSettings:
     poll_interval: float
 
     @classmethod
-    def from_values(cls, values: dict[str, str]) -> "MailSettings":
+    def from_values(cls, values: dict[str, str]) -> MailSettings:
         host = values.get("MAIL_OTP_HOST", "").strip()
         user = values.get("MAIL_OTP_USER", "").strip()
         auth = values.get("MAIL_OTP_AUTH", "password").strip().lower()
@@ -131,7 +147,9 @@ class MailSettings:
         if security not in {"ssl", "starttls"}:
             raise MailOtpError("MAIL_OTP_SECURITY must be ssl or starttls")
         try:
-            port = int(values.get("MAIL_OTP_PORT", "993" if security == "ssl" else "143"))
+            port = int(
+                values.get("MAIL_OTP_PORT", "993" if security == "ssl" else "143")
+            )
             poll_interval = float(values.get("MAIL_OTP_POLL_INTERVAL", "5"))
         except ValueError as error:
             raise MailOtpError(
@@ -140,13 +158,19 @@ class MailSettings:
         if not 1 <= port <= 65535:
             raise MailOtpError("MAIL_OTP_PORT must be between 1 and 65535")
         if not 1 <= poll_interval <= 60:
-            raise MailOtpError("MAIL_OTP_POLL_INTERVAL must be between 1 and 60 seconds")
+            raise MailOtpError(
+                "MAIL_OTP_POLL_INTERVAL must be between 1 and 60 seconds"
+            )
         password = values.get("MAIL_OTP_PASSWORD") or None
         access_token = values.get("MAIL_OTP_ACCESS_TOKEN") or None
         if auth == "password" and not password:
-            raise MailOtpError("MAIL_OTP_PASSWORD is required for password authentication")
+            raise MailOtpError(
+                "MAIL_OTP_PASSWORD is required for password authentication"
+            )
         if auth == "oauth2" and not access_token:
-            raise MailOtpError("MAIL_OTP_ACCESS_TOKEN is required for oauth2 authentication")
+            raise MailOtpError(
+                "MAIL_OTP_ACCESS_TOKEN is required for oauth2 authentication"
+            )
         return cls(
             host=host,
             port=port,
@@ -177,7 +201,7 @@ def _html_text(value: str) -> str:
     try:
         parser.feed(value)
         parser.close()
-    except Exception:
+    except (AssertionError, ValueError):
         return value
     return parser.text()
 
@@ -194,10 +218,14 @@ def message_text(message: Any) -> str:
             value = part.get_content()
         except (LookupError, UnicodeError):
             payload = part.get_payload(decode=True) or b""
-            value = payload.decode(part.get_content_charset() or "utf-8", errors="replace")
+            value = payload.decode(
+                part.get_content_charset() or "utf-8", errors="replace"
+            )
         if not isinstance(value, str):
             continue
-        chunks.append(_html_text(value) if part.get_content_type() == "text/html" else value)
+        chunks.append(
+            _html_text(value) if part.get_content_type() == "text/html" else value
+        )
         if sum(len(chunk) for chunk in chunks) >= 300_000:
             break
     return "\n".join(chunks)[:300_000]
@@ -260,11 +288,13 @@ class MailOtpClient:
                 payload = (
                     f"user={self.settings.user}\x01"
                     f"auth=Bearer {self.settings.access_token}\x01\x01"
-                ).encode("utf-8")
+                ).encode()
                 connection.authenticate("XOAUTH2", lambda _: payload)
             status, _ = connection.select(self.settings.folder, readonly=True)
             if status != "OK":
-                raise MailOtpError(f"unable to select mailbox folder: {self.settings.folder}")
+                raise MailOtpError(
+                    f"unable to select mailbox folder: {self.settings.folder}"
+                )
             return connection
         except MailOtpError:
             if connection is not None:
@@ -302,8 +332,10 @@ class MailOtpClient:
             raise MailOtpError("since must be between 1 and 43200 minutes")
         if not 1 <= limit <= 100:
             raise MailOtpError("limit must be between 1 and 100")
-        threshold = datetime.now(timezone.utc) - timedelta(minutes=since_minutes)
-        search_date = f"{threshold.day:02d}-{_MONTHS[threshold.month - 1]}-{threshold.year:04d}"
+        threshold = datetime.now(UTC) - timedelta(minutes=since_minutes)
+        search_date = (
+            f"{threshold.day:02d}-{_MONTHS[threshold.month - 1]}-{threshold.year:04d}"
+        )
         connection = self._connect()
         try:
             criteria: list[str] = ["SINCE", search_date]
@@ -340,7 +372,9 @@ class MailOtpClient:
         uid: bytes,
         threshold: datetime,
     ) -> MailResult | None:
-        status, data = connection.uid("fetch", uid, "(INTERNALDATE BODY.PEEK[]<0.1048576>)")
+        status, data = connection.uid(
+            "fetch", uid, "(INTERNALDATE BODY.PEEK[]<0.1048576>)"
+        )
         if status != "OK" or not data:
             return None
         metadata = b""
@@ -373,13 +407,13 @@ def _message_datetime(date_header: str | None, metadata: bytes) -> datetime | No
         try:
             value = parsedate_to_datetime(date_header)
             if value.tzinfo is None:
-                value = value.replace(tzinfo=timezone.utc)
-            return value.astimezone(timezone.utc)
+                value = value.replace(tzinfo=UTC)
+            return value.astimezone(UTC)
         except (TypeError, ValueError, OverflowError):
             pass
     internal = imaplib.Internaldate2tuple(metadata)
     if internal:
-        return datetime.fromtimestamp(time.mktime(internal), timezone.utc)
+        return datetime.fromtimestamp(time.mktime(internal), UTC)
     return None
 
 
@@ -393,7 +427,9 @@ def _read_secret(prompt: str, *, stdin: bool) -> str:
     elif sys.stdin.isatty():
         value = getpass.getpass(prompt)
     else:
-        raise MailOtpError("use --password-stdin or --token-stdin in a non-interactive shell")
+        raise MailOtpError(
+            "use --password-stdin or --token-stdin in a non-interactive shell"
+        )
     if not value:
         raise MailOtpError("secret value must not be empty")
     return value
@@ -462,18 +498,20 @@ def _configure(args: argparse.Namespace, path: Path) -> int:
     )
     if auth == "password":
         configured.pop("MAIL_OTP_ACCESS_TOKEN", None)
-        if not args.no_secret:
-            if args.password_stdin or not configured.get("MAIL_OTP_PASSWORD"):
-                configured["MAIL_OTP_PASSWORD"] = _read_secret(
-                    "Mailbox app password: ", stdin=args.password_stdin
-                )
+        if not args.no_secret and (
+            args.password_stdin or not configured.get("MAIL_OTP_PASSWORD")
+        ):
+            configured["MAIL_OTP_PASSWORD"] = _read_secret(
+                "Mailbox app password: ", stdin=args.password_stdin
+            )
     else:
         configured.pop("MAIL_OTP_PASSWORD", None)
-        if not args.no_secret:
-            if args.token_stdin or not configured.get("MAIL_OTP_ACCESS_TOKEN"):
-                configured["MAIL_OTP_ACCESS_TOKEN"] = _read_secret(
-                    "OAuth2 access token: ", stdin=args.token_stdin
-                )
+        if not args.no_secret and (
+            args.token_stdin or not configured.get("MAIL_OTP_ACCESS_TOKEN")
+        ):
+            configured["MAIL_OTP_ACCESS_TOKEN"] = _read_secret(
+                "OAuth2 access token: ", stdin=args.token_stdin
+            )
     write_config(path, configured)
     _output({"configured": True, "path": str(path), "provider": provider}, args.json)
     return 0
@@ -554,13 +592,19 @@ def _emit_result(result: MailResult, json_output: bool) -> None:
 
 def add_mail_subcommands(parser: argparse.ArgumentParser) -> None:
     subcommands = parser.add_subparsers(dest="mail_action", required=True)
-    configure = subcommands.add_parser("configure", help="write a mode-600 mailbox config")
+    configure = subcommands.add_parser(
+        "configure", help="write a mode-600 mailbox config"
+    )
     _add_configure_arguments(configure)
-    set_password = subcommands.add_parser("set-pass", help="replace the mailbox app password")
+    set_password = subcommands.add_parser(
+        "set-pass", help="replace the mailbox app password"
+    )
     set_password.add_argument("--password-stdin", action="store_true")
     set_password.add_argument("--config", type=Path)
     set_password.add_argument("--json", action="store_true")
-    test = subcommands.add_parser("test", help="test IMAP authentication and folder access")
+    test = subcommands.add_parser(
+        "test", help="test IMAP authentication and folder access"
+    )
     _add_query_arguments(test, since=False)
     latest = subcommands.add_parser("latest", help="print the newest matching OTP")
     _add_query_arguments(latest, since=True)
@@ -622,7 +666,9 @@ def run_mail_command(args: argparse.Namespace, home: Path) -> int:
 
 
 def _standalone_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="mail-otp", description="retrieve lab mailbox OTP codes")
+    parser = argparse.ArgumentParser(
+        prog="mail-otp", description="retrieve lab mailbox OTP codes"
+    )
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--test", action="store_true")
     mode.add_argument("--wait", type=int, metavar="SECONDS")

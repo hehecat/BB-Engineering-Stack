@@ -3,18 +3,17 @@ from __future__ import annotations
 
 import json
 import os
-from pathlib import Path
 import shutil
 import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import patch
-
 
 ROOT = Path(__file__).resolve().parents[2]
 os.environ["BB_STACK_ROOT"] = str(ROOT)
 
 from bb_stack.engagement import EngagementManager
-from bb_stack.errors import StackError
+from bb_stack.errors import StackError, ValidationError
 from bb_stack.paths import StackPaths
 from bb_stack.workspace import WorkspaceManager
 
@@ -36,15 +35,15 @@ class WorkspaceTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.temporary.cleanup()
 
-    def test_initialize_uses_selected_root_and_generates_plain_claude_entry(self) -> None:
+    def test_initialize_uses_selected_root_and_generates_plain_claude_entry(
+        self,
+    ) -> None:
         result = self.manager.initialize()
 
         self.assertEqual(result["root"], str(self.paths.work_root))
         self.assertTrue((self.paths.work_root / "CLAUDE.md").is_file())
         self.assertTrue((self.paths.work_root / ".mcp.json").is_file())
-        self.assertTrue(
-            (self.paths.work_root / ".claude" / "settings.json").is_file()
-        )
+        self.assertTrue((self.paths.work_root / ".claude" / "settings.json").is_file())
         self.assertTrue(self.paths.engagements_root.is_dir())
         self.assertTrue((self.paths.work_root / "inbox").is_dir())
         settings = json.loads(
@@ -60,7 +59,32 @@ class WorkspaceTests(unittest.TestCase):
         self.assertIn("returned repair commands yourself", router)
         self.assertIn("Ask one compact question only", router)
         self.assertIn("使用简体中文编写面向用户的回复", router)
+        self.assertIn("authorization.status=verified", router)
+        self.assertIn("bb-stack data ensure", router)
         self.assertTrue(self.manager.status()["ready"])
+
+    def test_work_root_cannot_overlap_stack_source(self) -> None:
+        for work_root in (ROOT / "nested-work", ROOT.parent):
+            with self.subTest(work_root=work_root):
+                paths = StackPaths(
+                    root=ROOT,
+                    home=self.paths.home,
+                    work_root=work_root,
+                    config_home=self.paths.config_home,
+                    claude_config_dir=self.paths.claude_config_dir,
+                )
+                with self.assertRaises(ValidationError):
+                    WorkspaceManager(paths)._validate_root()
+
+    def test_default_home_child_work_root_is_allowed(self) -> None:
+        paths = StackPaths(
+            root=ROOT,
+            home=self.paths.home,
+            work_root=self.paths.home / "BB-Workspaces",
+            config_home=self.paths.config_home,
+            claude_config_dir=self.paths.claude_config_dir,
+        )
+        WorkspaceManager(paths)._validate_root()
 
     def test_claude_local_permissions_survive_workspace_refresh(self) -> None:
         self.manager.initialize()
@@ -261,7 +285,10 @@ class WorkspaceTests(unittest.TestCase):
                 )
                 self.assertEqual(result["profile"], expected[0])
                 self.assertEqual(result["skill_route"][-1], expected[1])
-                self.assertEqual(result["workflow"], "assessment" if kind != "reverse-analysis" else "analysis")
+                self.assertEqual(
+                    result["workflow"],
+                    "assessment" if kind != "reverse-analysis" else "analysis",
+                )
 
     def test_managed_file_changes_are_not_overwritten_without_force(self) -> None:
         self.manager.initialize()

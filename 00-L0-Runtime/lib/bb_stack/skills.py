@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
 import hashlib
 import os
+from datetime import UTC, datetime
 from pathlib import Path
-import shutil
 from typing import Any
 
 from .errors import StackError, ValidationError
@@ -111,7 +110,9 @@ class SkillRegistry:
         digest = hashlib.sha256()
         ignored = {".DS_Store", "README.md"}
         for path in sorted(
-            item for item in root.rglob("*") if item.is_file() and item.name not in ignored
+            item
+            for item in root.rglob("*")
+            if item.is_file() and item.name not in ignored
         ):
             digest.update(str(path.relative_to(root)).encode("utf-8"))
             digest.update(b"\0")
@@ -172,10 +173,14 @@ class SkillRegistry:
             destination.symlink_to(source, target_is_directory=True)
             return f"replaced; backup={backup}"
         if destination.exists():
-            if destination.is_dir() and self.tree_digest(destination) == self.tree_digest(source):
+            if destination.is_dir() and self.tree_digest(
+                destination
+            ) == self.tree_digest(source):
                 return "compatible-unmanaged"
             if not force:
-                raise StackError(f"Skill directory conflict (use --force): {destination}")
+                raise StackError(
+                    f"Skill directory conflict (use --force): {destination}"
+                )
             backup = self._backup_name(destination)
             destination.rename(backup)
             destination.symlink_to(source, target_is_directory=True)
@@ -185,7 +190,7 @@ class SkillRegistry:
 
     @staticmethod
     def _backup_name(path: Path) -> Path:
-        timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
         candidate = path.with_name(f"{path.name}.bb-stack-backup.{timestamp}")
         serial = 1
         while candidate.exists() or candidate.is_symlink():
@@ -199,7 +204,8 @@ class SkillRegistry:
         destination_root = (
             self.paths.claude_config_dir / "skills"
             if agent == "claude"
-            else Path(os.environ.get("CODEX_HOME", self.paths.home / ".codex")) / "skills"
+            else Path(os.environ.get("CODEX_HOME", self.paths.home / ".codex"))
+            / "skills"
         )
         results = []
         for name in self.selected(profile_name):

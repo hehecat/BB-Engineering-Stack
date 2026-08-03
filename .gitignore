@@ -1,6 +1,7 @@
 .venv/
 .runtime/
 .cache/
+.ruff_cache/
 generated/
 __pycache__/
 *.pyc

@@ -1,9 +1,8 @@
 from __future__ import annotations
 
-import json
 import hashlib
+import json
 import os
-from pathlib import Path
 import platform
 import re
 import shlex
@@ -14,21 +13,23 @@ import sys
 import tarfile
 import tempfile
 import time
+import zipfile
+from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
-import zipfile
 
 from .capabilities import CapabilityRegistry
 from .configuration import ConfigurationManager, load_machine_config
-from .errors import CommandError, StackError, ValidationError
+from .data import DataManager
+from .engagement import EngagementManager
+from .errors import CommandError, ValidationError
 from .io import atomic_write, expand, load_yaml
 from .paths import StackPaths
 from .profiles import ProfileRegistry
 from .skills import SkillRegistry
 from .validation import validate
 from .workspace import WorkspaceManager
-
 
 NPM_OFFICIAL_REGISTRY = "https://registry.npmjs.org"
 NPM_MIRROR_REGISTRY = "https://registry.npmmirror.com"
@@ -55,7 +56,8 @@ class RuntimeManager:
     ) -> dict[str, Any]:
         CapabilityRegistry(self.paths).profile(profile)
         SkillRegistry(self.paths).profile(profile)
-        self.paths.ensure_runtime_dirs()
+        if not dry_run:
+            self.paths.ensure_runtime_dirs()
         actions: list[dict[str, Any]] = []
         actions.append(self._python_runtime(dry_run))
         if not skip_node:
@@ -63,16 +65,34 @@ class RuntimeManager:
         actions.extend(self._install_wrappers(dry_run))
         self._write_env(dry_run)
         actions.append(
-            {"component": "env", "state": "planned" if dry_run else "ready", "path": str(self.paths.env_file)}
+            {
+                "component": "env",
+                "state": "planned" if dry_run else "ready",
+                "path": str(self.paths.env_file),
+            }
         )
         if not skip_tools:
-            actions.extend(self.install_tools(profile, include_optional, dry_run=dry_run))
+            actions.extend(
+                self.install_tools(profile, include_optional, dry_run=dry_run)
+            )
+            actions.extend(
+                DataManager(self.paths).ensure_profile(
+                    profile,
+                    include_optional=include_optional,
+                    dry_run=dry_run,
+                )
+            )
         if not skip_skills:
             if dry_run:
-                actions.append({"component": "skills", "state": "planned", "profile": profile})
+                actions.append(
+                    {"component": "skills", "state": "planned", "profile": profile}
+                )
             else:
                 installed = SkillRegistry(self.paths).install(
-                    profile, agent="claude", include_optional=include_optional, force=False
+                    profile,
+                    agent="claude",
+                    include_optional=include_optional,
+                    force=False,
                 )
                 actions.append(
                     {
@@ -91,13 +111,21 @@ class RuntimeManager:
                 "entry": workspace["default_entry"],
             }
         )
-        return {"schema_version": 1, "profile": profile, "dry_run": dry_run, "actions": actions}
+        return {
+            "schema_version": 1,
+            "profile": profile,
+            "dry_run": dry_run,
+            "actions": actions,
+        }
 
     def validate_config(self) -> dict[str, Any]:
         tools = load_yaml(self.config / "tools.yaml")
         toolchains = load_yaml(self.config / "toolchains.yaml")
         validate(tools, self.config / "tools.schema.json", "tool installer manifest")
-        validate(toolchains, self.config / "toolchains.schema.json", "toolchain manifest")
+        validate(
+            toolchains, self.config / "toolchains.schema.json", "toolchain manifest"
+        )
+        data = DataManager(self.paths).validate_config()
         known = set(tools["installers"])
         for name, profile in tools["profiles"].items():
             missing = (set(profile["required"]) | set(profile["optional"])) - known
@@ -105,7 +133,11 @@ class RuntimeManager:
                 raise ValidationError(
                     f"tool profile {name} references unknown installers: {', '.join(sorted(missing))}"
                 )
-        return {"tool_profiles": sorted(tools["profiles"]), "toolchains": sorted(toolchains["toolchains"])}
+        return {
+            "tool_profiles": sorted(tools["profiles"]),
+            "toolchains": sorted(toolchains["toolchains"]),
+            "data": data,
+        }
 
     def _run(
         self,
@@ -124,8 +156,14 @@ class RuntimeManager:
                 check=True,
                 stdout=sys.stderr,
             )
-        except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
-            raise CommandError(f"command failed: {shlex.join(command)}: {error}") from error
+        except (
+            OSError,
+            subprocess.CalledProcessError,
+            subprocess.TimeoutExpired,
+        ) as error:
+            raise CommandError(
+                f"command failed: {shlex.join(command)}: {error}"
+            ) from error
 
     def _python_runtime(self, dry_run: bool) -> dict[str, Any]:
         python = self.paths.venv / "bin" / "python"
@@ -133,9 +171,21 @@ class RuntimeManager:
         stamp = self.paths.runtime / "python.stamp"
         digest = self._digest_files([requirements, self.paths.root / "pyproject.toml"])
         if dry_run:
-            return {"component": "python-runtime", "state": "planned", "path": str(python)}
-        if python.is_file() and stamp.is_file() and stamp.read_text(encoding="utf-8").strip() == digest:
-            return {"component": "python-runtime", "state": "ready", "path": str(python)}
+            return {
+                "component": "python-runtime",
+                "state": "planned",
+                "path": str(python),
+            }
+        if (
+            python.is_file()
+            and stamp.is_file()
+            and stamp.read_text(encoding="utf-8").strip() == digest
+        ):
+            return {
+                "component": "python-runtime",
+                "state": "ready",
+                "path": str(python),
+            }
         if not python.is_file():
             self._run([sys.executable, "-m", "venv", str(self.paths.venv)])
         self._run(
@@ -145,11 +195,22 @@ class RuntimeManager:
                 "pip",
                 "install",
                 "--disable-pip-version-check",
+                "--require-hashes",
                 "-r",
                 str(requirements),
             ]
         )
-        self._run([str(python), "-m", "pip", "install", "--no-deps", "-e", str(self.paths.root)])
+        self._run(
+            [
+                str(python),
+                "-m",
+                "pip",
+                "install",
+                "--no-deps",
+                "-e",
+                str(self.paths.root),
+            ]
+        )
         atomic_write(stamp, digest + "\n")
         return {"component": "python-runtime", "state": "ready", "path": str(python)}
 
@@ -196,6 +257,7 @@ class RuntimeManager:
         for candidate in self.available_npm_registries(setting):
             attempted.append(candidate)
             npm_env = dict(os.environ)
+            npm_env["PATH"] = self.paths.runtime_path()
             npm_env["NPM_CONFIG_REGISTRY"] = candidate
             npm_env["npm_config_registry"] = candidate
             try:
@@ -336,7 +398,10 @@ class RuntimeManager:
         if not archive.is_file() or self._sha256(archive) != file_spec["sha256"]:
             temporary = archive.with_suffix(archive.suffix + ".part")
             try:
-                with urlopen(file_spec["url"], timeout=120) as response, temporary.open("wb") as handle:
+                with (
+                    urlopen(file_spec["url"], timeout=120) as response,
+                    temporary.open("wb") as handle,
+                ):
                     shutil.copyfileobj(response, handle)
                 if self._sha256(temporary) != file_spec["sha256"]:
                     raise CommandError(f"checksum mismatch for {file_spec['archive']}")
@@ -346,7 +411,9 @@ class RuntimeManager:
                     temporary.unlink()
         target = toolchains / f"{name}-{config['version']}-{platform.machine()}"
         if not target.is_dir():
-            with tempfile.TemporaryDirectory(prefix=f"{name}-extract-", dir=toolchains) as temporary_dir:
+            with tempfile.TemporaryDirectory(
+                prefix=f"{name}-extract-", dir=toolchains
+            ) as temporary_dir:
                 temporary_path = Path(temporary_dir)
                 with tarfile.open(archive) as handle:
                     self._safe_extract(handle, temporary_path)
@@ -359,7 +426,9 @@ class RuntimeManager:
         replacement.symlink_to(target.name, target_is_directory=True)
         os.replace(replacement, current)
 
-    def _toolchain_version_ready(self, name: str, command: str, config: dict[str, Any]) -> bool:
+    def _toolchain_version_ready(
+        self, name: str, command: str, config: dict[str, Any]
+    ) -> bool:
         try:
             completed = subprocess.run(
                 [command, "--version" if name == "node" else "version"],
@@ -376,7 +445,11 @@ class RuntimeManager:
             return False
         major, minor = int(match.group(1)), int(match.group(2))
         if name == "node":
-            return major >= int(config["minimum_major"])
+            return (
+                int(config["minimum_major"])
+                <= major
+                <= int(config.get("maximum_major", config["minimum_major"]))
+            )
         minimum = tuple(int(item) for item in str(config["minimum"]).split("."))
         return (major, minor) >= minimum
 
@@ -391,18 +464,63 @@ class RuntimeManager:
     @staticmethod
     def _safe_extract(archive: tarfile.TarFile, destination: Path) -> None:
         base = destination.resolve()
+        seen: set[Path] = set()
+        links: set[Path] = set()
         for member in archive.getmembers():
             if member.isdev() or member.isfifo():
                 raise CommandError(f"archive contains a special file: {member.name}")
-            target = (destination / member.name).resolve()
+            member_path = Path(member.name)
+            if member_path.is_absolute() or ".." in member_path.parts:
+                raise CommandError(f"archive path escapes destination: {member.name}")
+            normalized = Path(
+                *[part for part in member_path.parts if part not in {"", "."}]
+            )
+            if normalized in seen:
+                raise CommandError(f"archive contains a duplicate path: {member.name}")
+            seen.add(normalized)
+            target = (destination / normalized).resolve()
             try:
                 target.relative_to(base)
             except ValueError as error:
-                raise CommandError(f"archive path escapes destination: {member.name}") from error
-            if member.issym() or member.islnk():
+                raise CommandError(
+                    f"archive path escapes destination: {member.name}"
+                ) from error
+            if member.issym():
                 link_target = Path(member.linkname)
-                if link_target.is_absolute() or ".." in link_target.parts:
-                    raise CommandError(f"archive link escapes destination: {member.name}")
+                resolved_link = (target.parent / link_target).resolve()
+                if link_target.is_absolute():
+                    raise CommandError(
+                        f"archive link escapes destination: {member.name}"
+                    )
+                try:
+                    resolved_link.relative_to(base)
+                except ValueError as error:
+                    raise CommandError(
+                        f"archive link escapes destination: {member.name}"
+                    ) from error
+                links.add(normalized)
+            elif member.islnk():
+                link_target = Path(member.linkname)
+                resolved_link = (destination / link_target).resolve()
+                if link_target.is_absolute():
+                    raise CommandError(
+                        f"archive link escapes destination: {member.name}"
+                    )
+                try:
+                    resolved_link.relative_to(base)
+                except ValueError as error:
+                    raise CommandError(
+                        f"archive link escapes destination: {member.name}"
+                    ) from error
+                links.add(normalized)
+        for member in archive.getmembers():
+            member_path = Path(
+                *[part for part in Path(member.name).parts if part not in {"", "."}]
+            )
+            if any(
+                parent in links for parent in member_path.parents if parent != Path(".")
+            ):
+                raise CommandError(f"archive path traverses a link: {member.name}")
         archive.extractall(destination)
 
     @staticmethod
@@ -411,7 +529,9 @@ class RuntimeManager:
         for member in archive.infolist():
             member_path = Path(member.filename)
             if member_path.is_absolute() or ".." in member_path.parts:
-                raise CommandError(f"archive path escapes destination: {member.filename}")
+                raise CommandError(
+                    f"archive path escapes destination: {member.filename}"
+                )
             target = (destination / member.filename).resolve()
             try:
                 target.relative_to(base)
@@ -421,7 +541,9 @@ class RuntimeManager:
                 ) from error
             unix_mode = member.external_attr >> 16
             if unix_mode and (unix_mode & 0o170000) == 0o120000:
-                raise CommandError(f"archive contains a symbolic link: {member.filename}")
+                raise CommandError(
+                    f"archive contains a symbolic link: {member.filename}"
+                )
         archive.extractall(destination)
 
     def _install_wrappers(self, dry_run: bool) -> list[dict[str, Any]]:
@@ -442,7 +564,10 @@ class RuntimeManager:
             destination = local_bin / name
             if not dry_run:
                 source.chmod(source.stat().st_mode | 0o755)
-                if destination.is_symlink() and destination.resolve() == source.resolve():
+                if (
+                    destination.is_symlink()
+                    and destination.resolve() == source.resolve()
+                ):
                     state = "ready"
                 elif destination.exists() or destination.is_symlink():
                     state = "conflict"
@@ -452,17 +577,24 @@ class RuntimeManager:
             else:
                 state = "planned"
             results.append(
-                {"component": f"wrapper:{name}", "state": state, "path": str(destination)}
+                {
+                    "component": f"wrapper:{name}",
+                    "state": state,
+                    "path": str(destination),
+                }
             )
         pentest = self.paths.runtime_bin / "pentest-python"
         content = (
-            "#!/usr/bin/env sh\n"
-            f'exec "{self.paths.venv / "bin" / "python"}" "$@"\n'
+            f'#!/usr/bin/env sh\nexec "{self.paths.venv / "bin" / "python"}" "$@"\n'
         )
         if not dry_run:
             atomic_write(pentest, content, 0o755)
         results.append(
-            {"component": "wrapper:pentest-python", "state": "planned" if dry_run else "ready", "path": str(pentest)}
+            {
+                "component": "wrapper:pentest-python",
+                "state": "planned" if dry_run else "ready",
+                "path": str(pentest),
+            }
         )
         return results
 
@@ -485,10 +617,7 @@ class RuntimeManager:
         lines = [
             "# Generated by bb-stack. Source this file from your shell rc.",
             "# config.env was parsed as literal data; this file never sources it.",
-            *(
-                f"export {key}={shlex.quote(value)}"
-                for key, value in effective.items()
-            ),
+            *(f"export {key}={shlex.quote(value)}" for key, value in effective.items()),
         ]
         if self.paths.claude_config_explicit:
             lines.append(
@@ -499,6 +628,7 @@ class RuntimeManager:
         lines.extend(
             [
                 f"export BB_CONFIG_HOME={shlex.quote(str(self.paths.config_home))}",
+                f"export BB_DATA_ROOT={shlex.quote(str(self.paths.data_root))}",
                 f"export BB_STACK_ROOT={shlex.quote(str(self.paths.root))}",
                 f"export BB_WORK_ROOT={shlex.quote(str(self.paths.work_root))}",
                 f"export PATH={shlex.quote(self.paths.runtime_path(effective['BB_EXTRA_PATH']))}",
@@ -615,18 +745,23 @@ class RuntimeManager:
                 continue
             self._install_tool(name, expanded, env)
             if not self._tool_ready(expanded, env):
-                raise CommandError(f"tool installer completed but check still fails: {name}")
+                raise CommandError(
+                    f"tool installer completed but check still fails: {name}"
+                )
             results.append({"component": f"tool:{name}", "state": "installed"})
 
         if apt_pending:
             if dry_run:
                 results.extend(
-                    {"component": f"tool:{name}", "state": "planned"} for name in apt_names
+                    {"component": f"tool:{name}", "state": "planned"}
+                    for name in apt_names
                 )
             else:
                 apt = shutil.which("apt-get", path=env["PATH"])
                 if not apt:
-                    raise CommandError("apt-get is unavailable; install system packages manually")
+                    raise CommandError(
+                        "apt-get is unavailable; install system packages manually"
+                    )
                 prefix = [] if os.geteuid() == 0 else ["sudo"]
                 self._run([*prefix, apt, "update"], env=env)
                 self._run(
@@ -666,12 +801,16 @@ class RuntimeManager:
                     stderr=subprocess.DEVNULL,
                     check=False,
                 )
-                configured = {line.strip() for line in sparse.stdout.splitlines() if line.strip()}
+                configured = {
+                    line.strip() for line in sparse.stdout.splitlines() if line.strip()
+                }
                 return sparse.returncode == 0 and configured == set(sparse_paths)
             return True
         if spec["kind"] == "service":
             try:
-                with socket.create_connection((spec["host"], int(spec["port"])), timeout=0.4):
+                with socket.create_connection(
+                    (spec["host"], int(spec["port"])), timeout=0.4
+                ):
                     return True
             except OSError:
                 return False
@@ -687,11 +826,15 @@ class RuntimeManager:
                 ):
                     return False
             return True
-        commands_ready = all(shutil.which(item, path=env["PATH"]) for item in spec.get("checks", []))
+        commands_ready = all(
+            shutil.which(item, path=env["PATH"]) for item in spec.get("checks", [])
+        )
         post_check = spec.get("post_check")
         return commands_ready and (not post_check or Path(post_check).exists())
 
-    def _install_tool(self, name: str, spec: dict[str, Any], env: dict[str, str]) -> None:
+    def _install_tool(
+        self, name: str, spec: dict[str, Any], env: dict[str, str]
+    ) -> None:
         kind = spec["kind"]
         if kind == "go":
             go = shutil.which("go", path=env["PATH"])
@@ -709,13 +852,17 @@ class RuntimeManager:
                 self._run([*prefix, apt, "install", "-y", "pipx"], env=env)
                 pipx = shutil.which("pipx", path=env["PATH"])
                 if not pipx:
-                    raise CommandError(f"pipx installation did not expose its command for {name}")
+                    raise CommandError(
+                        f"pipx installation did not expose its command for {name}"
+                    )
             self._run([pipx, "install", spec["package"]], env=env)
         elif kind == "git-data":
             self._install_git_data(name, spec, env)
         elif kind == "archive-binary":
             if platform.system() != "Linux" or platform.machine() not in spec["files"]:
-                raise CommandError(f"archive installer for {name} supports Linux x86_64/aarch64")
+                raise CommandError(
+                    f"archive installer for {name} supports Linux x86_64/aarch64"
+                )
             file_spec = spec["files"][platform.machine()]
             cache = self.paths.runtime / "cache"
             cache.mkdir(parents=True, exist_ok=True)
@@ -723,23 +870,34 @@ class RuntimeManager:
             if not archive.is_file() or self._sha256(archive) != file_spec["sha256"]:
                 temporary = archive.with_suffix(archive.suffix + ".part")
                 try:
-                    with urlopen(file_spec["url"], timeout=120) as response, temporary.open("wb") as handle:
+                    with (
+                        urlopen(file_spec["url"], timeout=120) as response,
+                        temporary.open("wb") as handle,
+                    ):
                         shutil.copyfileobj(response, handle)
                     if self._sha256(temporary) != file_spec["sha256"]:
-                        raise CommandError(f"checksum mismatch for {file_spec['archive']}")
+                        raise CommandError(
+                            f"checksum mismatch for {file_spec['archive']}"
+                        )
                     os.replace(temporary, archive)
                 finally:
                     if temporary.exists():
                         temporary.unlink()
-            with tempfile.TemporaryDirectory(prefix=f"{name}-extract-", dir=self.paths.runtime) as temporary_dir:
+            with tempfile.TemporaryDirectory(
+                prefix=f"{name}-extract-", dir=self.paths.runtime
+            ) as temporary_dir:
                 temporary_path = Path(temporary_dir)
                 with tarfile.open(archive) as handle:
                     self._safe_extract(handle, temporary_path)
                 candidates = [
-                    path for path in temporary_path.rglob(spec["binary"]) if path.is_file()
+                    path
+                    for path in temporary_path.rglob(spec["binary"])
+                    if path.is_file()
                 ]
                 if len(candidates) != 1:
-                    raise CommandError(f"archive did not contain one {spec['binary']} binary")
+                    raise CommandError(
+                        f"archive did not contain one {spec['binary']} binary"
+                    )
                 destination = self.paths.runtime_bin / spec["binary"]
                 shutil.copy2(candidates[0], destination)
                 destination.chmod(0o755)
@@ -788,10 +946,15 @@ class RuntimeManager:
             prefix = [] if os.geteuid() == 0 else ["sudo"]
             self._run([*prefix, apt, "install", "-y", str(archive)], env=env)
         elif kind == "service":
-            raise CommandError(f"service {name} is not running; configure it outside bootstrap")
+            raise CommandError(
+                f"service {name} is not running; configure it outside bootstrap"
+            )
         else:
             raise CommandError(f"unsupported installer kind for {name}: {kind}")
-        if spec.get("post_install") and not Path(str(spec.get("post_check", ""))).exists():
+        if (
+            spec.get("post_install")
+            and not Path(str(spec.get("post_check", ""))).exists()
+        ):
             self._run(list(spec["post_install"]), env=env)
 
     def _install_git_data(
@@ -804,9 +967,7 @@ class RuntimeManager:
 
         if destination.exists():
             marker_repository = (
-                marker.read_text(encoding="utf-8").strip()
-                if marker.is_file()
-                else None
+                marker.read_text(encoding="utf-8").strip() if marker.is_file() else None
             )
             if marker_repository != repository:
                 raise CommandError(
@@ -902,7 +1063,9 @@ class RuntimeManager:
 
     def _download_tool_archive(self, name: str, spec: dict[str, Any]) -> Path:
         if platform.system() != "Linux" or platform.machine() not in spec["files"]:
-            raise CommandError(f"archive installer for {name} supports Linux x86_64/aarch64")
+            raise CommandError(
+                f"archive installer for {name} supports Linux x86_64/aarch64"
+            )
         file_spec = spec["files"][platform.machine()]
         cache = self.paths.runtime / "cache"
         cache.mkdir(parents=True, exist_ok=True)
@@ -911,9 +1074,10 @@ class RuntimeManager:
             return archive
         temporary = archive.with_suffix(archive.suffix + ".part")
         try:
-            with urlopen(file_spec["url"], timeout=600) as response, temporary.open(
-                "wb"
-            ) as handle:
+            with (
+                urlopen(file_spec["url"], timeout=600) as response,
+                temporary.open("wb") as handle,
+            ):
                 shutil.copyfileobj(response, handle)
             if self._sha256(temporary) != file_spec["sha256"]:
                 raise CommandError(f"checksum mismatch for {file_spec['archive']}")
@@ -933,15 +1097,37 @@ class RuntimeManager:
         dry_run: bool,
         include_high_context_mcp: bool = False,
     ) -> dict[str, Any]:
+        profile_registry = ProfileRegistry(self.paths)
+        profile_definition = profile_registry.load(profile_name)
+        protected = profile_definition["workflow"] in {"bug-bounty", "assessment"}
+        engagement_state: dict[str, Any] | None = None
         if engagement is not None:
             engagement = self.paths.engagement(engagement)
+            engagement_state = EngagementManager(self.paths).validate(engagement)
+            if engagement_state["lifecycle"] != "active":
+                raise CommandError(
+                    f"Engagement {engagement_state['slug']} is "
+                    f"{engagement_state['lifecycle']}; resume or reopen it before launch"
+                )
+            if protected and engagement_state["authorization"]["status"] != "verified":
+                raise CommandError(
+                    "active testing requires verified authorization; run "
+                    f"bb-stack engagement authorize {engagement_state['slug']} "
+                    "--status verified --source DESCRIPTION"
+                )
             cwd = engagement
             artifact_root = engagement / "artifacts"
         else:
+            if protected:
+                raise CommandError(
+                    f"{profile_definition['workflow']} launch requires an Engagement "
+                    "with verified authorization"
+                )
             cwd = Path.cwd().resolve()
             artifact_root = cwd / ".bb-stack" / "artifacts"
-            artifact_root.mkdir(parents=True, exist_ok=True)
-        render = ProfileRegistry(self.paths).render(
+            if not dry_run:
+                artifact_root.mkdir(parents=True, exist_ok=True)
+        render = profile_registry.render(
             profile_name, platform=platform, engagement=engagement
         )
         skill_registry = SkillRegistry(self.paths)
@@ -961,6 +1147,11 @@ class RuntimeManager:
         output_dir = Path(render.output_file).parent
         mcp_path = output_dir / "mcp.json"
         capability_registry = CapabilityRegistry(self.paths)
+        side_effects = capability_registry.side_effects(render.l5_profile)
+        data = DataManager(self.paths).ensure_profile(
+            render.l5_profile,
+            dry_run=dry_run,
+        )
         capability_report = capability_registry.doctor(render.l5_profile, artifact_root)
         if not capability_report["ready"]:
             raise CommandError(
@@ -968,6 +1159,12 @@ class RuntimeManager:
                 + ", ".join(capability_report["missing_required"])
                 + f"; run bb-stack doctor --profile {render.l5_profile}"
             )
+        if render.l5_profile == "browser-js" and not dry_run:
+            if engagement is None:
+                raise CommandError("Browser-JS launch requires an Engagement")
+            from .browser import BrowserRuntimeManager
+
+            BrowserRuntimeManager(self.paths).start(engagement)
         mcp = capability_registry.render_mcp(
             render.l5_profile,
             mcp_path,
@@ -996,17 +1193,18 @@ class RuntimeManager:
             "cwd": str(cwd),
             "command": command,
             "mcp_servers": sorted(mcp["mcpServers"]),
+            "data": data,
+            "side_effects": side_effects,
         }
         if dry_run:
             return result
-        if render.l5_profile == "browser-js":
-            if engagement is None:
-                raise CommandError("Browser-JS launch requires an Engagement")
-            from .browser import BrowserRuntimeManager
-
-            BrowserRuntimeManager(self.paths).start(engagement)
         env = self.paths.environment(artifact_root)
         env["PATH"] = self.paths.runtime_path()
+        env["BB_SELECTED_SIDE_EFFECTS"] = ",".join(side_effects)
+        if engagement is not None and engagement_state is not None:
+            env["BB_ENGAGEMENT_ROOT"] = str(engagement)
+            env["BB_ENGAGEMENT_WORKFLOW"] = engagement_state["workflow"]
+            env["BB_AUTHORIZATION_STATUS"] = engagement_state["authorization"]["status"]
         os.chdir(cwd)
         os.execvpe(command[0], command, env)
         raise AssertionError("os.execvpe returned unexpectedly")
@@ -1026,6 +1224,7 @@ class RuntimeManager:
                 "engagements_root": str(self.paths.engagements_root),
                 "config_home": str(self.paths.config_home),
                 "runtime": str(self.paths.runtime),
+                "data_root": str(self.paths.data_root),
             },
             "env_file": self.paths.env_file.is_file(),
             "venv": (self.paths.venv / "bin" / "python").is_file(),

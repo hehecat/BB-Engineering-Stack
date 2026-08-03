@@ -15,7 +15,7 @@ nmap -sV -sC -p- -T4 target.com -oN nmap.txt &
 whatweb -a 3 https://target.com -q --log-json whatweb.json &
 
 # Content discovery
-ffuf -u https://target.com/FUZZ -w /usr/share/wordlists/dirb/common.txt \
+ffuf -u https://target.com/FUZZ -w "${BB_DATA_ROOT}/seclists/Discovery/Web-Content/common.txt" \
      -mc 200,204,301,302,307,401,403 -o ffuf.json -of json &
 
 # Nuclei exposure / panel / CVE sweep against the root

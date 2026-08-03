@@ -2,12 +2,13 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path
+import subprocess
+import tarfile
 import tempfile
 import unittest
-from unittest.mock import patch
 import zipfile
-
+from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
 os.environ["BB_STACK_ROOT"] = str(ROOT)
@@ -15,6 +16,7 @@ os.environ["BB_STACK_ROOT"] = str(ROOT)
 from bb_stack.errors import CommandError
 from bb_stack.paths import StackPaths
 from bb_stack.runtime import RuntimeManager
+from test_support import isolated_stack_source
 
 
 class RuntimeInstallerTests(unittest.TestCase):
@@ -49,13 +51,13 @@ class RuntimeInstallerTests(unittest.TestCase):
             "executables": {"demo": "bin/demo"},
             "files": {},
         }
-        with patch.object(
-            self.manager, "_download_tool_archive", return_value=archive
-        ):
+        with patch.object(self.manager, "_download_tool_archive", return_value=archive):
             self.manager._install_tool("demo", spec, {"PATH": "/usr/bin:/bin"})
         wrapper = self.paths.runtime_bin / "demo"
         self.assertTrue(wrapper.is_symlink())
-        self.assertTrue(self.manager._tool_ready(spec, {"PATH": self.paths.runtime_path()}))
+        self.assertTrue(
+            self.manager._tool_ready(spec, {"PATH": self.paths.runtime_path()})
+        )
 
     def test_zip_traversal_is_rejected(self) -> None:
         archive = Path(self.temporary.name) / "escape.zip"
@@ -63,10 +65,45 @@ class RuntimeInstallerTests(unittest.TestCase):
             handle.writestr("../escape", "unexpected")
         destination = Path(self.temporary.name) / "extract"
         destination.mkdir()
-        with zipfile.ZipFile(archive) as handle:
-            with self.assertRaises(CommandError):
-                RuntimeManager._safe_extract_zip(handle, destination)
+        with zipfile.ZipFile(archive) as handle, self.assertRaises(CommandError):
+            RuntimeManager._safe_extract_zip(handle, destination)
         self.assertFalse((Path(self.temporary.name) / "escape").exists())
+
+    def test_tar_relative_symlink_inside_destination_is_allowed(self) -> None:
+        archive = Path(self.temporary.name) / "node.tar"
+        payload = b"#!/usr/bin/env node\n"
+        with tarfile.open(archive, "w") as handle:
+            target = tarfile.TarInfo("node/lib/node_modules/npm/bin/npm-cli.js")
+            target.size = len(payload)
+            handle.addfile(target, __import__("io").BytesIO(payload))
+            link = tarfile.TarInfo("node/bin/npm")
+            link.type = tarfile.SYMTYPE
+            link.linkname = "../lib/node_modules/npm/bin/npm-cli.js"
+            handle.addfile(link)
+
+        destination = Path(self.temporary.name) / "node-extract"
+        destination.mkdir()
+        with tarfile.open(archive) as handle:
+            RuntimeManager._safe_extract(handle, destination)
+
+        npm = destination / "node" / "bin" / "npm"
+        self.assertTrue(npm.is_symlink())
+        self.assertEqual(
+            npm.resolve(),
+            (destination / "node/lib/node_modules/npm/bin/npm-cli.js").resolve(),
+        )
+
+    def test_tar_symlink_outside_destination_is_rejected(self) -> None:
+        archive = Path(self.temporary.name) / "escape.tar"
+        with tarfile.open(archive, "w") as handle:
+            link = tarfile.TarInfo("node/bin/npm")
+            link.type = tarfile.SYMTYPE
+            link.linkname = "../../../outside"
+            handle.addfile(link)
+        destination = Path(self.temporary.name) / "tar-extract"
+        destination.mkdir()
+        with tarfile.open(archive) as handle, self.assertRaises(CommandError):
+            RuntimeManager._safe_extract(handle, destination)
 
     def test_deb_installer_uses_pinned_local_archive(self) -> None:
         archive = Path(self.temporary.name) / "tool.deb"
@@ -75,13 +112,36 @@ class RuntimeInstallerTests(unittest.TestCase):
         with (
             patch.object(self.manager, "_download_tool_archive", return_value=archive),
             patch("bb_stack.runtime.shutil.which", return_value="/usr/bin/apt-get"),
+            patch("bb_stack.runtime.os.geteuid", return_value=1000),
             patch.object(self.manager, "_run") as run,
         ):
             self.manager._install_tool("demo", spec, {"PATH": "/usr/bin:/bin"})
         run.assert_called_once_with(
-            ["/usr/bin/apt-get", "install", "-y", str(archive)],
+            ["sudo", "/usr/bin/apt-get", "install", "-y", str(archive)],
             env={"PATH": "/usr/bin:/bin"},
         )
+
+    def test_bootstrap_dry_run_has_no_persistent_writes(self) -> None:
+        base = Path(self.temporary.name) / "dry-run"
+        stack = isolated_stack_source(ROOT, base / "stack")
+        paths = StackPaths(
+            stack,
+            base / "home",
+            base / "work",
+            base / "config",
+            base / "home" / ".claude",
+        )
+        result = RuntimeManager(paths).bootstrap(
+            "minimal",
+            skip_tools=True,
+            skip_node=True,
+            skip_skills=True,
+            dry_run=True,
+        )
+        self.assertTrue(result["dry_run"])
+        self.assertFalse(paths.runtime.exists())
+        self.assertFalse(paths.work_root.exists())
+        self.assertFalse(paths.config_home.exists())
 
     def test_auto_npm_registry_prefers_official_then_falls_back(self) -> None:
         self.assertEqual(
@@ -98,9 +158,7 @@ class RuntimeInstallerTests(unittest.TestCase):
         with patch.object(
             self.manager,
             "_npm_registry_latency",
-            side_effect=lambda value: (
-                0.1 if value.endswith("npmmirror.com") else 0.5
-            ),
+            side_effect=lambda value: 0.1 if value.endswith("npmmirror.com") else 0.5,
         ):
             self.assertEqual(
                 self.manager.available_npm_registries("auto"),
@@ -112,13 +170,32 @@ class RuntimeInstallerTests(unittest.TestCase):
         with patch.object(
             self.manager,
             "_npm_registry_latency",
-            side_effect=lambda value: (
-                0.1 if value.endswith("npmmirror.com") else None
-            ),
+            side_effect=lambda value: 0.1 if value.endswith("npmmirror.com") else None,
         ):
             self.assertEqual(
                 self.manager.resolve_npm_registry(),
                 "https://registry.npmmirror.com",
+            )
+
+    def test_node_toolchain_rejects_unsupported_major(self) -> None:
+        config = {"minimum_major": 22, "maximum_major": 22}
+        with patch(
+            "bb_stack.runtime.subprocess.run",
+            return_value=subprocess.CompletedProcess(
+                ["node", "--version"], 0, "v24.13.1\n"
+            ),
+        ):
+            self.assertFalse(
+                self.manager._toolchain_version_ready("node", "/usr/bin/node", config)
+            )
+        with patch(
+            "bb_stack.runtime.subprocess.run",
+            return_value=subprocess.CompletedProcess(
+                ["node", "--version"], 0, "v22.23.2\n"
+            ),
+        ):
+            self.assertTrue(
+                self.manager._toolchain_version_ready("node", "/usr/bin/node", config)
             )
 
     def test_git_data_retries_and_cleans_partial_clone(self) -> None:
@@ -156,9 +233,7 @@ class RuntimeInstallerTests(unittest.TestCase):
         self.assertEqual(fetch_timeouts, [45, 45])
         sleep.assert_called_once_with(2)
         self.assertTrue((destination / ".git").is_dir())
-        self.assertFalse(
-            destination.with_name(".fixture.bb-stack-installing").exists()
-        )
+        self.assertFalse(destination.with_name(".fixture.bb-stack-installing").exists())
 
     def test_git_data_preserves_unknown_existing_directory(self) -> None:
         destination = self.paths.runtime / "data" / "fixture"

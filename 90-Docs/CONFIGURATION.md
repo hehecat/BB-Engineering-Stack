@@ -59,6 +59,10 @@ Generated `$BB_CONFIG_HOME/env.sh` preserves these roots. Do not place them in
 `config.env`; bootstrap removes managed root assignments from that file. Check
 the active values with `bb-stack status` or `bb-stack paths`.
 
+`BB_DATA_ROOT` is derived from `$BB_STACK_ROOT/.runtime/data` and is exported
+to Claude workspace settings and strict launches. Do not set it in
+`config.env`; use `bb-stack data path DATASET` to resolve a managed repository.
+
 To select a different work root later without reinstalling tools:
 
 ```bash

@@ -1156,11 +1156,11 @@ git-dumper https://target.com/.git/ output/
 ### Wordlists
 
 ```bash
-# SecLists
-/SecLists/Discovery/Web-Content/common.txt
-/SecLists/Fuzzing/XSS/
-/SecLists/Fuzzing/SQLi/
-/SecLists/Passwords/Default-Credentials/
+# Managed data assets
+${BB_DATA_ROOT}/seclists/Discovery/Web-Content/common.txt
+${BB_DATA_ROOT}/seclists/Fuzzing/XSS/
+${BB_DATA_ROOT}/seclists/Passwords/Default-Credentials/
+${BB_DATA_ROOT}/payloads-all-the-things/SQL Injection/
 
 # Custom patterns from HackerOne
 - API endpoints from disclosed reports

@@ -1,0 +1,149 @@
+schema_version: 1
+
+datasets:
+  seclists:
+    repository: https://github.com/danielmiessler/SecLists.git
+    revision: bfa9146e6d9d3ebb3d5d4a8096c60182da009204
+    branch: master
+    destination: "${BB_DATA_ROOT}/seclists"
+    license: MIT
+    network_timeout_seconds: 600
+    retry_attempts: 3
+    bundles:
+      web:
+        paths: [Discovery/Web-Content]
+        sentinels: [Discovery/Web-Content/common.txt]
+      dns:
+        paths: [Discovery/DNS]
+        sentinels: [Discovery/DNS/README.md]
+      fuzzing:
+        paths: [Fuzzing/LFI, Fuzzing/XSS]
+        sentinels: [Fuzzing/LFI/LFI-Jhaddix.txt, Fuzzing/XSS/README.md]
+      credentials:
+        paths: [Passwords/Common-Credentials, Passwords/Default-Credentials]
+        sentinels:
+          - Passwords/Common-Credentials/10k-most-common.txt
+          - Passwords/Default-Credentials/default-passwords.csv
+      usernames:
+        paths: [Usernames]
+        sentinels: [Usernames/top-usernames-shortlist.txt]
+      llm:
+        paths: [Ai/LLM_Testing]
+        sentinels: [Ai/LLM_Testing/README.md]
+      complete:
+        paths: ['.']
+        sentinels:
+          - Discovery/Web-Content/common.txt
+          - Discovery/DNS/README.md
+          - Fuzzing/LFI/LFI-Jhaddix.txt
+          - Fuzzing/XSS/README.md
+          - Passwords/Common-Credentials/10k-most-common.txt
+          - Passwords/Default-Credentials/default-passwords.csv
+          - Usernames/top-usernames-shortlist.txt
+          - Ai/LLM_Testing/README.md
+
+  payloads-all-the-things:
+    repository: https://github.com/swisskyrepo/PayloadsAllTheThings.git
+    revision: 83630e74eb354db306bddd4e665f00e662c18f97
+    branch: master
+    destination: "${BB_DATA_ROOT}/payloads-all-the-things"
+    license: MIT
+    network_timeout_seconds: 600
+    retry_attempts: 3
+    bundles:
+      web-core:
+        paths:
+          - Account Takeover
+          - Directory Traversal
+          - File Inclusion
+          - Insecure Deserialization
+          - JSON Web Token
+          - OAuth Misconfiguration
+          - SQL Injection
+          - Server Side Request Forgery
+          - Server Side Template Injection
+          - Upload Insecure Files
+          - XSS Injection
+        sentinels:
+          - Account Takeover/README.md
+          - File Inclusion/README.md
+          - SQL Injection/README.md
+          - Server Side Request Forgery/README.md
+          - XSS Injection/README.md
+      complete:
+        paths: ['.']
+        sentinels:
+          - Account Takeover/README.md
+          - Insecure Deserialization/README.md
+          - JSON Web Token/README.md
+          - SQL Injection/README.md
+          - Server Side Request Forgery/README.md
+          - Server Side Template Injection/README.md
+          - Upload Insecure Files/README.md
+          - XSS Injection/README.md
+
+  trickest-wordlists:
+    repository: https://github.com/trickest/wordlists.git
+    revision: 673ce83a611bb564c4a9c2f1da1969f77a7004c1
+    branch: main
+    destination: "${BB_DATA_ROOT}/trickest-wordlists"
+    license: MIT
+    network_timeout_seconds: 600
+    retry_attempts: 3
+    bundles:
+      recon:
+        paths: [cloud, inventory, robots, technologies]
+        sentinels:
+          - cloud/subdomains.txt
+          - inventory/subdomains.txt
+          - robots/top-100.txt
+          - technologies/tomcat.txt
+      complete:
+        paths: ['.']
+        sentinels:
+          - cloud/subdomains.txt
+          - inventory/subdomains.txt
+          - robots/top-100.txt
+          - technologies/tomcat.txt
+
+profiles:
+  minimal: {required: [], optional: []}
+  ctf-web:
+    required:
+      - {dataset: seclists, bundles: [web, fuzzing, credentials]}
+      - {dataset: payloads-all-the-things, bundles: [web-core]}
+    optional:
+      - {dataset: trickest-wordlists, bundles: [recon]}
+  web:
+    required:
+      - {dataset: seclists, bundles: [web, dns, fuzzing, credentials, usernames]}
+      - {dataset: payloads-all-the-things, bundles: [web-core]}
+      - {dataset: trickest-wordlists, bundles: [recon]}
+    optional: []
+  android: {required: [], optional: []}
+  reverse: {required: [], optional: []}
+  browser-js: {required: [], optional: []}
+  assessment-web:
+    required:
+      - {dataset: seclists, bundles: [web, dns, fuzzing, credentials]}
+      - {dataset: payloads-all-the-things, bundles: [web-core]}
+    optional:
+      - {dataset: trickest-wordlists, bundles: [recon]}
+  assessment-android: {required: [], optional: []}
+  assessment-ios: {required: [], optional: []}
+  assessment-network:
+    required:
+      - {dataset: seclists, bundles: [dns, credentials, usernames]}
+      - {dataset: trickest-wordlists, bundles: [recon]}
+    optional: []
+  assessment-cloud:
+    required:
+      - {dataset: trickest-wordlists, bundles: [recon]}
+    optional: []
+  assessment-llm:
+    required:
+      - {dataset: seclists, bundles: [llm]}
+    optional: []
+  assessment-source: {required: [], optional: []}
+  analysis-android: {required: [], optional: []}
+  analysis-reverse: {required: [], optional: []}

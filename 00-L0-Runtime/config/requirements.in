@@ -1,0 +1,4 @@
+jsonschema[format]==4.25.1
+PyJWT==2.13.0
+PyYAML==6.0.2
+requests==2.33.0

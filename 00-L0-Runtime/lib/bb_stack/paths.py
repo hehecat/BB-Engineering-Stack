@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 import os
+from collections.abc import Mapping
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Mapping
 
 from .errors import StackError
 
@@ -29,21 +29,31 @@ class StackPaths:
     claude_config_explicit: bool = False
 
     @classmethod
-    def discover(cls) -> "StackPaths":
+    def discover(cls) -> StackPaths:
         home = Path(os.environ.get("HOME", str(Path.home()))).expanduser().resolve()
-        root = Path(os.environ.get("BB_STACK_ROOT", str(_module_root()))).expanduser().resolve()
+        root = (
+            Path(os.environ.get("BB_STACK_ROOT", str(_module_root())))
+            .expanduser()
+            .resolve()
+        )
         if not (root / "stack.yaml").is_file():
             raise StackError(f"BB_STACK_ROOT is not a stack source tree: {root}")
-        work_root = Path(
-            os.environ.get("BB_WORK_ROOT", str(home / "BB-Workspaces"))
-        ).expanduser().resolve()
-        config_home = Path(
-            os.environ.get("BB_CONFIG_HOME", str(home / ".config" / "bb-stack"))
-        ).expanduser().resolve()
+        work_root = (
+            Path(os.environ.get("BB_WORK_ROOT", str(home / "BB-Workspaces")))
+            .expanduser()
+            .resolve()
+        )
+        config_home = (
+            Path(os.environ.get("BB_CONFIG_HOME", str(home / ".config" / "bb-stack")))
+            .expanduser()
+            .resolve()
+        )
         claude_config_explicit = bool(os.environ.get("CLAUDE_CONFIG_DIR"))
-        claude_config_dir = Path(
-            os.environ.get("CLAUDE_CONFIG_DIR", str(home / ".claude"))
-        ).expanduser().resolve()
+        claude_config_dir = (
+            Path(os.environ.get("CLAUDE_CONFIG_DIR", str(home / ".claude")))
+            .expanduser()
+            .resolve()
+        )
         return cls(
             root,
             home,
@@ -60,6 +70,10 @@ class StackPaths:
     @property
     def runtime_bin(self) -> Path:
         return self.runtime / "bin"
+
+    @property
+    def data_root(self) -> Path:
+        return self.runtime / "data"
 
     @property
     def venv(self) -> Path:
@@ -85,6 +99,7 @@ class StackPaths:
                 "BB_STACK_ROOT": str(self.root),
                 "BB_WORK_ROOT": str(self.work_root),
                 "BB_CONFIG_HOME": str(self.config_home),
+                "BB_DATA_ROOT": str(self.data_root),
             }
         )
         if self.claude_config_explicit:
@@ -122,9 +137,7 @@ class StackPaths:
             Path("/bin"),
         ]
         extra = (
-            os.environ.get("BB_EXTRA_PATH", "")
-            if extra_path is None
-            else extra_path
+            os.environ.get("BB_EXTRA_PATH", "") if extra_path is None else extra_path
         ).split(os.pathsep)
         ordered: list[str] = []
         for entry in [str(path) for path in entries] + extra:
@@ -154,6 +167,7 @@ class StackPaths:
         for path in (
             self.runtime,
             self.runtime_bin,
+            self.data_root,
             self.config_home,
             self.generated,
             self.work_root,

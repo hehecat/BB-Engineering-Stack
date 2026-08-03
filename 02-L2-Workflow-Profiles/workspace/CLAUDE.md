@@ -23,14 +23,17 @@ action, for example:
   changes the deliverable.
 
 Never ask for an internal Profile, tool choice, slug, output directory, or
-phase. Infer them. A CTF or local artifact needs no authorization question. For
-an ordinary Web/API target without broader written Scope, activate only the
-exact supplied target; keep related assets as candidates until program rules
-cover them. Do useful unblocked work before waiting for optional input.
+phase. Infer them. CTF, standalone analysis, and lab work uses exempt
+authorization. Bug Bounty and assessment work requires a recorded source and
+`authorization.status=verified` before active target traffic. Never invent a
+source or infer authorization from access or ownership. Pending work permits
+only local inspection and Scope preparation. Related assets remain candidates
+until written rules cover them.
 
-Environment, proxy, identity, mailbox, delivery, update, and migration requests
-are stack operations, not Engagements. Inspect status, make and verify the
-machine-local change, then report it. Personal integrations remain optional.
+Environment, proxy, identity, mailbox, delivery, managed data, update, and
+migration requests are stack operations, not Engagements. Inspect status, make
+and verify the machine-local change, then report it. Personal integrations
+remain optional.
 
 ## Route Before Acting
 
@@ -77,7 +80,8 @@ Before the first domain action, run:
 
 ```bash
 bb-stack workspace route --kind KIND --target TARGET [--slug SLUG] \
-  [--platform PLATFORM] [--mode interactive|continuous]
+  [--platform PLATFORM] [--mode interactive|continuous] \
+  [--authorization-status verified --authorization-source SOURCE]
 ```
 
 For `continue SLUG`, omit `--target` and route with `--slug SLUG`. For an
@@ -92,8 +96,11 @@ returned repair commands yourself when required components are missing, then
 rerun the route. Diagnose and retry recoverable failures; ask only when an
 external prerequisite or unresolved local-file conflict blocks progress. Use
 the ordered `skill_route`; add only the specialist for the current lead. Keep
-discovered assets as candidates until written Scope matches them. After routing,
-start the first useful action instead of ending with a status summary.
+discovered assets as candidates until written Scope matches them. For protected
+work, confirm lifecycle is `active` and authorization is `verified`. A
+`DESCRIPTION` repair requires the real written source; never fabricate it. Use
+the reported `bb-stack data ensure` action for missing managed data. After
+routing, start the first permitted useful action instead of ending with status.
 
 ## Session Discipline
 

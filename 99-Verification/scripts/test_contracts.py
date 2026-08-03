@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import json
 import os
-from pathlib import Path
 import shutil
 import subprocess
 import tempfile
-import unittest
-import json
 import tomllib
+import unittest
+from pathlib import Path
+from unittest.mock import patch
 
 import yaml
 
@@ -16,6 +17,7 @@ ROOT = Path(__file__).resolve().parents[2]
 os.environ["BB_STACK_ROOT"] = str(ROOT)
 
 from bb_stack.capabilities import CapabilityRegistry
+from bb_stack.data import DataManager
 from bb_stack.errors import ValidationError
 from bb_stack.io import load_yaml
 from bb_stack.paths import StackPaths
@@ -47,15 +49,45 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(len(CapabilityRegistry(self.paths).validate_all()), 16)
         runtime = RuntimeManager(self.paths).validate_config()
         self.assertIn("ctf-web", runtime["tool_profiles"])
+        self.assertEqual(
+            set(runtime["tool_profiles"]),
+            set(runtime["data"]["profiles"]),
+        )
+        self.assertEqual(
+            set(runtime["data"]["datasets"]),
+            {"seclists", "payloads-all-the-things", "trickest-wordlists"},
+        )
+
+    def test_skill_wordlist_paths_use_managed_data_root(self) -> None:
+        forbidden = (
+            "~/wordlists",
+            "/usr/share/wordlists",
+            "/usr/share/seclists",
+            "/SecLists/",
+        )
+        offenders: list[str] = []
+        for path in (ROOT / "04-L4-Skills").rglob("*"):
+            if not path.is_file():
+                continue
+            text = path.read_text(encoding="utf-8", errors="ignore")
+            if any(value in text for value in forbidden):
+                offenders.append(str(path.relative_to(ROOT)))
+        self.assertEqual(offenders, [])
+        catalog = DataManager(self.paths).catalog()
+        self.assertEqual(catalog["schema_version"], 1)
 
     def test_all_prompts_fit_budget_and_have_one_output(self) -> None:
         registry = ProfileRegistry(self.paths)
         for name in registry.names():
             result = registry.render(name)
             self.assertLessEqual(result.token_estimate, result.budget)
-            expected = "system.md" if result.prompt_mode == "replacement" else "append.md"
+            expected = (
+                "system.md" if result.prompt_mode == "replacement" else "append.md"
+            )
             self.assertEqual(Path(result.output_file).name, expected)
-            self.assertEqual(len(result.source_fragments), len(set(result.source_fragments)))
+            self.assertEqual(
+                len(result.source_fragments), len(set(result.source_fragments))
+            )
             self.assertIn(
                 "01-L1-Global-Prompt/languages/zh-CN.md",
                 result.source_fragments,
@@ -127,7 +159,9 @@ class ContractTests(unittest.TestCase):
                 stderr=subprocess.DEVNULL,
                 check=False,
             )
-            self.assertEqual(result.returncode, 0, f"required template is not tracked: {relative}")
+            self.assertEqual(
+                result.returncode, 0, f"required template is not tracked: {relative}"
+            )
 
     def test_release_versions_match(self) -> None:
         version = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
@@ -138,11 +172,27 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(__version__, version)
 
     def test_committed_npm_lock_uses_canonical_registry(self) -> None:
-        lock = (
-            ROOT / "00-L0-Runtime/config/node-runtime/package-lock.json"
-        ).read_text(encoding="utf-8")
+        lock = (ROOT / "00-L0-Runtime/config/node-runtime/package-lock.json").read_text(
+            encoding="utf-8"
+        )
         self.assertIn("https://registry.npmjs.org/", lock)
         self.assertNotIn("registry.npmmirror.com", lock)
+
+    def test_python_runtime_lock_requires_hashes(self) -> None:
+        requirements = (ROOT / "00-L0-Runtime/config/requirements.lock").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("--hash=sha256:", requirements)
+        self.assertIn("pyjwt==2.13.0", requirements.lower())
+        self.assertIn("requests==2.33.0", requirements.lower())
+        source = (ROOT / "00-L0-Runtime/config/requirements.in").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("PyJWT==2.13.0", source)
+        runtime = (ROOT / "00-L0-Runtime/lib/bb_stack/runtime.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('"--require-hashes"', runtime)
 
     def test_staged_npm_lock_registry_is_canonicalized(self) -> None:
         lock = {
@@ -155,9 +205,7 @@ class ContractTests(unittest.TestCase):
                 },
             }
         }
-        UpdateManager._canonicalize_npm_lock(
-            lock, "https://registry.npmmirror.com"
-        )
+        UpdateManager._canonicalize_npm_lock(lock, "https://registry.npmmirror.com")
         self.assertEqual(
             lock["packages"]["node_modules/example"]["resolved"],
             "https://registry.npmjs.org/example/-/example-1.0.0.tgz",
@@ -167,8 +215,27 @@ class ContractTests(unittest.TestCase):
             "https://github.com/example/archive.tgz",
         )
 
+    def test_update_candidate_environment_does_not_inherit_credentials(self) -> None:
+        candidate = Path(self.temporary.name) / "candidate-env"
+        with patch.dict(
+            os.environ,
+            {"GH_TOKEN": "secret", "AWS_SECRET_ACCESS_KEY": "secret"},
+            clear=False,
+        ):
+            env = UpdateManager(self.paths)._candidate_environment(candidate)
+        self.assertNotIn("GH_TOKEN", env)
+        self.assertNotIn("AWS_SECRET_ACCESS_KEY", env)
+        self.assertEqual(env["HOME"], str(candidate / "sandbox-home"))
+
     def test_authored_core_has_no_old_machine_paths(self) -> None:
-        excluded = {".git", ".runtime", "vendor", "__pycache__"}
+        excluded = {
+            ".git",
+            ".runtime",
+            ".venv",
+            ".ruff_cache",
+            "vendor",
+            "__pycache__",
+        }
         offenders = []
         for path in ROOT.rglob("*"):
             if not path.is_file() or any(part in excluded for part in path.parts):
@@ -182,7 +249,14 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(offenders, [])
 
     def test_core_structured_files_and_whitespace(self) -> None:
-        excluded = {".git", ".runtime", "vendor", "__pycache__"}
+        excluded = {
+            ".git",
+            ".runtime",
+            ".venv",
+            ".ruff_cache",
+            "vendor",
+            "__pycache__",
+        }
         trailing = []
         absolute_homes = []
         for path in ROOT.rglob("*"):
@@ -192,7 +266,16 @@ class ContractTests(unittest.TestCase):
                 json.loads(path.read_text(encoding="utf-8"))
             elif path.suffix in {".yaml", ".yml"}:
                 yaml.safe_load(path.read_text(encoding="utf-8"))
-            if path.suffix in {".md", ".yaml", ".yml", ".json", ".py", ".sh", ".zsh", ""}:
+            if path.suffix in {
+                ".md",
+                ".yaml",
+                ".yml",
+                ".json",
+                ".py",
+                ".sh",
+                ".zsh",
+                "",
+            }:
                 text = path.read_text(encoding="utf-8", errors="ignore")
                 if any(line.endswith((" ", "\t")) for line in text.splitlines()):
                     trailing.append(str(path.relative_to(ROOT)))
@@ -207,7 +290,9 @@ class ContractTests(unittest.TestCase):
         self.assertFalse((ROOT / "engagements").exists())
         self.assertFalse((ROOT / "recon").exists())
 
-    def test_workspace_router_is_small_and_routes_without_profile_questions(self) -> None:
+    def test_workspace_router_is_small_and_routes_without_profile_questions(
+        self,
+    ) -> None:
         router = (
             ROOT / "02-L2-Workflow-Profiles" / "workspace" / "CLAUDE.md"
         ).read_text(encoding="utf-8")
@@ -218,6 +303,8 @@ class ContractTests(unittest.TestCase):
         self.assertIn("Ask one compact question only", router)
         self.assertIn("returned repair commands yourself", router)
         self.assertIn("stack operations, not Engagements", router)
+        self.assertIn("authorization.status=verified", router)
+        self.assertIn("bb-stack data ensure", router)
         for kind in (
             "ctf-web",
             "ctf-android",
@@ -244,6 +331,8 @@ class ContractTests(unittest.TestCase):
         self.assertIn("Operate the stack commands yourself", prompt)
         self.assertIn("read its generated", prompt)
         self.assertIn("Do not perform target work in the source tree", prompt)
+        self.assertIn("bb-stack data status", prompt)
+        self.assertIn("updates approve", prompt)
 
     def test_yaml_duplicate_keys_are_rejected(self) -> None:
         duplicate = Path(self.temporary.name) / "duplicate.yaml"
@@ -260,7 +349,9 @@ class ContractTests(unittest.TestCase):
         original = registry.registry
         registry.registry = lambda: document
         try:
-            with self.assertRaisesRegex(ValidationError, "MCP server name 'playwright'"):
+            with self.assertRaisesRegex(
+                ValidationError, "MCP server name 'playwright'"
+            ):
                 registry.validate_all()
         finally:
             registry.registry = original
@@ -272,7 +363,9 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(summary["skills"], skill_count)
         mcp_count = sum(
             provider["kind"] == "mcp"
-            for provider in CapabilityRegistry(self.paths).registry()["providers"].values()
+            for provider in CapabilityRegistry(self.paths)
+            .registry()["providers"]
+            .values()
         )
         self.assertEqual(summary["mcp"], mcp_count)
         self.assertGreaterEqual(summary["tools"], 20)
@@ -323,9 +416,9 @@ class ContractTests(unittest.TestCase):
         manager = UpdateManager(self.paths)
         skill = manager.inventory({"skills"})["skill.ctf-web"]
         manager._git_remote_revision = lambda repository, branch: "f" * 40
-        manager._github_tree_digest = (
-            lambda component, revision: skill["current_digest"]
-        )
+        manager._github_tree_digest = lambda component, revision: skill[
+            "current_digest"
+        ]
         result = manager.check({"skills"}, "skill.ctf-web")["results"][0]
         self.assertEqual(result["status"], "current")
         self.assertNotEqual(result["current"], result["latest"])
@@ -362,6 +455,22 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(result["state"], "validated")
         self.assertEqual(result["validation"]["digest"], digest)
         self.assertEqual(SkillRegistry.tree_digest(source), digest)
+        with self.assertRaisesRegex(ValidationError, "explicit review"):
+            manager.promote("skill.ctf-web")
+
+        approved = manager.approve(
+            "skill.ctf-web",
+            reviewer="security-reviewer",
+            note="Reviewed the source diff",
+        )
+        self.assertEqual(approved["approval"]["reviewer"], "security-reviewer")
+        skill_file = payload / "SKILL.md"
+        skill_file.write_text(
+            skill_file.read_text(encoding="utf-8") + "\n# changed after approval\n",
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(ValidationError, "changed after approval"):
+            manager.promote("skill.ctf-web")
 
 
 if __name__ == "__main__":

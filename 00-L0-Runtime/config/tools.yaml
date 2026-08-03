@@ -5,10 +5,10 @@ profiles:
     required: [system-base]
     optional: [mihomo]
   ctf-web:
-    required: [system-base, ffuf, chromium, seclists]
+    required: [system-base, ffuf, chromium]
     optional: [httpx, katana, gau, sqlmap, interactsh-client]
   web:
-    required: [system-base, subfinder, dnsx, httpx, katana, ffuf, nuclei, chromium, seclists]
+    required: [system-base, subfinder, dnsx, httpx, katana, ffuf, nuclei, chromium]
     optional: [assetfinder, amass, gau, waybackurls, interactsh-client, dalfox, naabu, sqlmap, semgrep, trufflehog]
   android:
     required: [system-base, java-runtime, adb, apktool, jadx]
@@ -30,13 +30,13 @@ profiles:
     optional: [ios-device, frida, objection]
   assessment-network:
     required: [system-base, nmap]
-    optional: [naabu, seclists]
+    optional: [naabu]
   assessment-cloud:
     required: [system-base]
     optional: []
   assessment-llm:
     required: [system-base, chromium]
-    optional: [interactsh-client, seclists]
+    optional: [interactsh-client]
   assessment-source:
     required: [system-base, semgrep]
     optional: [trufflehog]
@@ -186,20 +186,6 @@ installers:
         archive: trufflehog_3.96.0_linux_arm64.tar.gz
         url: https://github.com/trufflesecurity/trufflehog/releases/download/v3.96.0/trufflehog_3.96.0_linux_arm64.tar.gz
         sha256: 50acd4c7a3b8ebfe5083d8350956057030c44be3515dedd55b45263495c490b2
-  seclists:
-    kind: git-data
-    checks: []
-    repository: https://github.com/danielmiessler/SecLists.git
-    revision: aeb36e9df937d1b77042e5667780e8156cd419f7
-    destination: "${BB_STACK_ROOT}/.runtime/data/SecLists"
-    network_timeout_seconds: 600
-    retry_attempts: 3
-    sparse_paths:
-      - Ai/LLM_Testing
-      - Discovery/Web-Content
-      - Fuzzing/LFI
-      - Fuzzing/XSS
-      - Pattern-Matching
   mihomo:
     kind: service
     checks: []

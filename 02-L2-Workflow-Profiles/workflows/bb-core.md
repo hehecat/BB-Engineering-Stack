@@ -4,6 +4,12 @@ The written program scope owns assets, exclusions, rates, identity rules, and
 side-effect limits. Resume from `engagement.yaml`, `notes/SCOPE.md`,
 `SESSION-HANDOFF.md`, and `STATUS.md` before selecting a new lead.
 
+Before active target traffic, require `lifecycle: active` and
+`authorization.status: verified` in `engagement.yaml`, with the written source
+recorded in `notes/SCOPE.md`. If authorization is pending, user-asserted, or
+revoked, stop active testing, preserve state, and complete the authorization
+repair first. Never infer verification from asset ownership or target access.
+
 At engagement start, resume, or target switch, route first through
 `bb-orchestrator`, then load only the specialist Skill matching the active lead.
 Use `bb-methodology` only when the current queue needs new hunting ideas.

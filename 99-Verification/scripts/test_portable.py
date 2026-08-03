@@ -3,10 +3,9 @@ from __future__ import annotations
 
 import json
 import os
-from pathlib import Path
 import tempfile
 import unittest
-
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 os.environ["BB_STACK_ROOT"] = str(ROOT)
@@ -16,6 +15,7 @@ from bb_stack.engagement import EngagementManager
 from bb_stack.errors import ValidationError
 from bb_stack.paths import StackPaths
 from bb_stack.portable import PortableManager
+from test_support import isolated_stack_source
 
 
 class PortableTests(unittest.TestCase):
@@ -23,8 +23,9 @@ class PortableTests(unittest.TestCase):
         self.temporary = tempfile.TemporaryDirectory(prefix="bb-portable-")
         self.base = Path(self.temporary.name)
         self.source_home = self.base / "source-home"
+        self.stack = isolated_stack_source(ROOT, self.base / "stack")
         self.source = StackPaths(
-            ROOT,
+            self.stack,
             self.source_home,
             self.source_home / "work",
             self.source_home / "config",
@@ -51,10 +52,7 @@ class PortableTests(unittest.TestCase):
         mail.parent.mkdir(parents=True)
         mail.write_text('MAIL_PASSWORD="mail-secret-value"\n', encoding="utf-8")
         mail.chmod(0o600)
-        secret = (
-            self.source.engagements_root
-            / "portable-ctf/notes/LAB-CREDS.local.md"
-        )
+        secret = self.source.engagements_root / "portable-ctf/notes/LAB-CREDS.local.md"
         secret.write_text("engagement-secret-value\n", encoding="utf-8")
         secret.chmod(0o600)
         self.bundle = self.base / "portable.json"
@@ -74,9 +72,7 @@ class PortableTests(unittest.TestCase):
         document = json.loads(raw)
         self.assertNotIn("BB_EXTRA_PATH", document["machine_config"])
         self.assertEqual(document["machine_config"]["BB_AGENT_LANGUAGE"], "en")
-        self.assertEqual(
-            document["machine_config"]["BB_NPM_REGISTRY"], "npmmirror"
-        )
+        self.assertEqual(document["machine_config"]["BB_NPM_REGISTRY"], "npmmirror")
         inspected = manager.inspect(self.bundle)
         self.assertTrue(inspected["valid"])
         self.assertEqual(inspected["engagements"][0]["slug"], "portable-ctf")
@@ -89,7 +85,7 @@ class PortableTests(unittest.TestCase):
         PortableManager(self.source).export(self.bundle)
         target_home = self.base / "target-home"
         target = StackPaths(
-            ROOT,
+            self.stack,
             target_home,
             target_home / "destination-work",
             target_home / "destination-config",
@@ -114,9 +110,7 @@ class PortableTests(unittest.TestCase):
         self.assertEqual(target_config.effective()["BB_PROXY_MODE"], "mihomo")
         self.assertEqual(target_config.effective()["BB_H1_USERNAME"], "portable-user")
         self.assertEqual(target_config.effective()["BB_AGENT_LANGUAGE"], "en")
-        self.assertEqual(
-            target_config.effective()["BB_NPM_REGISTRY"], "npmmirror"
-        )
+        self.assertEqual(target_config.effective()["BB_NPM_REGISTRY"], "npmmirror")
         self.assertEqual(target.work_root, target_home / "destination-work")
 
     def test_rejects_unknown_or_mutated_document(self) -> None:

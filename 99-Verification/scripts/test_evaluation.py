@@ -1,21 +1,22 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
-import os
 import json
-from pathlib import Path
+import os
 import tempfile
 import textwrap
 import unittest
+from pathlib import Path
 from unittest.mock import patch
-
 
 ROOT = Path(__file__).resolve().parents[2]
 os.environ["BB_STACK_ROOT"] = str(ROOT)
 
-from bb_stack.evaluation import EvaluationManager
-from bb_stack.evaluation import BROWSER_JS_BEHAVIOR_EXPECTED
-from bb_stack.evaluation import WEB_BEHAVIOR_EXPECTED
+from bb_stack.evaluation import (
+    BROWSER_JS_BEHAVIOR_EXPECTED,
+    WEB_BEHAVIOR_EXPECTED,
+    EvaluationManager,
+)
 from bb_stack.paths import StackPaths
 from bb_stack.skills import SkillRegistry
 
@@ -23,7 +24,8 @@ from bb_stack.skills import SkillRegistry
 class EvaluationTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory(prefix="bb-evaluation-")
-        self.home = Path(self.temporary.name) / "home"
+        base = Path(self.temporary.name)
+        self.home = base / "home"
         self.paths = StackPaths(
             ROOT,
             self.home,
@@ -31,7 +33,6 @@ class EvaluationTests(unittest.TestCase):
             self.home / "config",
             self.home / ".claude",
         )
-        self.paths.ensure_runtime_dirs()
 
     def tearDown(self) -> None:
         self.temporary.cleanup()
@@ -95,34 +96,52 @@ class EvaluationTests(unittest.TestCase):
             encoding="utf-8",
         )
         fake.chmod(0o755)
-        with patch.dict(os.environ, {"CLAUDE_BIN": str(fake)}, clear=False):
-            report = EvaluationManager(self.paths).agent(
-                "lab-replacement", timeout=30
-            )
+        with (
+            patch.dict(os.environ, {"CLAUDE_BIN": str(fake)}, clear=False),
+            patch(
+                "bb_stack.runtime.CapabilityRegistry.doctor",
+                return_value={"ready": True, "missing_required": []},
+            ),
+            patch(
+                "bb_stack.runtime.CapabilityRegistry.render_mcp",
+                return_value={"mcpServers": {}},
+            ),
+        ):
+            report = EvaluationManager(self.paths).agent("lab-replacement", timeout=30)
         self.assertTrue(report["passed"])
         self.assertTrue(Path(report["artifact"]).is_file())
         self.assertTrue(Path(report["report"]).is_file())
-        self.assertEqual(EvaluationManager(self.paths).latest("lab-replacement")["passed"], True)
+        self.assertEqual(
+            EvaluationManager(self.paths).latest("lab-replacement")["passed"], True
+        )
 
     def test_agent_suite_records_missing_artifact_as_failure(self) -> None:
         SkillRegistry(self.paths).install(
             "minimal", agent="claude", include_optional=False
         )
         fake = Path(self.temporary.name) / "empty-claude"
-        fake.write_text("#!/bin/sh\nprintf '%s\\n' BB_AGENT_EVAL_DONE\n", encoding="utf-8")
+        fake.write_text(
+            "#!/bin/sh\nprintf '%s\\n' BB_AGENT_EVAL_DONE\n", encoding="utf-8"
+        )
         fake.chmod(0o755)
-        with patch.dict(os.environ, {"CLAUDE_BIN": str(fake)}, clear=False):
-            report = EvaluationManager(self.paths).agent(
-                "lab-replacement", timeout=30
-            )
+        with (
+            patch.dict(os.environ, {"CLAUDE_BIN": str(fake)}, clear=False),
+            patch(
+                "bb_stack.runtime.CapabilityRegistry.doctor",
+                return_value={"ready": True, "missing_required": []},
+            ),
+            patch(
+                "bb_stack.runtime.CapabilityRegistry.render_mcp",
+                return_value={"mcpServers": {}},
+            ),
+        ):
+            report = EvaluationManager(self.paths).agent("lab-replacement", timeout=30)
         self.assertFalse(report["passed"])
         failed = {item["id"] for item in report["checks"] if not item["passed"]}
         self.assertEqual(failed, {"artifact.exists"})
 
     def test_web_agent_suite_scores_harness_decisions(self) -> None:
-        SkillRegistry(self.paths).install(
-            "web", agent="claude", include_optional=False
-        )
+        SkillRegistry(self.paths).install("web", agent="claude", include_optional=False)
         fake = Path(self.temporary.name) / "fake-web-claude"
         fake.write_text(
             textwrap.dedent(
@@ -171,24 +190,25 @@ class EvaluationTests(unittest.TestCase):
             encoding="utf-8",
         )
         fake.chmod(0o755)
-        with patch.dict(os.environ, {"CLAUDE_BIN": str(fake)}, clear=False), patch(
-            "bb_stack.runtime.CapabilityRegistry.doctor",
-            return_value={"ready": True, "missing_required": []},
-        ), patch(
-            "bb_stack.runtime.CapabilityRegistry.render_mcp",
-            return_value={"mcpServers": {}},
+        with (
+            patch.dict(os.environ, {"CLAUDE_BIN": str(fake)}, clear=False),
+            patch(
+                "bb_stack.runtime.CapabilityRegistry.doctor",
+                return_value={"ready": True, "missing_required": []},
+            ),
+            patch(
+                "bb_stack.runtime.CapabilityRegistry.render_mcp",
+                return_value={"mcpServers": {}},
+            ),
         ):
-            report = EvaluationManager(self.paths).agent(
-                "bb-interactive", timeout=30
-            )
+            report = EvaluationManager(self.paths).agent("bb-interactive", timeout=30)
         self.assertTrue(report["passed"])
         self.assertEqual(
             report["expected_skill_route"],
             ["bb-orchestrator", "api-security"],
         )
         scope = (
-            Path(report["workspace"])
-            / "work/engagements/agent-eval/notes/SCOPE.md"
+            Path(report["workspace"]) / "work/engagements/agent-eval/notes/SCOPE.md"
         ).read_text(encoding="utf-8")
         self.assertIn("`https://portal.example.invalid/`", scope)
         self.assertIn(
@@ -246,9 +266,7 @@ class EvaluationTests(unittest.TestCase):
             stdout="BB_AGENT_EVAL_DONE",
         )
         by_id = {item["id"]: item for item in checks}
-        self.assertTrue(
-            by_id["result.behavior_decision.secret_handling"]["passed"]
-        )
+        self.assertTrue(by_id["result.behavior_decision.secret_handling"]["passed"])
 
     def test_agent_suite_accepts_marker_with_source_label(self) -> None:
         manager = EvaluationManager(self.paths)

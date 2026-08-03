@@ -2,15 +2,15 @@ from __future__ import annotations
 
 import json
 import os
-from pathlib import Path
 import re
 import tempfile
-from typing import Any, Mapping
+from collections.abc import Mapping
+from pathlib import Path
+from typing import Any
 
 import yaml
 
 from .errors import ValidationError
-
 
 _ENV_RE = re.compile(r"\$\{([A-Z_][A-Z0-9_]*)\}")
 
@@ -112,8 +112,12 @@ def expand(value: Any, env: Mapping[str, str], *, strict: bool = True) -> Any:
     if isinstance(value, str):
         missing = sorted(set(_ENV_RE.findall(value)) - set(env))
         if strict and missing:
-            raise ValidationError("undefined environment variable(s): " + ", ".join(missing))
-        result = _ENV_RE.sub(lambda match: env.get(match.group(1), match.group(0)), value)
+            raise ValidationError(
+                "undefined environment variable(s): " + ", ".join(missing)
+            )
+        result = _ENV_RE.sub(
+            lambda match: env.get(match.group(1), match.group(0)), value
+        )
         return os.path.expanduser(result)
     if isinstance(value, list):
         return [expand(item, env, strict=strict) for item in value]
@@ -128,7 +132,9 @@ def read_fragments(paths: list[Path]) -> str:
         try:
             content = path.read_text(encoding="utf-8").strip()
         except OSError as error:
-            raise ValidationError(f"failed to read prompt fragment {path}: {error}") from error
+            raise ValidationError(
+                f"failed to read prompt fragment {path}: {error}"
+            ) from error
         if not content:
             raise ValidationError(f"empty prompt fragment: {path}")
         parts.append(content)

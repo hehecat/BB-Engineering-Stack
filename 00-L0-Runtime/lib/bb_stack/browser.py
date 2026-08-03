@@ -3,16 +3,17 @@ from __future__ import annotations
 import http.client
 import json
 import os
-from pathlib import Path
 import shutil
 import signal
+import socket
 import subprocess
 import time
+from pathlib import Path
 from typing import Any
 
 from .configuration import ConfigurationManager
 from .engagement import EngagementManager
-from .errors import CommandError
+from .errors import CommandError, ValidationError
 from .io import dump_json, load_json
 from .paths import StackPaths
 
@@ -21,27 +22,24 @@ class BrowserRuntimeManager:
     """Own one isolated Chromium CDP process for an active work unit."""
 
     HOST = "127.0.0.1"
-    PORT = 9222
 
     def __init__(self, paths: StackPaths):
         self.paths = paths
-        self.state_path = paths.config_home / "browser-runtime.json"
+
+    @staticmethod
+    def _state_path(engagement: Path) -> Path:
+        return engagement / ".bb-stack" / "browser" / "runtime.json"
 
     def start(self, engagement: Path) -> dict[str, Any]:
         engagement = engagement.resolve()
         EngagementManager(self.paths).validate(engagement)
-        current = self.status()
-        if current["ready"] and current.get("engagement") == str(engagement):
+        state_path = self._state_path(engagement)
+        current = self.status(engagement)
+        if current["ready"]:
             self._configure_cli(current["browser_url"])
             return current | {"state": "ready"}
-        if current["ready"]:
-            self.stop()
-        elif self.state_path.is_file():
-            self.stop()
-        elif self._endpoint_ready():
-            raise CommandError(
-                f"browser CDP port {self.PORT} is occupied by an unmanaged process"
-            )
+        if state_path.is_file():
+            self.stop(engagement)
 
         env = self.paths.environment(engagement / "artifacts")
         env["PATH"] = self.paths.runtime_path()
@@ -51,26 +49,21 @@ class BrowserRuntimeManager:
             or shutil.which("google-chrome", path=env["PATH"])
         )
         if not chromium:
-            raise CommandError("Chromium or Chrome is required for managed browser work")
+            raise CommandError(
+                "Chromium or Chrome is required for managed browser work"
+            )
 
         runtime_dir = engagement / ".bb-stack" / "browser"
         profile_dir = runtime_dir / "profile"
         log_path = engagement / "artifacts" / "browser" / "chromium-cdp.log"
         profile_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
         log_path.parent.mkdir(parents=True, exist_ok=True)
-        command = [
-            chromium,
-            "--headless",
-            "--no-sandbox",
-            "--disable-gpu",
-            f"--remote-debugging-address={self.HOST}",
-            f"--remote-debugging-port={self.PORT}",
-            f"--user-data-dir={profile_dir}",
-            "about:blank",
-        ]
+        port = self._allocate_port()
         machine = ConfigurationManager(self.paths).effective()
-        if machine["BB_PROXY_MODE"] == "mihomo":
-            command.insert(-1, f"--proxy-server={machine['BB_HTTP_PROXY']}")
+        proxy = (
+            machine["BB_HTTP_PROXY"] if machine["BB_PROXY_MODE"] == "mihomo" else None
+        )
+        command = self._browser_command(chromium, port, profile_dir, proxy)
         log_fd = os.open(log_path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
         null_fd = os.open(os.devnull, os.O_RDONLY)
         try:
@@ -91,19 +84,17 @@ class BrowserRuntimeManager:
         try:
             deadline = time.monotonic() + 12
             while time.monotonic() < deadline:
-                if self._endpoint_ready():
+                if self._endpoint_ready(port):
                     break
                 if self._child_exited(pid):
-                    raise CommandError(
-                        f"Chromium CDP exited early; inspect {log_path}"
-                    )
+                    raise CommandError(f"Chromium CDP exited early; inspect {log_path}")
                 time.sleep(0.2)
             else:
                 raise CommandError(
                     f"Chromium CDP did not become ready; inspect {log_path}"
                 )
 
-            browser_url = f"http://{self.HOST}:{self.PORT}"
+            browser_url = f"http://{self.HOST}:{port}"
             state = {
                 "schema_version": 1,
                 "pid": pid,
@@ -111,54 +102,90 @@ class BrowserRuntimeManager:
                 "profile_dir": str(profile_dir),
                 "log": str(log_path),
                 "browser_url": browser_url,
+                "port": port,
             }
-            dump_json(self.state_path, state, 0o600)
+            dump_json(state_path, state, 0o600)
             self._configure_cli(browser_url)
         except Exception:
-            self.state_path.unlink(missing_ok=True)
+            state_path.unlink(missing_ok=True)
             self._terminate_owned(pid)
             raise
-        return self.status() | {"state": "started"}
+        return self.status(engagement) | {"state": "started"}
 
-    def status(self) -> dict[str, Any]:
+    def status(self, engagement: Path | None = None) -> dict[str, Any]:
+        if engagement is None:
+            instances = [
+                self._status_one(root)
+                for root in EngagementManager(self.paths).roots()
+                if self._state_path(root).is_file()
+            ]
+            ready = [item for item in instances if item["ready"]]
+            return {
+                "schema_version": 1,
+                "ready": bool(ready),
+                "state": "ready" if ready else "stopped",
+                "instances": instances,
+            }
+        return self._status_one(engagement.resolve())
+
+    def _status_one(self, engagement: Path) -> dict[str, Any]:
+        state_path = self._state_path(engagement)
         state: dict[str, Any] = {}
-        if self.state_path.is_file():
+        if state_path.is_file():
             try:
-                state = load_json(self.state_path)
-            except Exception:
+                state = load_json(state_path)
+            except ValidationError:
                 state = {}
+        port = int(state.get("port", 0))
         ready = bool(
             state
             and self._process_matches(
                 int(state.get("pid", 0)), Path(str(state.get("profile_dir", "")))
             )
-            and self._endpoint_ready()
+            and port > 0
+            and self._endpoint_ready(port)
         )
         return {
             "schema_version": 1,
             "ready": ready,
             "state": "ready" if ready else "stopped",
             "pid": state.get("pid"),
-            "engagement": state.get("engagement"),
-            "browser_url": state.get(
-                "browser_url", f"http://{self.HOST}:{self.PORT}"
-            ),
+            "engagement": state.get("engagement", str(engagement)),
+            "browser_url": state.get("browser_url"),
+            "port": state.get("port"),
             "log": state.get("log"),
         }
 
-    def stop(self) -> dict[str, Any]:
+    def stop(self, engagement: Path | None = None) -> dict[str, Any]:
+        if engagement is None:
+            stopped = [
+                self._stop_one(root)
+                for root in EngagementManager(self.paths).roots()
+                if self._state_path(root).is_file()
+            ]
+            self._stop_cli()
+            return {
+                "schema_version": 1,
+                "ready": False,
+                "state": "stopped",
+                "instances": stopped,
+            }
         self._stop_cli()
+        return self._stop_one(engagement.resolve())
+
+    def _stop_one(self, engagement: Path) -> dict[str, Any]:
+        state_path = self._state_path(engagement)
         state: dict[str, Any] = {}
-        if self.state_path.is_file():
+        if state_path.is_file():
             try:
-                state = load_json(self.state_path)
-            except Exception:
+                state = load_json(state_path)
+            except ValidationError:
                 state = {}
         pid = int(state.get("pid", 0))
         profile_dir = Path(str(state.get("profile_dir", "")))
         if self._process_matches(pid, profile_dir):
             self._terminate(pid, profile_dir)
-        self.state_path.unlink(missing_ok=True)
+        state_path.unlink(missing_ok=True)
         return {
             "schema_version": 1,
             "ready": False,
@@ -169,7 +196,7 @@ class BrowserRuntimeManager:
     def _configure_cli(self, browser_url: str) -> None:
         cli = self.paths.runtime / "node_modules" / ".bin" / "chrome-devtools"
         if not cli.is_file():
-            raise CommandError("managed chrome-devtools CLI is not installed")
+            return
         env = self.paths.environment()
         env["PATH"] = self.paths.runtime_path()
         self._stop_cli()
@@ -186,8 +213,7 @@ class BrowserRuntimeManager:
                 "--screenshotMaxWidth=1600",
             ],
             env=env,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
             text=True,
             timeout=20,
             check=False,
@@ -213,9 +239,9 @@ class BrowserRuntimeManager:
             check=False,
         )
 
-    def _endpoint_ready(self) -> bool:
+    def _endpoint_ready(self, port: int) -> bool:
         try:
-            connection = http.client.HTTPConnection(self.HOST, self.PORT, timeout=0.5)
+            connection = http.client.HTTPConnection(self.HOST, port, timeout=0.5)
             connection.request("GET", "/json/version")
             response = connection.getresponse()
             payload = response.read()
@@ -226,6 +252,33 @@ class BrowserRuntimeManager:
         except (OSError, ValueError, json.JSONDecodeError):
             return False
 
+    @classmethod
+    def _allocate_port(cls) -> int:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
+            listener.bind((cls.HOST, 0))
+            return int(listener.getsockname()[1])
+
+    @classmethod
+    def _browser_command(
+        cls,
+        chromium: str,
+        port: int,
+        profile_dir: Path,
+        proxy: str | None,
+    ) -> list[str]:
+        command = [
+            chromium,
+            "--headless",
+            "--disable-gpu",
+            f"--remote-debugging-address={cls.HOST}",
+            f"--remote-debugging-port={port}",
+            f"--user-data-dir={profile_dir}",
+            "about:blank",
+        ]
+        if proxy:
+            command.insert(-1, f"--proxy-server={proxy}")
+        return command
+
     @staticmethod
     def _process_matches(pid: int, profile_dir: Path) -> bool:
         if pid <= 1 or not profile_dir:
@@ -234,7 +287,9 @@ class BrowserRuntimeManager:
             command = Path(f"/proc/{pid}/cmdline").read_bytes().replace(b"\0", b" ")
         except OSError:
             return False
-        return str(profile_dir).encode() in command and b"remote-debugging-port" in command
+        return (
+            str(profile_dir).encode() in command and b"remote-debugging-port" in command
+        )
 
     @staticmethod
     def _child_exited(pid: int) -> bool:

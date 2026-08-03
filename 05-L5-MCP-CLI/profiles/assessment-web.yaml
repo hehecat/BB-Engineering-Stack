@@ -1,4 +1,4 @@
 schema_version: 1
 name: assessment-web
-required: [http.raw, data.json, runtime.python, browser.stateful]
-optional: [tls.inspect, web.probe, web.crawl, web.fuzz, source.audit, analysis.javascript, oob.callback, proxy.http]
+required: [http.raw, data.json, runtime.python, browser.stateful, data.wordlists.web, data.wordlists.dns, data.wordlists.fuzzing, data.wordlists.credentials, data.payloads.web]
+optional: [tls.inspect, web.probe, web.crawl, web.fuzz, source.audit, analysis.javascript, oob.callback, proxy.http, data.wordlists.recon]

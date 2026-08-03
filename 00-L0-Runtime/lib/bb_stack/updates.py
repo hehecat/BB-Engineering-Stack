@@ -1,17 +1,20 @@
 from __future__ import annotations
 
-from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timezone
+import fcntl
+import hashlib
 import json
 import os
-from pathlib import Path
 import re
 import shlex
 import shutil
 import subprocess
 import tarfile
 import tempfile
-from typing import Any
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any, ClassVar
 from urllib.error import HTTPError
 from urllib.parse import quote, urlparse
 from urllib.request import Request, urlopen
@@ -29,12 +32,14 @@ from .validation import validate
 class UpdateManager:
     """Audited update discovery with isolated staging and explicit promotion."""
 
-    CATEGORIES = {"skills", "mcp", "tools"}
+    CATEGORIES: ClassVar[set[str]] = {"skills", "mcp", "tools"}
 
     def __init__(self, paths: StackPaths):
         self.paths = paths
         self.config_path = paths.root / "00-L0-Runtime" / "config" / "upstreams.yaml"
-        self.schema_path = paths.root / "00-L0-Runtime" / "config" / "upstreams.schema.json"
+        self.schema_path = (
+            paths.root / "00-L0-Runtime" / "config" / "upstreams.schema.json"
+        )
         self.candidate_schema = (
             paths.root / "00-L0-Runtime" / "config" / "update-candidate.schema.json"
         )
@@ -61,14 +66,16 @@ class UpdateManager:
             try:
                 inventory_path.relative_to(self.paths.root.resolve())
             except ValueError as error:
-                raise ValidationError(f"update inventory {label} escapes stack root") from error
+                raise ValidationError(
+                    f"update inventory {label} escapes stack root"
+                ) from error
             if not inventory_path.is_file():
-                raise ValidationError(f"missing update inventory {label}: {inventory_path}")
+                raise ValidationError(
+                    f"missing update inventory {label}: {inventory_path}"
+                )
         skills = SkillRegistry(self.paths).manifest()["skills"]
         capabilities = CapabilityRegistry(self.paths).registry()["providers"]
-        package_json = load_json(
-            self.paths.root / config["inventory"]["mcp_packages"]
-        )
+        package_json = load_json(self.paths.root / config["inventory"]["mcp_packages"])
         dependencies = package_json.get("dependencies", {})
         if not isinstance(dependencies, dict):
             raise ValidationError("MCP package manifest dependencies must be an object")
@@ -118,9 +125,14 @@ class UpdateManager:
             elif component["category"] == "mcp":
                 provider_name = component["provider"]
                 if provider_name in mcp_providers:
-                    raise ValidationError(f"duplicate MCP update provider: {provider_name}")
+                    raise ValidationError(
+                        f"duplicate MCP update provider: {provider_name}"
+                    )
                 mcp_providers.add(provider_name)
-                if provider_name not in capabilities or capabilities[provider_name]["kind"] != "mcp":
+                if (
+                    provider_name not in capabilities
+                    or capabilities[provider_name]["kind"] != "mcp"
+                ):
                     raise ValidationError(
                         f"upstream {name} references unknown MCP provider {provider_name}"
                     )
@@ -132,7 +144,9 @@ class UpdateManager:
             elif component["target"] == "keysmith":
                 stack = load_yaml(self.paths.root / "stack.yaml")
                 if stack["keysmith"]["revision"] != component["current_revision"]:
-                    raise ValidationError("Keysmith upstream revision differs from stack.yaml")
+                    raise ValidationError(
+                        "Keysmith upstream revision differs from stack.yaml"
+                    )
 
         registered_mcp = {
             name for name, provider in capabilities.items() if provider["kind"] == "mcp"
@@ -152,12 +166,16 @@ class UpdateManager:
             "tools": sum(item["category"] == "tools" for item in inventory.values()),
         }
 
-    def inventory(self, categories: set[str] | None = None) -> dict[str, dict[str, Any]]:
+    def inventory(
+        self, categories: set[str] | None = None
+    ) -> dict[str, dict[str, Any]]:
         config = self.config()
         selected = categories or self.CATEGORIES
         unknown = selected - self.CATEGORIES
         if unknown:
-            raise ValidationError("unknown update categories: " + ", ".join(sorted(unknown)))
+            raise ValidationError(
+                "unknown update categories: " + ", ".join(sorted(unknown))
+            )
 
         items: dict[str, dict[str, Any]] = {
             name: dict(component, name=name)
@@ -253,7 +271,9 @@ class UpdateManager:
             )
         elif kind in {"archive-binary", "archive-tree", "deb"}:
             urls = [entry["url"] for entry in spec["files"].values()]
-            match = re.search(r"github\.com/([^/]+/[^/]+)/releases/download/([^/]+)", urls[0])
+            match = re.search(
+                r"github\.com/([^/]+/[^/]+)/releases/download/([^/]+)", urls[0]
+            )
             if match:
                 item.update(
                     checker="github-release",
@@ -263,7 +283,9 @@ class UpdateManager:
             else:
                 item.update(checker="manual", current="pinned-archive")
         elif kind == "apt":
-            item.update(checker="apt", packages=list(spec["packages"]), current="system")
+            item.update(
+                checker="apt", packages=list(spec["packages"]), current="system"
+            )
         elif kind == "service":
             item.update(checker="manual", current="external-service")
         else:
@@ -298,7 +320,7 @@ class UpdateManager:
             status = "rate-limited" if error.code == 403 else "check-error"
             failed.update(status=status, error=f"HTTP {error.code}: {error.reason}")
             return failed
-        except Exception as error:
+        except (OSError, KeyError, TypeError, ValueError, StackError) as error:
             failed = self._public_item(component)
             failed.update(status="check-error", error=str(error))
             return failed
@@ -319,7 +341,9 @@ class UpdateManager:
         current = component.get("current") or component.get("current_revision")
         if checker == "github-tree":
             slug = self._github_slug(component["repository"])
-            latest = self._git_remote_revision(component["repository"], component["branch"])
+            latest = self._git_remote_revision(
+                component["repository"], component["branch"]
+            )
             result["upstream"] = (
                 f"https://github.com/{slug}/tree/{component['branch']}/"
                 f"{component['subpath']}"
@@ -330,7 +354,9 @@ class UpdateManager:
                 result["upstream_digest"] = self._github_tree_digest(component, latest)
         elif checker == "github-commit":
             slug = self._github_slug(component["repository"])
-            latest = self._git_remote_revision(component["repository"], component["branch"])
+            latest = self._git_remote_revision(
+                component["repository"], component["branch"]
+            )
             result["upstream"] = f"https://github.com/{slug}"
         elif checker == "github-release":
             slug = self._github_slug(component["repository"])
@@ -338,7 +364,9 @@ class UpdateManager:
             result["upstream"] = f"https://github.com/{slug}"
         elif checker == "npm":
             package = quote(component["target"], safe="")
-            latest_data = self._request_json(f"https://registry.npmjs.org/{package}/latest")
+            latest_data = self._request_json(
+                f"https://registry.npmjs.org/{package}/latest"
+            )
             latest = latest_data["version"]
             result["upstream"] = self._repository_url(latest_data.get("repository"))
             result["upstream_license"] = latest_data.get("license")
@@ -351,7 +379,9 @@ class UpdateManager:
             result["upstream_license"] = latest_data["info"].get("license") or None
         elif checker == "go":
             module = quote(component["package"], safe="/")
-            latest_data = self._request_json(f"https://proxy.golang.org/{module}/@latest")
+            latest_data = self._request_json(
+                f"https://proxy.golang.org/{module}/@latest"
+            )
             latest = latest_data["Version"]
             result["upstream"] = f"https://{component['package']}"
         else:
@@ -365,15 +395,25 @@ class UpdateManager:
             and upstream_license != component["license"]
         ):
             result["status"] = "license-review"
-        elif checker == "github-tree" and component["local_digest"] != component["current_digest"]:
+        elif (
+            checker == "github-tree"
+            and component["local_digest"] != component["current_digest"]
+        ):
             result["status"] = "local-drift"
-        elif checker == "github-tree" and result["upstream_digest"] == component["current_digest"]:
+        elif (
+            checker == "github-tree"
+            and result["upstream_digest"] == component["current_digest"]
+        ):
             result["status"] = "current"
         else:
             result["status"] = "current" if current == latest else "update-available"
         return result
 
     def stage(self, name: str) -> dict[str, Any]:
+        with self._operation_lock(name):
+            return self._stage_locked(name)
+
+    def _stage_locked(self, name: str) -> dict[str, Any]:
         report = self.check(name=name)
         result = report["results"][0]
         if result["status"] != "update-available":
@@ -392,10 +432,14 @@ class UpdateManager:
         }
         try:
             if component["checker"] == "github-tree":
-                self._stage_github_tree(component, result["latest"], candidate, manifest)
+                self._stage_github_tree(
+                    component, result["latest"], candidate, manifest
+                )
                 if manifest["candidate_digest"] == component["current_digest"]:
                     manifest["state"] = "no-content-change"
-                    manifest["reason"] = "upstream revision has the same Skill tree digest"
+                    manifest["reason"] = (
+                        "upstream revision has the same Skill tree digest"
+                    )
             elif component["checker"] == "npm" and component["category"] == "mcp":
                 self._stage_npm(component, result["latest"], candidate, manifest)
             else:
@@ -414,7 +458,8 @@ class UpdateManager:
 
     def validate_candidates(self, name: str | None = None) -> list[dict[str, Any]]:
         if name:
-            candidates = [self._candidate(name)]
+            with self._operation_lock(name):
+                return [self._validate_candidate(self._candidate(name))]
         else:
             root = self._candidate_root()
             candidates = sorted(
@@ -425,7 +470,9 @@ class UpdateManager:
             )
         results = []
         for candidate in candidates:
-            results.append(self._validate_candidate(candidate))
+            manifest = self._load_candidate(candidate / "candidate.json")
+            with self._operation_lock(manifest["component"]):
+                results.append(self._validate_candidate(candidate))
         return results
 
     def _validate_candidate(self, candidate: Path) -> dict[str, Any]:
@@ -456,9 +503,12 @@ class UpdateManager:
             elif component["checker"] == "npm":
                 manifest["validation"] = self._validate_npm_mcp(component, candidate)
             else:
-                raise ValidationError("candidate requires manual review and cannot be promoted")
+                raise ValidationError(
+                    "candidate requires manual review and cannot be promoted"
+                )
             manifest["state"] = "validated"
             manifest["validated_at"] = self._now()
+            manifest.pop("approval", None)
             manifest.pop("error", None)
         except Exception as error:
             manifest["state"] = "validation-failed"
@@ -468,62 +518,120 @@ class UpdateManager:
         dump_json(manifest_path, manifest)
         return manifest | {"path": str(candidate)}
 
+    def approve(
+        self, name: str, *, reviewer: str, note: str | None = None
+    ) -> dict[str, Any]:
+        reviewer = self._approval_text("reviewer", reviewer, 120)
+        approved_note = self._approval_text("note", note, 500) if note else None
+        with self._operation_lock(name):
+            candidate = self._candidate(name)
+            manifest_path = candidate / "candidate.json"
+            manifest = self._load_candidate(manifest_path)
+            if manifest["state"] != "validated":
+                raise ValidationError(
+                    f"candidate {name} must be validated before approval"
+                )
+            component = self.inventory()[name]
+            approval = {
+                "reviewer": reviewer,
+                "approved_at": self._now(),
+                "content_digest": self._candidate_content_digest(component, candidate),
+            }
+            if approved_note:
+                approval["note"] = approved_note
+            manifest["approval"] = approval
+            dump_json(manifest_path, manifest)
+            return manifest | {"path": str(candidate)}
+
     def promote(self, name: str) -> dict[str, Any]:
+        with self._operation_lock(name):
+            return self._promote_locked(name)
+
+    def _promote_locked(self, name: str) -> dict[str, Any]:
         candidate = self._candidate(name)
-        manifest = self._load_candidate(candidate / "candidate.json")
+        manifest_path = candidate / "candidate.json"
+        manifest = self._load_candidate(manifest_path)
         if manifest["state"] != "validated":
-            raise ValidationError(f"candidate {name} must be validated before promotion")
+            raise ValidationError(
+                f"candidate {name} must be validated before promotion"
+            )
         component = self.inventory()[name]
+        approval = manifest.get("approval")
+        if not approval:
+            raise ValidationError(
+                f"candidate {name} requires explicit review; run bb-stack updates approve"
+            )
+        content_digest = self._candidate_content_digest(component, candidate)
+        if approval["content_digest"] != content_digest:
+            raise ValidationError(
+                f"candidate {name} changed after approval; validate and approve it again"
+            )
         fresh = self.check(name=name)["results"][0]
-        if (
-            fresh["status"] != "update-available"
-            or fresh.get("latest") != manifest.get("latest")
+        if fresh["status"] != "update-available" or fresh.get("latest") != manifest.get(
+            "latest"
         ):
             raise ValidationError(
                 f"candidate {name} is stale: upstream status={fresh['status']}, "
                 f"latest={fresh.get('latest')}"
             )
         backup = self._new_backup(name)
-        if component["checker"] == "github-tree":
-            self._promote_skill(component, candidate, backup, manifest)
-        elif component["checker"] == "npm":
-            self._promote_npm(candidate, backup, manifest)
-        else:
-            raise ValidationError(f"automatic promotion is unsupported for {name}")
+        manifest["state"] = "promoting"
+        manifest["backup"] = str(backup)
+        dump_json(manifest_path, manifest)
+        try:
+            if component["checker"] == "github-tree":
+                self._promote_skill(component, candidate, backup, manifest)
+            elif component["checker"] == "npm":
+                self._promote_npm(candidate, backup, manifest)
+            else:
+                raise ValidationError(f"automatic promotion is unsupported for {name}")
+        except Exception as error:
+            manifest["state"] = "promotion-failed"
+            manifest["error"] = str(error)
+            dump_json(manifest_path, manifest)
+            raise
         manifest["state"] = "promoted"
         manifest["promoted_at"] = self._now()
-        manifest["backup"] = str(backup)
-        dump_json(candidate / "candidate.json", manifest)
+        manifest.pop("error", None)
+        dump_json(manifest_path, manifest)
         return manifest | {"path": str(candidate)}
 
     def rollback(self, name: str) -> dict[str, Any]:
+        with self._operation_lock(name):
+            return self._rollback_locked(name)
+
+    def _rollback_locked(self, name: str) -> dict[str, Any]:
         candidate = self._candidate(name)
-        manifest = self._load_candidate(candidate / "candidate.json")
-        if manifest["state"] != "promoted":
+        manifest_path = candidate / "candidate.json"
+        manifest = self._load_candidate(manifest_path)
+        if manifest["state"] not in {"promoted", "rollback-failed"}:
             raise ValidationError(f"candidate {name} is not promoted")
         backup = Path(manifest["backup"]).resolve()
         try:
             backup.relative_to(self._backup_root().resolve())
         except ValueError as error:
-            raise ValidationError("candidate backup path escapes managed backup root") from error
+            raise ValidationError(
+                "candidate backup path escapes managed backup root"
+            ) from error
         component = self.inventory()[name]
-        if component["checker"] == "github-tree":
-            source = SkillRegistry(self.paths).source(component["target"])
-            replaced = backup / "replaced-at-rollback"
-            source.rename(replaced)
-            shutil.copytree(backup / "payload", source)
-            shutil.copy2(backup / "upstreams.yaml", self.config_path)
-        elif component["checker"] == "npm":
-            runtime_config = self.paths.root / "00-L0-Runtime" / "config" / "node-runtime"
-            for filename in ("package.json", "package-lock.json"):
-                shutil.copy2(backup / filename, runtime_config / filename)
-            RuntimeManager(self.paths)._node_runtime(False)
-        else:
-            raise ValidationError(f"automatic rollback is unsupported for {name}")
-        self._validate_stack_contracts()
+        manifest["state"] = "rolling-back"
+        dump_json(manifest_path, manifest)
+        try:
+            if component["checker"] == "github-tree":
+                self._rollback_skill(component, backup)
+            elif component["checker"] == "npm":
+                self._rollback_npm(backup)
+            else:
+                raise ValidationError(f"automatic rollback is unsupported for {name}")
+        except Exception as error:
+            manifest["state"] = "rollback-failed"
+            manifest["error"] = str(error)
+            dump_json(manifest_path, manifest)
+            raise
         manifest["state"] = "rolled-back"
         manifest["rolled_back_at"] = self._now()
-        dump_json(candidate / "candidate.json", manifest)
+        manifest.pop("error", None)
+        dump_json(manifest_path, manifest)
         return manifest | {"path": str(candidate)}
 
     def _stage_github_tree(
@@ -549,14 +657,18 @@ class UpdateManager:
         except ValueError as error:
             raise ValidationError("GitHub-tree subpath escapes archive") from error
         if not (source / "SKILL.md").is_file():
-            raise ValidationError(f"upstream Skill is missing SKILL.md: {component['subpath']}")
+            raise ValidationError(
+                f"upstream Skill is missing SKILL.md: {component['subpath']}"
+            )
         payload = candidate / "payload"
         shutil.copytree(source, payload)
         frontmatter = SkillRegistry._frontmatter(payload / "SKILL.md")
         if frontmatter.get("name") != component["target"]:
             raise ValidationError("upstream Skill frontmatter/name mismatch")
         manifest["candidate_digest"] = SkillRegistry.tree_digest(payload)
-        manifest["source"] = f"https://github.com/{slug}/tree/{revision}/{component['subpath']}"
+        manifest["source"] = (
+            f"https://github.com/{slug}/tree/{revision}/{component['subpath']}"
+        )
 
     def _stage_npm(
         self,
@@ -598,7 +710,9 @@ class UpdateManager:
             self.paths.root / "05-L5-MCP-CLI" / "lib" / "mcp_probe.mjs",
             candidate / "mcp_probe.mjs",
         )
-        manifest["integrity"] = lock["packages"][f"node_modules/{component['target']}"]["integrity"]
+        manifest["integrity"] = lock["packages"][f"node_modules/{component['target']}"][
+            "integrity"
+        ]
 
     @staticmethod
     def _canonicalize_npm_lock(lock: dict[str, Any], registry: str) -> None:
@@ -616,7 +730,7 @@ class UpdateManager:
                 prefix = mirror + "/"
                 if resolved.startswith(prefix):
                     package["resolved"] = (
-                        NPM_OFFICIAL_REGISTRY + resolved[len(mirror):]
+                        NPM_OFFICIAL_REGISTRY + resolved[len(mirror) :]
                     )
                     break
 
@@ -627,6 +741,7 @@ class UpdateManager:
         node = shutil.which("node", path=self.paths.runtime_path())
         if not npm or not node:
             raise CommandError("node and npm are required to validate an MCP update")
+        env = self._candidate_environment(candidate)
         self._run(
             [
                 npm,
@@ -637,24 +752,49 @@ class UpdateManager:
                 "--prefix",
                 str(candidate),
             ],
+            env=env,
             timeout=180,
         )
         registry = CapabilityRegistry(self.paths)
         provider = registry.registry()["providers"][component["provider"]]
-        env = registry._environment(candidate / "artifacts")
         mcp = expand(provider["mcp"], env)
         old_modules = str(self.paths.runtime / "node_modules")
         new_modules = str(candidate / "node_modules")
         launch = {
             "command": mcp["command"],
-            "args": [str(value).replace(old_modules, new_modules) for value in mcp["args"]],
+            "args": [
+                str(value).replace(old_modules, new_modules) for value in mcp["args"]
+            ],
         }
+        bwrap = shutil.which("bwrap", path=self.paths.runtime_path())
+        if not bwrap:
+            raise CommandError(
+                "bubblewrap is required to validate untrusted MCP candidates"
+            )
+        probe_command = [
+            bwrap,
+            "--die-with-parent",
+            "--new-session",
+            "--unshare-net",
+            "--ro-bind",
+            "/",
+            "/",
+            "--bind",
+            str(candidate),
+            str(candidate),
+            "--tmpfs",
+            "/tmp",
+            "--chdir",
+            str(candidate),
+            node,
+            str(candidate / "mcp_probe.mjs"),
+            json.dumps(launch),
+        ]
         completed = subprocess.run(
-            [node, str(candidate / "mcp_probe.mjs"), json.dumps(launch)],
+            probe_command,
             env=env,
             text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
             timeout=30,
             check=False,
         )
@@ -666,12 +806,43 @@ class UpdateManager:
                 + (completed.stderr.strip() or completed.stdout.strip())
             ) from error
         if not result.get("connected"):
-            raise CommandError(f"MCP candidate handshake failed: {result.get('error', result)}")
+            raise CommandError(
+                f"MCP candidate handshake failed: {result.get('error', result)}"
+            )
         return {
             "npm_ci": "passed",
             "mcp_handshake": "passed",
+            "sandbox": "bubblewrap-unshared-network",
             "tool_count": result.get("tool_count"),
         }
+
+    def _candidate_environment(self, candidate: Path) -> dict[str, str]:
+        home = candidate / "sandbox-home"
+        artifacts = candidate / "artifacts"
+        home.mkdir(mode=0o700, parents=True, exist_ok=True)
+        artifacts.mkdir(mode=0o700, parents=True, exist_ok=True)
+        env = {
+            "HOME": str(home),
+            "PATH": self.paths.runtime_path(),
+            "LANG": "C.UTF-8",
+            "LC_ALL": "C.UTF-8",
+            "BB_STACK_ROOT": str(self.paths.root),
+            "BB_WORK_ROOT": str(candidate / "work"),
+            "BB_CONFIG_HOME": str(candidate / "config"),
+            "BB_ARTIFACT_ROOT": str(artifacts),
+            "CHROME_DEVTOOLS_MCP_NO_USAGE_STATISTICS": "1",
+            "CHROME_DEVTOOLS_MCP_NO_UPDATE_CHECKS": "1",
+            "NPM_CONFIG_USERCONFIG": "/dev/null",
+            "NPM_CONFIG_IGNORE_SCRIPTS": "true",
+        }
+        chromium = (
+            shutil.which("chromium", path=env["PATH"])
+            or shutil.which("chromium-browser", path=env["PATH"])
+            or shutil.which("google-chrome", path=env["PATH"])
+        )
+        if chromium:
+            env["BB_CHROMIUM_BIN"] = chromium
+        return env
 
     def _promote_skill(
         self,
@@ -686,8 +857,12 @@ class UpdateManager:
         try:
             shutil.copytree(candidate / "payload", source)
             config = self.config()
-            config["components"][manifest["component"]]["current_revision"] = manifest["latest"]
-            config["components"][manifest["component"]]["current_digest"] = manifest["candidate_digest"]
+            config["components"][manifest["component"]]["current_revision"] = manifest[
+                "latest"
+            ]
+            config["components"][manifest["component"]]["current_digest"] = manifest[
+                "candidate_digest"
+            ]
             dump_yaml(self.config_path, config)
             self._validate_stack_contracts()
         except Exception:
@@ -703,19 +878,120 @@ class UpdateManager:
         runtime_config = self.paths.root / "00-L0-Runtime" / "config" / "node-runtime"
         for filename in ("package.json", "package-lock.json"):
             shutil.copy2(runtime_config / filename, backup / filename)
-            shutil.copy2(candidate / filename, runtime_config / filename)
+            self._replace_file(candidate / filename, runtime_config / filename)
         try:
             RuntimeManager(self.paths)._node_runtime(False)
             self._validate_stack_contracts()
         except Exception:
             for filename in ("package.json", "package-lock.json"):
-                shutil.copy2(backup / filename, runtime_config / filename)
+                self._replace_file(backup / filename, runtime_config / filename)
             RuntimeManager(self.paths)._node_runtime(False)
             raise
 
+    def _rollback_skill(self, component: dict[str, Any], backup: Path) -> None:
+        source = SkillRegistry(self.paths).source(component["target"])
+        attempt = self._new_child(backup, "rollback-attempt")
+        current = attempt / "current-payload"
+        shutil.copy2(self.config_path, attempt / "current-upstreams.yaml")
+        source.rename(current)
+        try:
+            shutil.copytree(backup / "payload", source)
+            self._replace_file(backup / "upstreams.yaml", self.config_path)
+            self._validate_stack_contracts()
+        except Exception:
+            if source.exists():
+                source.rename(attempt / "failed-payload")
+            current.rename(source)
+            self._replace_file(attempt / "current-upstreams.yaml", self.config_path)
+            raise
+
+    def _rollback_npm(self, backup: Path) -> None:
+        runtime_config = self.paths.root / "00-L0-Runtime" / "config" / "node-runtime"
+        attempt = self._new_child(backup, "rollback-attempt")
+        for filename in ("package.json", "package-lock.json"):
+            shutil.copy2(runtime_config / filename, attempt / filename)
+            self._replace_file(backup / filename, runtime_config / filename)
+        try:
+            RuntimeManager(self.paths)._node_runtime(False)
+            self._validate_stack_contracts()
+        except Exception as original_error:
+            for filename in ("package.json", "package-lock.json"):
+                self._replace_file(attempt / filename, runtime_config / filename)
+            try:
+                RuntimeManager(self.paths)._node_runtime(False)
+            except (OSError, KeyError, ValueError, StackError) as restore_error:
+                raise CommandError(
+                    "npm rollback failed and runtime restoration also failed: "
+                    f"{restore_error}"
+                ) from original_error
+            raise
+
+    def _candidate_content_digest(
+        self, component: dict[str, Any], candidate: Path
+    ) -> str:
+        if component["checker"] == "github-tree":
+            return SkillRegistry.tree_digest(candidate / "payload")
+        if component["checker"] == "npm":
+            digest = hashlib.sha256()
+            for filename in ("package.json", "package-lock.json", "mcp_probe.mjs"):
+                path = candidate / filename
+                if not path.is_file() or path.is_symlink():
+                    raise ValidationError(
+                        f"candidate is missing a regular file: {filename}"
+                    )
+                digest.update(filename.encode("utf-8"))
+                digest.update(b"\0")
+                digest.update(path.read_bytes())
+                digest.update(b"\0")
+            return digest.hexdigest()
+        raise ValidationError(
+            f"candidate content digest is unsupported for {component['checker']}"
+        )
+
+    @staticmethod
+    def _approval_text(name: str, value: str | None, limit: int) -> str:
+        text = (value or "").strip()
+        if not text:
+            raise ValidationError(f"approval {name} must not be empty")
+        if len(text) > limit:
+            raise ValidationError(f"approval {name} is too long")
+        if any(ord(character) < 32 or ord(character) == 127 for character in text):
+            raise ValidationError(f"approval {name} contains control characters")
+        return text
+
+    @contextmanager
+    def _operation_lock(self, name: str):
+        if name not in self.inventory():
+            raise ValidationError(f"unknown update component: {name}")
+        lock_root = self._candidate_root() / ".locks"
+        lock_root.mkdir(parents=True, exist_ok=True)
+        lock_path = lock_root / f"{self._directory_name(name)}.lock"
+        with lock_path.open("a+", encoding="utf-8") as lock:
+            fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+            yield
+
+    @staticmethod
+    def _replace_file(source: Path, destination: Path) -> None:
+        temporary = destination.with_name(f".{destination.name}.update-{os.getpid()}")
+        shutil.copy2(source, temporary)
+        os.replace(temporary, destination)
+
+    @classmethod
+    def _new_child(cls, root: Path, prefix: str) -> Path:
+        timestamp = cls._timestamp()
+        candidate = root / f"{prefix}-{timestamp}"
+        serial = 1
+        while candidate.exists():
+            candidate = root / f"{prefix}-{timestamp}.{serial}"
+            serial += 1
+        candidate.mkdir()
+        return candidate
+
     def _validate_stack_contracts(self) -> None:
         stack = load_yaml(self.paths.root / "stack.yaml")
-        validate(stack, self.paths.root / "schema" / "stack.schema.json", "stack manifest")
+        validate(
+            stack, self.paths.root / "schema" / "stack.schema.json", "stack manifest"
+        )
         RuntimeManager(self.paths).validate_config()
         ProfileRegistry(self.paths).validate_all()
         SkillRegistry(self.paths).validate_all()
@@ -746,7 +1022,9 @@ class UpdateManager:
         try:
             candidate.relative_to(root)
         except ValueError as error:
-            raise ValidationError("candidate path escapes managed candidate root") from error
+            raise ValidationError(
+                "candidate path escapes managed candidate root"
+            ) from error
         if not candidate.is_dir():
             raise ValidationError(f"no staged candidate for {name}")
         return candidate
@@ -763,7 +1041,15 @@ class UpdateManager:
         root = self._candidate_root()
         candidate = root / self._directory_name(name)
         if candidate.exists():
-            candidate.rename(root / f"{candidate.name}.superseded.{self._timestamp()}")
+            timestamp = self._timestamp()
+            superseded = root / f"{candidate.name}.superseded.{timestamp}"
+            serial = 1
+            while superseded.exists():
+                superseded = root / (
+                    f"{candidate.name}.superseded.{timestamp}.{serial}"
+                )
+                serial += 1
+            candidate.rename(superseded)
         candidate.mkdir()
         return candidate
 
@@ -781,7 +1067,7 @@ class UpdateManager:
     def _request_json(self, url: str) -> dict[str, Any]:
         value = self._request_json_value(url)
         if not isinstance(value, dict):
-            raise ValueError(f"expected JSON object from {url}")
+            raise TypeError(f"expected JSON object from {url}")
         return value
 
     def _request_json_value(self, url: str) -> Any:
@@ -813,19 +1099,22 @@ class UpdateManager:
                 [git, "ls-remote", repository, reference],
                 env=env,
                 text=True,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
+                capture_output=True,
                 timeout=int(self.config()["policy"]["network_timeout_seconds"]),
                 check=False,
             )
         except (OSError, subprocess.TimeoutExpired) as error:
-            raise CommandError(f"git ls-remote failed for {repository}: {error}") from error
+            raise CommandError(
+                f"git ls-remote failed for {repository}: {error}"
+            ) from error
         if completed.returncode != 0 or not completed.stdout.strip():
             detail = completed.stderr.strip() or "empty response"
             raise CommandError(f"git ls-remote failed for {repository}: {detail}")
         revision = completed.stdout.split()[0]
         if not re.fullmatch(r"[0-9a-f]{40}", revision):
-            raise ValidationError(f"invalid Git revision returned for {repository}: {revision}")
+            raise ValidationError(
+                f"invalid Git revision returned for {repository}: {revision}"
+            )
         return revision
 
     def _git_latest_tag(self, repository: str) -> str:
@@ -839,13 +1128,14 @@ class UpdateManager:
                 [git, "ls-remote", "--tags", "--refs", repository],
                 env=env,
                 text=True,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
+                capture_output=True,
                 timeout=int(self.config()["policy"]["network_timeout_seconds"]),
                 check=False,
             )
         except (OSError, subprocess.TimeoutExpired) as error:
-            raise CommandError(f"git tag check failed for {repository}: {error}") from error
+            raise CommandError(
+                f"git tag check failed for {repository}: {error}"
+            ) from error
         if completed.returncode != 0:
             detail = completed.stderr.strip() or "empty response"
             raise CommandError(f"git tag check failed for {repository}: {detail}")
@@ -858,7 +1148,9 @@ class UpdateManager:
                 version = tuple(int(part) for part in match.group(1).split("."))
                 tags.append((version, tag))
         if not tags:
-            raise ValidationError(f"no stable numeric release tags found for {repository}")
+            raise ValidationError(
+                f"no stable numeric release tags found for {repository}"
+            )
         return max(tags)[1]
 
     def _github_tree_digest(self, component: dict[str, Any], revision: str) -> str:
@@ -876,14 +1168,18 @@ class UpdateManager:
         with tempfile.TemporaryDirectory(prefix="github-tree-", dir=cache_root) as raw:
             temporary = Path(raw)
             archive = temporary / "upstream.tar.gz"
-            self._download(f"https://codeload.github.com/{slug}/tar.gz/{revision}", archive)
+            self._download(
+                f"https://codeload.github.com/{slug}/tar.gz/{revision}", archive
+            )
             extracted = temporary / "extracted"
             extracted.mkdir()
             with tarfile.open(archive) as handle:
                 RuntimeManager._safe_extract(handle, extracted)
             roots = [path for path in extracted.iterdir() if path.is_dir()]
             if len(roots) != 1:
-                raise ValidationError("GitHub archive has an unexpected top-level layout")
+                raise ValidationError(
+                    "GitHub archive has an unexpected top-level layout"
+                )
             source = (roots[0] / component["subpath"]).resolve()
             try:
                 source.relative_to(roots[0].resolve())
@@ -894,15 +1190,25 @@ class UpdateManager:
             digest = SkillRegistry.tree_digest(source)
         dump_json(
             cache_path,
-            {"schema_version": 1, "revision": revision, "digest": digest, "checked_at": self._now()},
+            {
+                "schema_version": 1,
+                "revision": revision,
+                "digest": digest,
+                "checked_at": self._now(),
+            },
         )
         return digest
 
     def _download(self, url: str, destination: Path) -> None:
         timeout = max(60, int(self.config()["policy"]["network_timeout_seconds"]))
-        request = Request(url, headers={"User-Agent": "bb-engineering-stack-update-checker/0.2"})
+        request = Request(
+            url, headers={"User-Agent": "bb-engineering-stack-update-checker/0.2"}
+        )
         temporary = destination.with_suffix(destination.suffix + ".part")
-        with urlopen(request, timeout=timeout) as response, temporary.open("wb") as handle:
+        with (
+            urlopen(request, timeout=timeout) as response,
+            temporary.open("wb") as handle,
+        ):
             shutil.copyfileobj(response, handle)
         os.replace(temporary, destination)
 
@@ -950,13 +1256,19 @@ class UpdateManager:
     def _run(command: list[str], *, timeout: int) -> None:
         try:
             subprocess.run(command, text=True, timeout=timeout, check=True)
-        except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
-            raise CommandError(f"command failed: {shlex.join(command)}: {error}") from error
+        except (
+            OSError,
+            subprocess.CalledProcessError,
+            subprocess.TimeoutExpired,
+        ) as error:
+            raise CommandError(
+                f"command failed: {shlex.join(command)}: {error}"
+            ) from error
 
     @staticmethod
     def _now() -> str:
-        return datetime.now(timezone.utc).isoformat(timespec="seconds")
+        return datetime.now(UTC).isoformat(timespec="seconds")
 
     @staticmethod
     def _timestamp() -> str:
-        return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        return datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")

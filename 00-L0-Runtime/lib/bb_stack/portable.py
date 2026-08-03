@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -12,7 +12,6 @@ from .io import atomic_write, load_json, load_yaml
 from .paths import StackPaths
 from .skills import SkillRegistry
 from .validation import validate
-
 
 PORTABLE_KIND = "bb-stack-portable"
 PORTABLE_SCHEMA_VERSION = 1
@@ -28,9 +27,7 @@ PORTABLE_CONFIG_KEYS = (
 
 
 def _now() -> str:
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace(
-        "+00:00", "Z"
-    )
+    return datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
 class PortableManager:
@@ -45,7 +42,9 @@ class PortableManager:
             raise StackError(f"portable document already exists: {output}")
         document = self._document()
         validate(document, self.schema, "portable export")
-        atomic_write(output, json.dumps(document, indent=2, ensure_ascii=True) + "\n", 0o600)
+        atomic_write(
+            output, json.dumps(document, indent=2, ensure_ascii=True) + "\n", 0o600
+        )
         return {
             "exported": True,
             "path": str(output),
@@ -135,7 +134,9 @@ class PortableManager:
             "BB_NPM_REGISTRY": config["BB_NPM_REGISTRY"],
         }
         if any(value is None for value in machine_config.values()):
-            raise ValidationError("machine configuration contains an invalid portable URL")
+            raise ValidationError(
+                "machine configuration contains an invalid portable URL"
+            )
         engagements = self._engagement_inventory()
         mail_configured = (
             self.paths.home / ".local" / "share" / "pentest-mail" / "config.env"
@@ -196,17 +197,13 @@ class PortableManager:
     def _installed_profiles(self) -> dict[str, list[str]]:
         registry = SkillRegistry(self.paths)
         result: dict[str, list[str]] = {"claude": [], "codex": []}
-        for agent in result:
+        for agent, profiles in result.items():
             for profile in registry.profile_names():
                 required = set(registry.profile(profile)["required"])
                 statuses = registry.status(profile, agent)
-                ready = {
-                    item["name"]
-                    for item in statuses
-                    if item["state"] == "ready"
-                }
+                ready = {item["name"] for item in statuses if item["state"] == "ready"}
                 if required <= ready:
-                    result[agent].append(profile)
+                    profiles.append(profile)
         return result
 
     def _engagement_inventory(self) -> list[dict[str, Any]]:

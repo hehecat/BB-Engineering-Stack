@@ -17,6 +17,12 @@ plain-Claude session resumes the same Profile. Legacy work units directly under
 `$BB_WORK_ROOT` remain
 readable but new data is never created there.
 
+Protected workflows use `pending`, `user-asserted`, `verified`, or `revoked`
+authorization. Permit active testing only while lifecycle is `active` and
+authorization is `verified`. CTF, lab, and standalone analysis use `exempt`.
+Keep the authorization source in `notes/SCOPE.md`; never infer it from access,
+credentials, asset ownership, or a discovered relationship.
+
 ## Lifecycle
 
 ```text

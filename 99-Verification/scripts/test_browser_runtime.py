@@ -3,12 +3,12 @@ from __future__ import annotations
 
 import json
 import os
-from pathlib import Path
 import shutil
 import subprocess
 import tempfile
 import unittest
-
+from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
 os.environ["BB_STACK_ROOT"] = str(ROOT)
@@ -37,12 +37,70 @@ class BrowserRuntimeTests(unittest.TestCase):
 
     def test_browser_js_mcp_connects_to_managed_cdp(self) -> None:
         output = Path(self.temporary.name) / "mcp.json"
-        document = CapabilityRegistry(self.paths).render_mcp(
-            "browser-js", output, artifact_root=Path(self.temporary.name) / "artifacts"
-        )
+        original_status = CapabilityRegistry.provider_status
+
+        def provider_status(
+            registry: CapabilityRegistry,
+            name: str,
+            provider: dict[str, object],
+            env: dict[str, str],
+        ) -> dict[str, object]:
+            if name == "chrome-devtools-mcp":
+                return {
+                    "name": name,
+                    "kind": "mcp",
+                    "present": True,
+                    "resolved": "fixture",
+                    "locator_detail": "fixture",
+                    "configuration": "ready",
+                    "configuration_detail": [],
+                    "usable": True,
+                    "placement": "shared-main",
+                }
+            return original_status(registry, name, provider, env)
+
+        with (
+            patch.dict(
+                os.environ,
+                {"BB_BROWSER_URL": "http://127.0.0.1:49152"},
+                clear=False,
+            ),
+            patch.object(
+                CapabilityRegistry,
+                "provider_status",
+                provider_status,
+            ),
+        ):
+            document = CapabilityRegistry(self.paths).render_mcp(
+                "browser-js",
+                output,
+                artifact_root=Path(self.temporary.name) / "artifacts",
+            )
         server = document["mcpServers"]["chrome-devtools"]
-        self.assertIn("--browser-url=http://127.0.0.1:9222", server["args"])
+        self.assertIn("--browser-url=http://127.0.0.1:49152", server["args"])
         self.assertNotIn("--executable-path", server["args"])
+
+    def test_browser_command_keeps_chromium_sandbox_enabled(self) -> None:
+        command = BrowserRuntimeManager._browser_command(
+            "/usr/bin/chromium",
+            49152,
+            Path(self.temporary.name) / "profile",
+            None,
+        )
+        self.assertNotIn("--no-sandbox", command)
+        self.assertIn("--remote-debugging-port=49152", command)
+
+    def test_browser_state_is_scoped_to_each_engagement(self) -> None:
+        first = EngagementManager(self.paths).create(
+            "browser-one", "https://one.invalid", workflow="analysis"
+        )
+        second = EngagementManager(self.paths).create(
+            "browser-two", "https://two.invalid", workflow="analysis"
+        )
+        self.assertNotEqual(
+            BrowserRuntimeManager._state_path(first),
+            BrowserRuntimeManager._state_path(second),
+        )
 
     def test_managed_cdp_serves_real_cli_calls(self) -> None:
         env = self.paths.environment()
@@ -69,8 +127,7 @@ class BrowserRuntimeTests(unittest.TestCase):
             [str(cli), "list_pages", "--output-format=json"],
             env=env,
             text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
             timeout=20,
             check=False,
         )
@@ -93,8 +150,7 @@ class BrowserRuntimeTests(unittest.TestCase):
             ],
             env=env,
             text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
             timeout=30,
             check=False,
         )

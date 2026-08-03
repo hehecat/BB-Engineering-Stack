@@ -1,16 +1,17 @@
 from __future__ import annotations
 
 import argparse
-from dataclasses import asdict
 import json
-from pathlib import Path
 import sys
+from dataclasses import asdict
+from pathlib import Path
 from typing import Any
 
 from . import __version__
 from .browser import BrowserRuntimeManager
 from .capabilities import CapabilityRegistry
 from .configuration import ConfigurationManager
+from .data import DataManager
 from .engagement import EngagementManager
 from .errors import StackError
 from .evaluation import EvaluationManager
@@ -26,7 +27,6 @@ from .status import StackStatus
 from .updates import UpdateManager
 from .validation import validate
 from .workspace import ROUTES, WorkspaceManager
-
 
 CAPABILITY_PROFILES = [
     "minimal",
@@ -69,7 +69,9 @@ def build_parser() -> argparse.ArgumentParser:
         prog="bb-stack",
         description="BB Engineering Stack L0-L5 control plane",
     )
-    parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
+    parser.add_argument(
+        "--version", action="version", version=f"%(prog)s {__version__}"
+    )
     commands = parser.add_subparsers(dest="command", required=True)
 
     paths = commands.add_parser("paths", help="show resolved source/runtime/work paths")
@@ -110,7 +112,8 @@ def build_parser() -> argparse.ArgumentParser:
     portable_import.add_argument("--json", action="store_true")
 
     evaluation = commands.add_parser(
-        "eval", help="run static contracts or an isolated real-Agent behavior evaluation"
+        "eval",
+        help="run static contracts or an isolated real-Agent behavior evaluation",
     )
     evaluation_sub = evaluation.add_subparsers(dest="eval_command", required=True)
     evaluation_contracts = evaluation_sub.add_parser("contracts")
@@ -123,7 +126,8 @@ def build_parser() -> argparse.ArgumentParser:
     evaluation_agent.add_argument("--json", action="store_true")
 
     status = commands.add_parser(
-        "status", help="show unified paths, Prompt, Skills, MCP, runtime, and personal configuration"
+        "status",
+        help="show unified paths, Prompt, Skills, MCP, runtime, and personal configuration",
     )
     status.add_argument(
         "--profile",
@@ -148,7 +152,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     add_mail_subcommands(mail)
 
-    bootstrap = commands.add_parser("bootstrap", help="create the local runtime and install a profile")
+    bootstrap = commands.add_parser(
+        "bootstrap", help="create the local runtime and install a profile"
+    )
     bootstrap.add_argument("--profile", default="ctf-web", choices=CAPABILITY_PROFILES)
     bootstrap.add_argument(
         "--work-root",
@@ -165,7 +171,8 @@ def build_parser() -> argparse.ArgumentParser:
     bootstrap.add_argument("--json", action="store_true")
 
     workspace = commands.add_parser(
-        "workspace", help="initialize, inspect, or route the natural-language Claude workspace"
+        "workspace",
+        help="initialize, inspect, or route the natural-language Claude workspace",
     )
     workspace_sub = workspace.add_subparsers(dest="workspace_command", required=True)
     workspace_init = workspace_sub.add_parser("init")
@@ -184,8 +191,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--platform",
         choices=PLATFORMS,
     )
+    workspace_route.add_argument("--mode", choices=["interactive", "continuous"])
+    workspace_route.add_argument("--authorization-source")
     workspace_route.add_argument(
-        "--mode", choices=["interactive", "continuous"]
+        "--authorization-status",
+        choices=["pending", "user-asserted", "verified"],
     )
     workspace_route.add_argument("--json", action="store_true")
 
@@ -197,11 +207,39 @@ def build_parser() -> argparse.ArgumentParser:
     browser_start.add_argument("--engagement")
     browser_start.add_argument("--json", action="store_true")
     browser_status = browser_sub.add_parser("status")
+    browser_status.add_argument("--engagement")
     browser_status.add_argument("--json", action="store_true")
     browser_stop = browser_sub.add_parser("stop")
+    browser_stop.add_argument("--engagement")
     browser_stop.add_argument("--json", action="store_true")
 
-    profile = commands.add_parser("profile", help="list, validate, or render runtime profiles")
+    data = commands.add_parser(
+        "data", help="inspect or install version-pinned wordlist and payload bundles"
+    )
+    data_sub = data.add_subparsers(dest="data_command", required=True)
+    data_status = data_sub.add_parser("status")
+    data_status.add_argument("dataset", nargs="?")
+    data_status.add_argument("--profile", choices=CAPABILITY_PROFILES)
+    data_status.add_argument("--strict", action="store_true")
+    data_status.add_argument("--json", action="store_true")
+    data_ensure = data_sub.add_parser("ensure")
+    data_ensure.add_argument("dataset", nargs="?")
+    data_ensure.add_argument("--profile", choices=CAPABILITY_PROFILES)
+    data_ensure.add_argument("--bundle", action="append", default=[])
+    data_ensure.add_argument("--with-optional", action="store_true")
+    data_ensure.add_argument("--dry-run", action="store_true")
+    data_ensure.add_argument("--json", action="store_true")
+    data_path = data_sub.add_parser("path")
+    data_path.add_argument("dataset")
+    data_path.add_argument("--json", action="store_true")
+    data_update = data_sub.add_parser("update")
+    data_update.add_argument("dataset", nargs="?")
+    data_update.add_argument("--check", action="store_true", required=True)
+    data_update.add_argument("--json", action="store_true")
+
+    profile = commands.add_parser(
+        "profile", help="list, validate, or render runtime profiles"
+    )
     profile_sub = profile.add_subparsers(dest="profile_command", required=True)
     profile_list = profile_sub.add_parser("list")
     profile_list.add_argument("--json", action="store_true")
@@ -220,9 +258,15 @@ def build_parser() -> argparse.ArgumentParser:
     new.add_argument("target")
     new.add_argument("--workflow", choices=WORKFLOWS, default="ctf")
     new.add_argument("--platform")
-    new.add_argument("--mode", choices=["interactive", "continuous"], default="interactive")
+    new.add_argument(
+        "--mode", choices=["interactive", "continuous"], default="interactive"
+    )
     new.add_argument("--title")
     new.add_argument("--authorization-source")
+    new.add_argument(
+        "--authorization-status",
+        choices=["pending", "user-asserted", "verified"],
+    )
     new.add_argument("--json", action="store_true")
 
     engagement = commands.add_parser("engagement", help="manage L3 engagement state")
@@ -235,6 +279,15 @@ def build_parser() -> argparse.ArgumentParser:
     checkpoint = engagement_sub.add_parser("checkpoint")
     checkpoint.add_argument("engagement", nargs="?")
     checkpoint.add_argument("--json", action="store_true")
+    authorize = engagement_sub.add_parser("authorize")
+    authorize.add_argument("engagement", nargs="?")
+    authorize.add_argument(
+        "--status",
+        required=True,
+        choices=["pending", "user-asserted", "verified", "revoked"],
+    )
+    authorize.add_argument("--source")
+    authorize.add_argument("--json", action="store_true")
     for action in ("pause", "block", "close", "resume", "reopen"):
         transition = engagement_sub.add_parser(action)
         transition.add_argument("engagement", nargs="?")
@@ -257,7 +310,9 @@ def build_parser() -> argparse.ArgumentParser:
     skills_validate.add_argument("--json", action="store_true")
     skills_install = skills_sub.add_parser("install")
     skills_install.add_argument("--profile", required=True, choices=CAPABILITY_PROFILES)
-    skills_install.add_argument("--agent", choices=["claude", "codex", "both"], default="claude")
+    skills_install.add_argument(
+        "--agent", choices=["claude", "codex", "both"], default="claude"
+    )
     skills_install.add_argument("--required-only", action="store_true")
     skills_install.add_argument("--force", action="store_true")
     skills_install.add_argument("--json", action="store_true")
@@ -279,19 +334,25 @@ def build_parser() -> argparse.ArgumentParser:
     mcp_probe.add_argument("--timeout", type=int, default=25)
     mcp_probe.add_argument("--json", action="store_true")
 
-    doctor = commands.add_parser("doctor", help="audit runtime, Skills, capabilities, and MCP readiness")
+    doctor = commands.add_parser(
+        "doctor", help="audit runtime, Skills, capabilities, and MCP readiness"
+    )
     doctor.add_argument("--profile", default="ctf-web", choices=CAPABILITY_PROFILES)
     doctor.add_argument("--engagement")
     doctor.add_argument("--strict", action="store_true")
     doctor.add_argument("--probe-mcp", action="store_true")
     doctor.add_argument("--json", action="store_true")
 
-    keysmith = commands.add_parser("keysmith", help="manage optional persistent Prompt deployment")
+    keysmith = commands.add_parser(
+        "keysmith", help="manage optional persistent Prompt deployment"
+    )
     keysmith_sub = keysmith.add_subparsers(dest="keysmith_command", required=True)
     keysmith_fetch = keysmith_sub.add_parser("fetch")
     keysmith_fetch.add_argument("--json", action="store_true")
     keysmith_install = keysmith_sub.add_parser("install")
-    keysmith_install.add_argument("--profile", required=True, choices=["ctf-replacement", "lab-replacement"])
+    keysmith_install.add_argument(
+        "--profile", required=True, choices=["ctf-replacement", "lab-replacement"]
+    )
     keysmith_install.add_argument("--yes", action="store_true")
     keysmith_install.add_argument("--json", action="store_true")
     keysmith_status = keysmith_sub.add_parser("status")
@@ -300,7 +361,9 @@ def build_parser() -> argparse.ArgumentParser:
     keysmith_uninstall.add_argument("--yes", action="store_true")
     keysmith_uninstall.add_argument("--json", action="store_true")
 
-    updates = commands.add_parser("updates", help="check, stage, validate, promote, or roll back updates")
+    updates = commands.add_parser(
+        "updates", help="check, stage, validate, promote, or roll back updates"
+    )
     updates_sub = updates.add_subparsers(dest="updates_command", required=True)
     updates_check = updates_sub.add_parser("check")
     update_scope = updates_check.add_mutually_exclusive_group()
@@ -316,6 +379,11 @@ def build_parser() -> argparse.ArgumentParser:
     updates_validate = updates_sub.add_parser("validate")
     updates_validate.add_argument("name", nargs="?")
     updates_validate.add_argument("--json", action="store_true")
+    updates_approve = updates_sub.add_parser("approve")
+    updates_approve.add_argument("name")
+    updates_approve.add_argument("--reviewer", required=True)
+    updates_approve.add_argument("--note")
+    updates_approve.add_argument("--json", action="store_true")
     updates_promote = updates_sub.add_parser("promote")
     updates_promote.add_argument("name")
     updates_promote.add_argument("--json", action="store_true")
@@ -323,7 +391,9 @@ def build_parser() -> argparse.ArgumentParser:
     updates_rollback.add_argument("name")
     updates_rollback.add_argument("--json", action="store_true")
 
-    launch = commands.add_parser("launch", help="render a profile and exec Claude Code in the work unit")
+    launch = commands.add_parser(
+        "launch", help="render a profile and exec Claude Code in the work unit"
+    )
     launch.add_argument("--profile", default="ctf-quick")
     launch.add_argument("--engagement")
     launch.add_argument("--platform")
@@ -463,6 +533,8 @@ def command(args: argparse.Namespace, paths: StackPaths) -> int:
                 slug=args.slug,
                 platform=args.platform,
                 mode=args.mode,
+                authorization_source=args.authorization_source,
+                authorization_status=args.authorization_status,
             )
         emit(result, args.json)
         return 0
@@ -472,16 +544,53 @@ def command(args: argparse.Namespace, paths: StackPaths) -> int:
             engagement = paths.engagement(args.engagement)
             emit(manager.start(engagement), args.json)
         elif args.browser_command == "status":
-            emit(manager.status(), args.json)
+            engagement = paths.engagement(args.engagement) if args.engagement else None
+            emit(manager.status(engagement), args.json)
         else:
-            emit(manager.stop(), args.json)
+            engagement = paths.engagement(args.engagement) if args.engagement else None
+            emit(manager.stop(engagement), args.json)
+        return 0
+    if args.command == "data":
+        manager = DataManager(paths)
+        if args.data_command == "status":
+            report = manager.status(args.dataset, profile=args.profile)
+            emit(report, args.json)
+            return 1 if args.strict and not report["ready"] else 0
+        if args.data_command == "ensure":
+            if bool(args.dataset) == bool(args.profile):
+                raise StackError(
+                    "data ensure requires exactly one dataset or --profile"
+                )
+            if args.profile:
+                result = manager.ensure_profile(
+                    args.profile,
+                    include_optional=args.with_optional,
+                    dry_run=args.dry_run,
+                )
+            else:
+                result = manager.ensure(
+                    args.dataset,
+                    args.bundle or None,
+                    dry_run=args.dry_run,
+                )
+            emit(result, args.json)
+            return 0
+        if args.data_command == "path":
+            result = {"dataset": args.dataset, "path": str(manager.path(args.dataset))}
+            emit(result if args.json else result["path"], args.json)
+            return 0
+        emit(manager.update_check(args.dataset), args.json)
         return 0
     if args.command == "profile":
         registry = ProfileRegistry(paths)
         if args.profile_command == "list":
             emit(registry.names(), args.json)
         elif args.profile_command == "validate":
-            result = [args.name] if args.name and registry.load(args.name) else registry.validate_all()
+            result = (
+                [args.name]
+                if args.name and registry.load(args.name)
+                else registry.validate_all()
+            )
             emit({"valid": result}, args.json)
         else:
             engagement = paths.engagement(args.engagement) if args.engagement else None
@@ -502,6 +611,7 @@ def command(args: argparse.Namespace, paths: StackPaths) -> int:
             mode=args.mode,
             title=args.title,
             authorization_source=args.authorization_source,
+            authorization_status=args.authorization_status,
         )
         emit({"created": str(root)}, args.json)
         return 0
@@ -524,6 +634,11 @@ def command(args: argparse.Namespace, paths: StackPaths) -> int:
         root = paths.engagement(args.engagement)
         if args.engagement_command == "validate":
             emit(manager.validate(root), args.json)
+        elif args.engagement_command == "authorize":
+            emit(
+                manager.authorize(root, status=args.status, source=args.source),
+                args.json,
+            )
         elif args.engagement_command == "checkpoint":
             emit(manager.checkpoint(root), args.json)
         else:
@@ -574,12 +689,20 @@ def command(args: argparse.Namespace, paths: StackPaths) -> int:
                 args.json,
             )
         else:
-            emit(registry.probe_mcp(args.config.expanduser().resolve(), args.timeout), args.json)
+            emit(
+                registry.probe_mcp(args.config.expanduser().resolve(), args.timeout),
+                args.json,
+            )
         return 0
     if args.command == "doctor":
         runtime = RuntimeManager(paths).runtime_status()
+        data = DataManager(paths).status(profile=args.profile)
         engagement = paths.engagement(args.engagement) if args.engagement else None
-        artifact_root = engagement / "artifacts" if engagement else paths.generated / "doctor-artifacts"
+        artifact_root = (
+            engagement / "artifacts"
+            if engagement
+            else paths.generated / "doctor-artifacts"
+        )
         l5 = CapabilityRegistry(paths)
         report = l5.doctor(args.profile, artifact_root)
         skill_registry = SkillRegistry(paths)
@@ -595,8 +718,13 @@ def command(args: argparse.Namespace, paths: StackPaths) -> int:
             "schema_version": 1,
             "profile": args.profile,
             "runtime": runtime,
+            "data": data,
             "capabilities": report,
-            "skills": {"ready": not missing_skills, "missing_or_conflicting": missing_skills, "items": skill_status},
+            "skills": {
+                "ready": not missing_skills,
+                "missing_or_conflicting": missing_skills,
+                "items": skill_status,
+            },
         }
         if engagement:
             result["engagement"] = EngagementManager(paths).validate(engagement)
@@ -607,6 +735,7 @@ def command(args: argparse.Namespace, paths: StackPaths) -> int:
         result["ready"] = bool(
             runtime["venv"]
             and runtime["node_modules"]
+            and data["ready"]
             and report["ready"]
             and not missing_skills
         )
@@ -638,6 +767,15 @@ def command(args: argparse.Namespace, paths: StackPaths) -> int:
             emit(manager.stage(args.name), args.json)
         elif args.updates_command == "validate":
             emit(manager.validate_candidates(args.name), args.json)
+        elif args.updates_command == "approve":
+            emit(
+                manager.approve(
+                    args.name,
+                    reviewer=args.reviewer,
+                    note=args.note,
+                ),
+                args.json,
+            )
         elif args.updates_command == "promote":
             emit(manager.promote(args.name), args.json)
         else:

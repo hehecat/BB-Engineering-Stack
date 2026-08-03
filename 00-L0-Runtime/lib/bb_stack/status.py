@@ -2,12 +2,11 @@ from __future__ import annotations
 
 import hashlib
 import os
-from pathlib import Path
 import shlex
-import shutil
 import socket
 import stat
 import subprocess
+from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 from urllib.request import ProxyHandler, Request, build_opener
@@ -15,12 +14,14 @@ from urllib.request import ProxyHandler, Request, build_opener
 from . import __version__
 from .capabilities import CapabilityRegistry
 from .configuration import MACHINE_CONFIG_KEYS, load_machine_config
+from .data import DataManager
 from .engagement import EngagementManager
 from .errors import StackError, ValidationError
 from .evaluation import EvaluationManager
 from .io import load_yaml
 from .keysmith import KeysmithAdapter
-from .mail_otp import MailOtpError, MailSettings, load_config as load_mail_config
+from .mail_otp import MailOtpError, MailSettings
+from .mail_otp import load_config as load_mail_config
 from .paths import StackPaths
 from .profiles import ProfileRegistry
 from .runtime import RuntimeManager
@@ -72,6 +73,7 @@ class StackStatus:
         )
         proxy_report = self._proxy(machine_config, actions)
         runtime_report = self._runtime(profile, actions)
+        data_report = self._data(profile, actions)
         engagement_report = self._engagement(profile, engagement, actions)
         selected_engagement = engagement_report["selected"]
         if (
@@ -131,6 +133,7 @@ class StackStatus:
             and config_report["ready"]
             and proxy_report["ready"]
             and runtime_report["ready"]
+            and data_report["ready"]
             and prompt_report["ready"]
             and evaluation_report["ready"]
             and engagement_report["ready"]
@@ -147,6 +150,7 @@ class StackStatus:
             "machine_config": config_report,
             "proxy": proxy_report,
             "runtime": runtime_report,
+            "data": data_report,
             "prompt": prompt_report,
             "evaluation": evaluation_report,
             "engagement": engagement_report,
@@ -157,9 +161,7 @@ class StackStatus:
             "actions": actions,
         }
 
-    def _paths(
-        self, profile: str, actions: list[dict[str, str]]
-    ) -> dict[str, Any]:
+    def _paths(self, profile: str, actions: list[dict[str, str]]) -> dict[str, Any]:
         definitions = {
             "home": (self.paths.home, True),
             "stack_root": (self.paths.root, True),
@@ -168,6 +170,7 @@ class StackStatus:
             "config_home": (self.paths.config_home, True),
             "claude_config_dir": (self.paths.claude_config_dir, False),
             "runtime": (self.paths.runtime, True),
+            "data_root": (self.paths.data_root, True),
         }
         items: dict[str, dict[str, Any]] = {}
         for name, (path, required) in definitions.items():
@@ -204,6 +207,50 @@ class StackStatus:
             "claude_config_explicit": self.paths.claude_config_explicit,
             "items": items,
         }
+
+    def _data(self, profile: str, actions: list[dict[str, str]]) -> dict[str, Any]:
+        report = DataManager(self.paths).status(profile=profile)
+        for name, item in report["items"].items():
+            missing_required = sorted(
+                set(item["required_bundles"]) - set(item["installed_bundles"])
+            )
+            if item["state"] == "incompatible":
+                self._action(
+                    actions,
+                    "required",
+                    f"data.{name}.incompatible",
+                    f"Move or repair the unexpected data directory: {item['destination']}",
+                    None,
+                )
+            elif item["required_bundles"] and (
+                not item["source_ready"] or missing_required
+            ):
+                bundle_args = " ".join(
+                    f"--bundle {shlex.quote(bundle)}" for bundle in missing_required
+                )
+                command = f"bb-stack data ensure {shlex.quote(name)}"
+                if bundle_args:
+                    command += " " + bundle_args
+                self._action(
+                    actions,
+                    "required",
+                    f"data.{name}.{item['state']}",
+                    f"Install or repair {name} data bundles: "
+                    + (", ".join(missing_required) or "pinned source"),
+                    command,
+                )
+            missing_optional = sorted(
+                set(item["optional_bundles"]) - set(item["installed_bundles"])
+            )
+            if missing_optional:
+                self._action(
+                    actions,
+                    "optional",
+                    f"data.{name}.optional",
+                    f"Install optional {name} data bundles: {', '.join(missing_optional)}",
+                    f"bb-stack data ensure --profile {profile} --with-optional",
+                )
+        return report
 
     def _config(
         self,
@@ -284,8 +331,7 @@ class StackStatus:
             lower_conflict = bool(
                 (active.get("http_proxy") and active["http_proxy"] != expected_http)
                 or (
-                    active.get("https_proxy")
-                    and active["https_proxy"] != expected_http
+                    active.get("https_proxy") and active["https_proxy"] != expected_http
                 )
                 or (active.get("all_proxy") and active["all_proxy"] != expected_socks)
             )
@@ -347,15 +393,15 @@ class StackStatus:
             "configuration_applied": applied,
         }
 
-    def _runtime(
-        self, profile: str, actions: list[dict[str, str]]
-    ) -> dict[str, Any]:
+    def _runtime(self, profile: str, actions: list[dict[str, str]]) -> dict[str, Any]:
         status = RuntimeManager(self.paths).runtime_status()
         versions: dict[str, str | None] = {}
         for name, command in status["commands"].items():
             versions[name] = self._command_version(name, command) if command else None
         required_commands = ("python3", "node", "npm", "git", "claude")
-        missing = [name for name in required_commands if not status["commands"].get(name)]
+        missing = [
+            name for name in required_commands if not status["commands"].get(name)
+        ]
         if not status["venv"] or not status["node_modules"] or missing:
             self._action(
                 actions,
@@ -390,7 +436,10 @@ class StackStatus:
             return {"ready": False, "selected": None, "available": []}
         registry = ProfileRegistry(self.paths)
         definition = registry.load(selected)
-        if definition["l5_profile"] != profile or definition["skill_profile"] != profile:
+        if (
+            definition["l5_profile"] != profile
+            or definition["skill_profile"] != profile
+        ):
             raise ValidationError(
                 f"workflow profile {selected} does not use L4/L5 profile {profile}"
             )
@@ -441,9 +490,7 @@ class StackStatus:
         if latest and prompt_file and Path(prompt_file).is_file():
             digest = hashlib.sha256(Path(prompt_file).read_bytes()).hexdigest()
             prompt_matches = latest.get("prompt_sha256") == digest
-        version_matches = bool(
-            latest and latest.get("stack_version") == __version__
-        )
+        version_matches = bool(latest and latest.get("stack_version") == __version__)
         contract_matches = bool(
             latest
             and current_contract
@@ -458,10 +505,14 @@ class StackStatus:
         )
         if latest is None:
             state = "not-run"
-            message = f"Run the isolated Agent behavior evaluation for {workflow_profile}"
+            message = (
+                f"Run the isolated Agent behavior evaluation for {workflow_profile}"
+            )
         elif not latest.get("passed"):
             state = "failed"
-            message = f"Re-run the failed Agent behavior evaluation for {workflow_profile}"
+            message = (
+                f"Re-run the failed Agent behavior evaluation for {workflow_profile}"
+            )
         elif not prompt_matches or not version_matches or not contract_matches:
             state = "stale"
             message = (
@@ -566,6 +617,7 @@ class StackStatus:
                 "mode": state["mode"],
                 "lifecycle": state["lifecycle"],
                 "phase": state["phase"],
+                "authorization": state["authorization"],
                 "next_action": state["current"]["next_action"],
                 "checkpoint_updated_at": state["checkpoint"]["updated_at"],
                 "expected_profile": expected_profile,
@@ -579,15 +631,34 @@ class StackStatus:
                     f"Use profile {expected_profile} for engagement {state['slug']}",
                     f"bb-stack status --profile {expected_profile} --engagement {state['slug']}",
                 )
+            if (
+                state["workflow"] in {"bug-bounty", "assessment"}
+                and state["authorization"]["status"] != "verified"
+            ):
+                self._action(
+                    actions,
+                    "required",
+                    "engagement.authorization",
+                    f"Verify authorization for engagement {state['slug']}",
+                    f"bb-stack engagement authorize {state['slug']} --status verified --source DESCRIPTION",
+                )
         invalid = [item["slug"] for item in inventory if "error" in item]
         lifecycle_counts: dict[str, int] = {}
         for item in inventory:
             lifecycle = item.get("lifecycle", "invalid")
             lifecycle_counts[lifecycle] = lifecycle_counts.get(lifecycle, 0) + 1
+        authorization_ready = bool(
+            not selected
+            or selected["workflow"] not in {"bug-bounty", "assessment"}
+            or selected["authorization"]["status"] == "verified"
+        )
         return {
-            "ready": bool((not explicit or selected) and profile_matches),
+            "ready": bool(
+                (not explicit or selected) and profile_matches and authorization_ready
+            ),
             "selected": selected,
             "profile_matches": profile_matches,
+            "authorization_ready": authorization_ready,
             "auto_detected": bool(selected and not explicit),
             "count": len(inventory),
             "lifecycle_counts": dict(sorted(lifecycle_counts.items())),
@@ -608,7 +679,9 @@ class StackStatus:
         registry = ProfileRegistry(self.paths)
         return sorted(
             capability
-            for capability, profile_name in stack["defaults"]["capability_profiles"].items()
+            for capability, profile_name in stack["defaults"][
+                "capability_profiles"
+            ].items()
             if registry.load(profile_name)["workflow"] == workflow
         )
 
@@ -712,12 +785,18 @@ class StackStatus:
         )
         mail_relevant = "otp.mail" in selected_capabilities
         delivery_relevant = "delivery.file-share" in selected_capabilities
-        mail = registry.provider_status("mail-otp", providers["mail-otp"], configured_env)
+        mail = registry.provider_status(
+            "mail-otp", providers["mail-otp"], configured_env
+        )
         delivery = registry.provider_status(
             "filecodebox", providers["filecodebox"], configured_env
         )
-        mail_config = self.paths.home / ".local" / "share" / "pentest-mail" / "config.env"
-        mail_mode = stat.S_IMODE(mail_config.stat().st_mode) if mail_config.is_file() else None
+        mail_config = (
+            self.paths.home / ".local" / "share" / "pentest-mail" / "config.env"
+        )
+        mail_mode = (
+            stat.S_IMODE(mail_config.stat().st_mode) if mail_config.is_file() else None
+        )
         mail_config_valid = False
         mail_config_error = None
         mail_provider = None
@@ -805,15 +884,12 @@ class StackStatus:
             elif mail_config.is_file() and not mail_config_valid:
                 external["mail"] = "invalid-config"
             else:
-                external["mail"] = self._check_mail(
-                    {**mail, "usable": mail_usable}
-                )
+                external["mail"] = self._check_mail({**mail, "usable": mail_usable})
             external["delivery"] = self._check_delivery(
                 config.get("BB_FILECODEBOX_URL", ""), config
             )
         required_ready = bool(
-            (not identity_required or username)
-            and delivery_url_valid
+            (not identity_required or username) and delivery_url_valid
         )
         mail_ready = bool(
             mail_mode in {None, 0o600}
@@ -847,9 +923,7 @@ class StackStatus:
             "external_checks": external,
         }
 
-    def _keysmith(
-        self, profile: str, actions: list[dict[str, str]]
-    ) -> dict[str, Any]:
+    def _keysmith(self, profile: str, actions: list[dict[str, str]]) -> dict[str, Any]:
         try:
             status = KeysmithAdapter(self.paths).status()
             result = {
@@ -859,7 +933,7 @@ class StackStatus:
                 "doctor_available": status.get("doctor", {}).get("available", True),
                 "profile": (status.get("deployment") or {}).get("profile"),
             }
-        except Exception as error:
+        except (OSError, KeyError, TypeError, StackError) as error:
             result = {
                 "source_cached": False,
                 "deployed": False,
@@ -909,7 +983,11 @@ class StackStatus:
         lines = [f"BB Engineering Stack: {state}", f"Profile: {report['profile']}", ""]
         lines.append("Paths")
         for name, item in report["paths"]["items"].items():
-            marker = "OK" if item["exists"] and (item["writable"] or not item["required"]) else "MISS"
+            marker = (
+                "OK"
+                if item["exists"] and (item["writable"] or not item["required"])
+                else "MISS"
+            )
             lines.append(f"  [{marker}] {name}: {item['path']}")
         runtime = report["runtime"]
         workspace = report["workspace"]
@@ -936,21 +1014,45 @@ class StackStatus:
             if version and name in {"python3", "node", "go", "claude", "codex"}
         ]
         lines.append("  " + " | ".join(version_parts))
+        data = report["data"]
+        lines.extend(["", "Data Assets"])
+        if not data["items"]:
+            lines.append("  [OK] no data bundles required")
+        for name, item in data["items"].items():
+            required_missing = set(item["required_bundles"]) - set(
+                item["installed_bundles"]
+            )
+            if item["source_ready"] and not required_missing:
+                marker = "OK"
+            elif item["required_bundles"]:
+                marker = "MISS"
+            else:
+                marker = "OPT"
+            lines.append(
+                f"  [{marker}] {name}: state={item['state']} "
+                f"installed={item['installed_bundles']} missing={item['missing_bundles']}"
+            )
         prompt = report["prompt"]
         lines.extend(
             [
                 "",
                 "Prompt",
-                f"  [{'OK' if prompt['ready'] else 'MISS'}] {prompt.get('selected') or 'unmapped'} "
-                f"mode={prompt.get('prompt_mode', 'n/a')} platform={prompt.get('platform', 'n/a')} "
-                f"tokens={prompt.get('token_estimate', 0)}/{prompt.get('budget', 0)}",
+                (
+                    f"  [{'OK' if prompt['ready'] else 'MISS'}] "
+                    f"{prompt.get('selected') or 'unmapped'} "
+                    f"mode={prompt.get('prompt_mode', 'n/a')} "
+                    f"platform={prompt.get('platform', 'n/a')} "
+                    f"tokens={prompt.get('token_estimate', 0)}/{prompt.get('budget', 0)}"
+                ),
             ]
         )
         evaluation = report["evaluation"]
         evaluation_mark = (
             "OK"
             if evaluation["state"] == "passed"
-            else "MISS" if evaluation["required"] else "OPT"
+            else "MISS"
+            if evaluation["required"]
+            else "OPT"
         )
         lines.append(
             f"  [{evaluation_mark}] agent-eval={evaluation['state']} "
@@ -969,8 +1071,11 @@ class StackStatus:
             [
                 "",
                 "Engagement State",
-                f"  [{'OK' if engagement['ready'] else 'MISS'}] {engagement_text} "
-                f"inventory={engagement['count']} states={engagement['lifecycle_counts']}",
+                (
+                    f"  [{'OK' if engagement['ready'] else 'MISS'}] "
+                    f"{engagement_text} inventory={engagement['count']} "
+                    f"states={engagement['lifecycle_counts']}"
+                ),
             ]
         )
         skills = report["skills"]
@@ -987,8 +1092,12 @@ class StackStatus:
         )
         capabilities = report["capabilities"]
         probe = capabilities["probe"]
-        probe_text = "not-run" if probe == "not-run" else str(
-            {name: value.get("connected", False) for name, value in probe.items()}
+        probe_text = (
+            "not-run"
+            if probe == "not-run"
+            else str(
+                {name: value.get("connected", False) for name, value in probe.items()}
+            )
         )
         lines.extend(
             [
@@ -1132,7 +1241,11 @@ class StackStatus:
             return "invalid-config"
         mode = config.get("BB_PROXY_MODE", "direct")
         proxy = config.get("BB_HTTP_PROXY", "")
-        handler = ProxyHandler({"http": proxy, "https": proxy}) if mode == "mihomo" else ProxyHandler({})
+        handler = (
+            ProxyHandler({"http": proxy, "https": proxy})
+            if mode == "mihomo"
+            else ProxyHandler({})
+        )
         opener = build_opener(handler)
         endpoint = url.rstrip("/") + "/health"
         try:

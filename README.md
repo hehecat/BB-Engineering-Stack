@@ -114,6 +114,7 @@ $BB_WORK_ROOT/
   inbox/                        unclassified inputs
   engagements/<slug>/          isolated target state and artifacts
 $BB_CONFIG_HOME/                machine-local config and generated state
+$BB_DATA_ROOT/                  pinned wordlist and payload repositories
 ```
 
 No engagement data belongs in the source repository.
@@ -144,6 +145,7 @@ automation, migration, troubleshooting, or maintenance:
 - [Engagement operations](90-Docs/OPERATIONS.md)
 - [Migration](90-Docs/MIGRATION.md)
 - [Updates](90-Docs/UPDATES.md)
+- [Data assets](90-Docs/DATA-ASSETS.md)
 - [Verification](90-Docs/VERIFICATION.md)
 - [Optional Keysmith integration](90-Docs/KEYSMITH.md)
 
@@ -151,5 +153,6 @@ Maintainers run:
 
 ```bash
 ./99-Verification/scripts/run-all.sh
+./99-Verification/scripts/audit-dependencies.sh
 ./99-Verification/scripts/fresh-machine.sh
 ```

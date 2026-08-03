@@ -11,7 +11,13 @@ required:
   - web.fuzz
   - web.templates
   - browser.stateful
-  - data.wordlists
+  - data.wordlists.web
+  - data.wordlists.dns
+  - data.wordlists.fuzzing
+  - data.wordlists.credentials
+  - data.wordlists.usernames
+  - data.wordlists.recon
+  - data.payloads.web
 optional:
   - tls.inspect
   - network.scan

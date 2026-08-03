@@ -87,7 +87,7 @@ hashcat -a 0 -m 16500 jwt.txt rockyou.txt
 Wordlists to try in order:
 1. Short project-specific list from `payloads/jwt_attacks.txt`
 2. `rockyou.txt`
-3. `seclists/Passwords/Common-Credentials/10k-most-common.txt`
+3. `${BB_DATA_ROOT}/seclists/Passwords/Common-Credentials/10k-most-common.txt`
 
 Expected time: seconds to minutes for weak secrets, abandon after ~30 min with
 strong wordlist unless you have reason to keep going.

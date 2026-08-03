@@ -1,4 +1,4 @@
 schema_version: 1
 name: assessment-network
-required: [data.json, runtime.python, tls.inspect, network.scan]
-optional: [http.raw, proxy.http, data.wordlists]
+required: [data.json, runtime.python, tls.inspect, network.scan, data.wordlists.dns, data.wordlists.credentials, data.wordlists.usernames, data.wordlists.recon]
+optional: [http.raw, proxy.http]

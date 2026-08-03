@@ -2,12 +2,11 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path
 import subprocess
 import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import patch
-
 
 ROOT = Path(__file__).resolve().parents[2]
 os.environ["BB_STACK_ROOT"] = str(ROOT)
@@ -16,14 +15,17 @@ from bb_stack.configuration import ConfigurationManager
 from bb_stack.errors import StackError, ValidationError
 from bb_stack.paths import StackPaths
 from bb_stack.runtime import RuntimeManager
+from test_support import isolated_stack_source
 
 
 class ConfigurationTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory(prefix="bb-configuration-")
-        self.home = Path(self.temporary.name) / "home"
+        base = Path(self.temporary.name)
+        self.home = base / "home"
+        stack = isolated_stack_source(ROOT, base / "stack")
         self.paths = StackPaths(
-            ROOT,
+            stack,
             self.home,
             self.home / "work",
             self.home / "config",
@@ -76,13 +78,13 @@ class ConfigurationTests(unittest.TestCase):
     def test_generated_environment_does_not_execute_config_syntax(self) -> None:
         marker = self.home / "must-not-exist"
         self.manager.path.write_text(
-            '\n'.join(
+            "\n".join(
                 (
                     'BB_PROXY_MODE="direct"',
                     'BB_HTTP_PROXY="http://127.0.0.1:7890"',
                     'BB_SOCKS_PROXY="socks5://127.0.0.1:7891"',
                     'BB_EXTRA_PATH="$(touch ' + str(marker) + ')"',
-                    '',
+                    "",
                 )
             ),
             encoding="utf-8",
@@ -97,9 +99,11 @@ class ConfigurationTests(unittest.TestCase):
         self.assertFalse(marker.exists())
 
     def test_noninteractive_prompt_has_explicit_error(self) -> None:
-        with patch("sys.stdin.isatty", return_value=False):
-            with self.assertRaises(StackError):
-                self.manager.interactive_updates()
+        with (
+            patch("sys.stdin.isatty", return_value=False),
+            self.assertRaises(StackError),
+        ):
+            self.manager.interactive_updates()
 
 
 if __name__ == "__main__":

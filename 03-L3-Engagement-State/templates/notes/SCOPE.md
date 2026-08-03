@@ -5,6 +5,7 @@ Revision: 1
 
 ## Authorization Source
 
+- Status: pending
 - Source: user instruction and the referenced program, competition, or lab rules
 - Reference: recorded program page, challenge statement, contract, or local fixture
 - Engagement type: bug bounty

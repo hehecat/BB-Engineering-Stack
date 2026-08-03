@@ -31,6 +31,7 @@ doctor_if_installed() {
 "$PYTHON" "$ROOT/99-Verification/scripts/test_portable.py"
 "$PYTHON" "$ROOT/99-Verification/scripts/test_evaluation.py"
 "$PYTHON" "$ROOT/99-Verification/scripts/test_runtime_installers.py"
+"$PYTHON" "$ROOT/99-Verification/scripts/test_data.py"
 "$PYTHON" "$ROOT/99-Verification/scripts/test_android_reverse_skill.py"
 "$PYTHON" "$ROOT/99-Verification/scripts/test_browser_runtime.py"
 "$PYTHON" "$ROOT/99-Verification/scripts/test_workspace.py"

@@ -4,17 +4,16 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-from pathlib import Path
 import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import patch
-
 
 ROOT = Path(__file__).resolve().parents[2]
 os.environ["BB_STACK_ROOT"] = str(ROOT)
 
-from bb_stack.capabilities import CapabilityRegistry
 from bb_stack import __version__
+from bb_stack.capabilities import CapabilityRegistry
 from bb_stack.engagement import EngagementManager
 from bb_stack.evaluation import EvaluationManager
 from bb_stack.paths import StackPaths
@@ -51,17 +50,12 @@ class StatusTests(unittest.TestCase):
 
     def test_collect_has_stable_sections_and_redacts_url_secrets(self) -> None:
         self.write_config(
-            '\n'.join(
-                (
-                    'BB_PROXY_MODE="direct"',
-                    'BB_HTTP_PROXY="http://proxy-user:proxy-secret@127.0.0.1:7890/path"',
-                    'BB_SOCKS_PROXY="socks5://socks-user:socks-secret@127.0.0.1:7891"',
-                    'BB_H1_USERNAME=""',
-                    'BB_FILECODEBOX_URL="https://box-user:box-secret@example.invalid/private?token=url-secret"',
-                    'BB_EXTRA_PATH=""',
-                    '',
-                )
-            )
+            'BB_PROXY_MODE="direct"\n'
+            'BB_HTTP_PROXY="http://proxy-user:proxy-secret@127.0.0.1:7890/path"\n'
+            'BB_SOCKS_PROXY="socks5://socks-user:socks-secret@127.0.0.1:7891"\n'
+            'BB_H1_USERNAME=""\n'
+            'BB_FILECODEBOX_URL="https://box-user:box-secret@example.invalid/private?token=url-secret"\n'
+            'BB_EXTRA_PATH=""\n'
         )
         with patch.dict(
             os.environ,
@@ -194,9 +188,7 @@ class StatusTests(unittest.TestCase):
                 actions=actions,
             )
         check_mail.assert_not_called()
-        self.assertEqual(
-            report["external_checks"]["mail"], "invalid-permissions"
-        )
+        self.assertEqual(report["external_checks"]["mail"], "invalid-permissions")
         self.assertFalse(report["ready"])
         self.assertIn("mail.permissions", {item["id"] for item in actions})
 
@@ -205,9 +197,7 @@ class StatusTests(unittest.TestCase):
             self.paths.home / ".local" / "share" / "pentest-mail" / "config.env"
         )
         mail_config.parent.mkdir(parents=True)
-        mail_config.write_text(
-            'MAIL_OTP_HOST="imap.example.test"\n', encoding="utf-8"
-        )
+        mail_config.write_text('MAIL_OTP_HOST="imap.example.test"\n', encoding="utf-8")
         mail_config.chmod(0o600)
         actions: list[dict[str, str]] = []
         with patch.object(self.manager, "_check_mail") as check_mail:
@@ -230,7 +220,9 @@ class StatusTests(unittest.TestCase):
         actions: list[dict[str, str]] = []
         self.paths.work_root.rmdir()
         self.manager._paths("reverse", actions)
-        command = next(item["command"] for item in actions if item["id"] == "path.work_root")
+        command = next(
+            item["command"] for item in actions if item["id"] == "path.work_root"
+        )
         self.assertEqual(command, "bb-stack bootstrap --profile reverse")
 
     def test_engagement_drives_platform_mode_and_identity_checks(self) -> None:
@@ -323,9 +315,7 @@ class StatusTests(unittest.TestCase):
                 return_value="current-contract",
             ),
         ):
-            report = self.manager._evaluation(
-                "ctf-quick", str(prompt), False, actions
-            )
+            report = self.manager._evaluation("ctf-quick", str(prompt), False, actions)
 
         self.assertEqual(report["state"], "stale")
         self.assertTrue(report["prompt_matches"])

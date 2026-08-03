@@ -260,13 +260,16 @@ providers:
     stateful: true
     context_cost: medium
     side_effects: [network-request, browser-action, local-write]
+    configuration:
+      required: true
+      env_all: [BB_BROWSER_URL]
     mcp:
       name: chrome-devtools
       transport: stdio
       command: node
       args:
         - "${BB_STACK_ROOT}/.runtime/node_modules/chrome-devtools-mcp/build/src/bin/chrome-devtools-mcp.js"
-        - --browser-url=http://127.0.0.1:9222
+        - "--browser-url=${BB_BROWSER_URL}"
         - --category-performance=false
         - --performance-crux=false
         - --usage-statistics=false
@@ -345,13 +348,83 @@ providers:
       required: true
       env_all: [BB_FILECODEBOX_URL]
 
-  seclists:
+  seclists-web:
     kind: data
-    locator: {type: path, value: "${BB_STACK_ROOT}/.runtime/data/SecLists"}
+    locator: {type: path, value: "${BB_DATA_ROOT}/seclists/Discovery/Web-Content/common.txt"}
     placement: runtime
     stateful: false
     context_cost: none
     side_effects: [local-read]
+
+  seclists-dns:
+    kind: data
+    locator: {type: path, value: "${BB_DATA_ROOT}/seclists/Discovery/DNS/README.md"}
+    placement: runtime
+    stateful: false
+    context_cost: none
+    side_effects: [local-read]
+
+  seclists-fuzzing:
+    kind: data
+    locator: {type: path, value: "${BB_DATA_ROOT}/seclists/Fuzzing/LFI/LFI-Jhaddix.txt"}
+    placement: runtime
+    stateful: false
+    context_cost: none
+    side_effects: [local-read]
+    configuration:
+      required: true
+      files_all: ["${BB_DATA_ROOT}/seclists/Fuzzing/XSS/README.md"]
+
+  seclists-credentials:
+    kind: data
+    locator: {type: path, value: "${BB_DATA_ROOT}/seclists/Passwords/Common-Credentials/10k-most-common.txt"}
+    placement: runtime
+    stateful: false
+    context_cost: none
+    side_effects: [local-read]
+
+  seclists-usernames:
+    kind: data
+    locator: {type: path, value: "${BB_DATA_ROOT}/seclists/Usernames/top-usernames-shortlist.txt"}
+    placement: runtime
+    stateful: false
+    context_cost: none
+    side_effects: [local-read]
+
+  seclists-llm:
+    kind: data
+    locator: {type: path, value: "${BB_DATA_ROOT}/seclists/Ai/LLM_Testing/README.md"}
+    placement: runtime
+    stateful: false
+    context_cost: none
+    side_effects: [local-read]
+
+  payloads-web:
+    kind: data
+    locator: {type: path, value: "${BB_DATA_ROOT}/payloads-all-the-things/Server Side Request Forgery/README.md"}
+    placement: runtime
+    stateful: false
+    context_cost: none
+    side_effects: [local-read]
+    configuration:
+      required: true
+      files_all:
+        - "${BB_DATA_ROOT}/payloads-all-the-things/SQL Injection/README.md"
+        - "${BB_DATA_ROOT}/payloads-all-the-things/XSS Injection/README.md"
+
+  trickest-recon:
+    kind: data
+    locator: {type: path, value: "${BB_DATA_ROOT}/trickest-wordlists/technologies/tomcat.txt"}
+    placement: runtime
+    stateful: false
+    context_cost: none
+    side_effects: [local-read]
+    configuration:
+      required: true
+      files_all:
+        - "${BB_DATA_ROOT}/trickest-wordlists/cloud/subdomains.txt"
+        - "${BB_DATA_ROOT}/trickest-wordlists/inventory/subdomains.txt"
+        - "${BB_DATA_ROOT}/trickest-wordlists/robots/top-100.txt"
 
   gf-patterns:
     kind: data
@@ -529,7 +602,15 @@ capabilities:
   proxy.http: {strategy: any, providers: [mihomo-http]}
   otp.mail: {strategy: any, providers: [mail-otp]}
   delivery.file-share: {strategy: any, providers: [filecodebox]}
-  data.wordlists: {strategy: any, providers: [seclists, gf-patterns]}
+  data.wordlists.web: {strategy: all, providers: [seclists-web]}
+  data.wordlists.dns: {strategy: all, providers: [seclists-dns]}
+  data.wordlists.fuzzing: {strategy: all, providers: [seclists-fuzzing]}
+  data.wordlists.credentials: {strategy: all, providers: [seclists-credentials]}
+  data.wordlists.usernames: {strategy: all, providers: [seclists-usernames]}
+  data.wordlists.llm: {strategy: all, providers: [seclists-llm]}
+  data.wordlists.recon: {strategy: all, providers: [trickest-recon]}
+  data.payloads.web: {strategy: all, providers: [payloads-web]}
+  data.patterns.gf: {strategy: all, providers: [gf-patterns]}
   android.device: {strategy: any, providers: [adb]}
   android.static: {strategy: all, providers: [apktool, jadx]}
   android.dynamic: {strategy: any, providers: [frida, objection]}
