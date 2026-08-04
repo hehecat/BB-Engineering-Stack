@@ -68,12 +68,18 @@ bb-stack new reverse-challenge ./challenge.bin --workflow ctf --platform standal
 bb-stack launch --profile ctf-reverse --engagement reverse-challenge
 ```
 
+The Reverse profile installs the native inventory baseline (`file` and
+Binutils) plus pinned Radare2. GDB, QEMU user emulation, hardening checks, and
+Ghidra headless analysis remain optional. Start every native artifact with the
+`native-reverse-engineering` triage workflow; it preserves the input and writes
+its evidence under the active Engagement.
+
 The Android profile installs Java, ADB, Apktool, pinned JADX, the
 `android-reverse-engineering` static workflow, and `android-pentest` for security
 validation. ADB device and Frida/Objection capabilities remain optional until
 dynamic analysis is needed.
-The Reverse profile installs pinned Radare2; JADX and Apktool are optional mixed
-artifact providers.
+The Reverse profile installs pinned Radare2; JADX and Apktool remain optional
+mixed-artifact providers.
 
 ## Authorized Security Assessment
 
@@ -82,6 +88,7 @@ Use normal conversation; the router distinguishes workflow and domain:
 ```text
 对 product.apk 做 Android 安全审计
 反编译 library.apk 并还原算法，不做漏洞测试
+对书面授权的 service.elf 做 native 组件安全评估
 对书面授权的 10.20.0.0/24 做内网和 AD 安全评估
 审计授权 AWS 账户的 IAM 和存储配置
 测试 RAG Agent 的 Prompt Injection、MCP 和 Memory 边界
@@ -93,10 +100,20 @@ Explicit profile setup is available when needed:
 ```bash
 bb-stack bootstrap --profile assessment-android
 bb-stack bootstrap --profile assessment-ios
+bb-stack bootstrap --profile assessment-reverse
 bb-stack bootstrap --profile assessment-network
 bb-stack bootstrap --profile assessment-cloud
 bb-stack bootstrap --profile assessment-llm
 bb-stack bootstrap --profile assessment-source
+```
+
+For an explicitly scoped native artifact, preserve the authorization source and
+route it into the assessment workflow before any dynamic action:
+
+```bash
+bb-stack workspace route --kind reverse-assessment --target ./service.elf \
+  --authorization-status verified --authorization-source "SIGNED_SCOPE_REFERENCE"
+bb-stack launch --profile assessment-reverse --engagement service-native
 ```
 
 Provider credentials, iOS devices, Frida, cloud CLIs, and specialized scanners

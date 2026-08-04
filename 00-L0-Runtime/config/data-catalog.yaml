@@ -145,5 +145,6 @@ profiles:
       - {dataset: seclists, bundles: [llm]}
     optional: []
   assessment-source: {required: [], optional: []}
+  assessment-reverse: {required: [], optional: []}
   analysis-android: {required: [], optional: []}
   analysis-reverse: {required: [], optional: []}

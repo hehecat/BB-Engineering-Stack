@@ -1,5 +1,5 @@
 schema_version: 1
 name: reverse
 orchestrator: reverse-orchestrator
-required: [reverse-orchestrator, solve-challenge]
+required: [reverse-orchestrator, native-reverse-engineering, solve-challenge]
 optional: [android-reverse-engineering, android-pentest, ctf-writeup]

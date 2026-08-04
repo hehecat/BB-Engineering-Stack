@@ -2,4 +2,4 @@ schema_version: 1
 name: assessment-android
 orchestrator: security-orchestrator
 required: [security-orchestrator, android-reverse-engineering, android-pentest]
-optional: [api-security, api-hacking, auth-hacking, information-disclosure]
+optional: [native-reverse-engineering, api-security, api-hacking, auth-hacking, information-disclosure]

@@ -40,8 +40,8 @@ class EvaluationTests(unittest.TestCase):
     def test_contract_suite_covers_every_runtime_profile(self) -> None:
         report = EvaluationManager(self.paths).contracts()
         self.assertTrue(report["passed"])
-        self.assertEqual(report["profile_count"], 17)
-        self.assertEqual(report["check_count"], 102)
+        self.assertEqual(report["profile_count"], 18)
+        self.assertEqual(report["check_count"], 108)
 
     def test_browser_js_decision_contract_is_scored(self) -> None:
         manager = EvaluationManager(self.paths)

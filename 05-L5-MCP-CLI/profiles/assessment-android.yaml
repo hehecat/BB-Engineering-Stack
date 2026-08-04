@@ -1,4 +1,4 @@
 schema_version: 1
 name: assessment-android
 required: [runtime.python, android.static]
-optional: [android.device, mobile.dynamic, http.raw, proxy.http]
+optional: [native.triage, native.static, android.device, mobile.dynamic, http.raw, proxy.http]

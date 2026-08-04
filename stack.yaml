@@ -38,6 +38,7 @@ defaults:
     assessment-cloud: assessment-cloud
     assessment-llm: assessment-llm
     assessment-source: assessment-source
+    assessment-reverse: assessment-reverse
     analysis-android: analysis-android
     analysis-reverse: analysis-reverse
   work_root: "${HOME}/BB-Workspaces"

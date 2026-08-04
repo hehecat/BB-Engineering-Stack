@@ -49,6 +49,7 @@ target. Do not ask the user to choose an internal Profile.
 | Contracted or explicitly scoped Web/API security assessment | `web-assessment` | `authorized-assessment` |
 | Android application penetration test or mobile security audit | `android-assessment` | `authorized-assessment` |
 | Android decompilation, algorithm recovery, or behavior analysis only | `android-analysis` | `standalone-analysis` |
+| Authorized native binary, firmware, or component security assessment | `reverse-assessment` | `authorized-assessment` |
 | iOS/IPA application penetration test or mobile security audit | `ios-assessment` | `authorized-assessment` |
 | Native binary, firmware, or bytecode analysis without a CTF goal | `reverse-analysis` | `standalone-analysis` |
 | Internal network, CIDR, Active Directory, or service assessment | `network-assessment` | `authorized-assessment` |

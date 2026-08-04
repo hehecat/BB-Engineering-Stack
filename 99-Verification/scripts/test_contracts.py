@@ -44,9 +44,9 @@ class ContractTests(unittest.TestCase):
         self.temporary.cleanup()
 
     def test_all_registries_validate(self) -> None:
-        self.assertEqual(len(ProfileRegistry(self.paths).validate_all()), 17)
+        self.assertEqual(len(ProfileRegistry(self.paths).validate_all()), 18)
         self.assertGreaterEqual(len(SkillRegistry(self.paths).validate_all()), 50)
-        self.assertEqual(len(CapabilityRegistry(self.paths).validate_all()), 16)
+        self.assertEqual(len(CapabilityRegistry(self.paths).validate_all()), 17)
         runtime = RuntimeManager(self.paths).validate_config()
         self.assertIn("ctf-web", runtime["tool_profiles"])
         self.assertEqual(

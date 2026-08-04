@@ -32,7 +32,7 @@ ROUTE_SUFFIXES = {
     "ctf-web": ["ctf-web"],
     "web": [],
     "android": ["android-reverse-engineering"],
-    "reverse": [],
+    "reverse": ["native-reverse-engineering"],
     "browser-js": [],
     "assessment-web": ["api-security"],
     "assessment-android": ["android-reverse-engineering", "android-pentest"],
@@ -41,8 +41,9 @@ ROUTE_SUFFIXES = {
     "assessment-cloud": ["cloud-security"],
     "assessment-llm": ["llm-security"],
     "assessment-source": ["sast-orchestration"],
+    "assessment-reverse": ["native-reverse-engineering"],
     "analysis-android": ["android-reverse-engineering"],
-    "analysis-reverse": [],
+    "analysis-reverse": ["native-reverse-engineering"],
 }
 SCENARIOS = {
     "minimal": (
@@ -98,13 +99,17 @@ SCENARIOS = {
         "The supplied repository needs source security analysis. Select the assessment "
         "orchestrator and SAST orchestration specialist."
     ),
+    "assessment-reverse": (
+        "The scoped native artifact needs security analysis. Select the assessment "
+        "orchestrator and native reverse-engineering specialist."
+    ),
     "analysis-android": (
         "The supplied APK needs standalone decompilation and call-flow recovery. Select "
         "the reverse router and Android reverse-engineering specialist."
     ),
     "analysis-reverse": (
         "The supplied native artifact needs standalone behavior recovery. Select the "
-        "reverse engineering router."
+        "reverse engineering router and native reverse-engineering specialist."
     ),
 }
 

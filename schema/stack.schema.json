@@ -59,7 +59,7 @@
         },
         "capability_profiles": {
           "type": "object",
-          "required": ["minimal", "ctf-web", "web", "android", "reverse", "browser-js", "assessment-web", "assessment-android", "assessment-ios", "assessment-network", "assessment-cloud", "assessment-llm", "assessment-source", "analysis-android", "analysis-reverse"],
+          "required": ["minimal", "ctf-web", "web", "android", "reverse", "browser-js", "assessment-web", "assessment-android", "assessment-ios", "assessment-network", "assessment-cloud", "assessment-llm", "assessment-source", "assessment-reverse", "analysis-android", "analysis-reverse"],
           "additionalProperties": false,
           "properties": {
             "minimal": {"type": "string"},
@@ -75,6 +75,7 @@
             "assessment-cloud": {"type": "string"},
             "assessment-llm": {"type": "string"},
             "assessment-source": {"type": "string"},
+            "assessment-reverse": {"type": "string"},
             "analysis-android": {"type": "string"},
             "analysis-reverse": {"type": "string"}
           }

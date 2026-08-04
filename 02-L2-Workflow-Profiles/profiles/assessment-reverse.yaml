@@ -1,0 +1,10 @@
+schema_version: 1
+name: assessment-reverse
+prompt_mode: append
+workflow: assessment
+platform: authorized-assessment
+default_mode: interactive
+domain_prompt: reverse
+l5_profile: assessment-reverse
+skill_profile: assessment-reverse
+max_custom_tokens: 1900

@@ -42,6 +42,7 @@ CAPABILITY_PROFILES = [
     "assessment-cloud",
     "assessment-llm",
     "assessment-source",
+    "assessment-reverse",
     "analysis-android",
     "analysis-reverse",
 ]

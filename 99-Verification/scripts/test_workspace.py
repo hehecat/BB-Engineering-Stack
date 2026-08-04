@@ -272,7 +272,14 @@ class WorkspaceTests(unittest.TestCase):
             "cloud-assessment": ("assessment-cloud", "cloud-security"),
             "llm-assessment": ("assessment-llm", "llm-security"),
             "source-audit": ("assessment-source", "sast-orchestration"),
-            "reverse-analysis": ("analysis-reverse", "reverse-orchestrator"),
+            "reverse-assessment": (
+                "assessment-reverse",
+                "native-reverse-engineering",
+            ),
+            "reverse-analysis": (
+                "analysis-reverse",
+                "native-reverse-engineering",
+            ),
         }
         for index, (kind, expected) in enumerate(cases.items(), start=1):
             with self.subTest(kind=kind):
@@ -287,8 +294,73 @@ class WorkspaceTests(unittest.TestCase):
                 self.assertEqual(result["skill_route"][-1], expected[1])
                 self.assertEqual(
                     result["workflow"],
-                    "assessment" if kind != "reverse-analysis" else "analysis",
+                    "analysis" if kind == "reverse-analysis" else "assessment",
                 )
+
+    def test_native_workflows_keep_policy_and_skill_routes_isolated(self) -> None:
+        self.manager.initialize()
+        analysis = self.manager.route(
+            kind="reverse-analysis",
+            target="./inbox/library.so",
+            slug="native-analysis",
+            platform=None,
+            mode="interactive",
+        )
+        challenge = self.manager.route(
+            kind="ctf-reverse",
+            target="./inbox/challenge.elf",
+            slug="native-ctf",
+            platform=None,
+            mode="interactive",
+        )
+        assessment = self.manager.route(
+            kind="reverse-assessment",
+            target="./inbox/service.dll",
+            slug="native-assessment",
+            platform=None,
+            mode="interactive",
+        )
+
+        self.assertEqual(
+            analysis["skill_route"],
+            ["reverse-orchestrator", "native-reverse-engineering"],
+        )
+        self.assertEqual(analysis["workflow"], "analysis")
+        self.assertNotIn("CTF Workflow", Path(analysis["prompt_file"]).read_text())
+
+        self.assertEqual(
+            challenge["skill_route"],
+            ["reverse-orchestrator", "native-reverse-engineering"],
+        )
+        self.assertEqual(challenge["workflow"], "ctf")
+
+        self.assertEqual(
+            assessment["skill_route"],
+            ["security-orchestrator", "native-reverse-engineering"],
+        )
+        self.assertEqual(assessment["workflow"], "assessment")
+        self.assertFalse(assessment["ready"])
+        self.assertIn(
+            "bb-stack engagement authorize",
+            "\n".join(assessment["repair_commands"]),
+        )
+        assessment_prompt = Path(assessment["prompt_file"]).read_text()
+        self.assertIn("Authorized Security Assessment Workflow", assessment_prompt)
+        self.assertNotIn("verified flag", assessment_prompt)
+
+        inferred_root = EngagementManager(self.paths).create(
+            "inferred-native",
+            "./inbox/driver.sys",
+            workflow="assessment",
+        )
+        inferred = self.manager.route(
+            kind=None,
+            target=None,
+            slug=inferred_root.name,
+            platform=None,
+            mode=None,
+        )
+        self.assertEqual(inferred["kind"], "reverse-assessment")
 
     def test_managed_file_changes_are_not_overwritten_without_force(self) -> None:
         self.manager.initialize()

@@ -56,6 +56,7 @@ Solve this Web CTF: https://challenge.example
 Test https://target.example as a continuous Bug Bounty engagement
 Assess inbox/product.apk as an authorized Android application
 Decompile inbox/library.apk and reconstruct its signing algorithm
+Assess inbox/service.elf as an authorized native component
 Analyze https://app.example request signing and deliver a reusable Node module
 Assess the authorized 10.20.0.0/24 network and Active Directory
 Audit this AWS account's IAM and object storage

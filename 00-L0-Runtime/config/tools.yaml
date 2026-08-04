@@ -12,10 +12,10 @@ profiles:
     optional: [assetfinder, amass, gau, waybackurls, interactsh-client, dalfox, naabu, sqlmap, semgrep, trufflehog]
   android:
     required: [system-base, java-runtime, adb, apktool, jadx]
-    optional: [frida, objection]
+    optional: [native-base, radare2, frida, objection]
   reverse:
-    required: [system-base, radare2]
-    optional: [jadx, apktool]
+    required: [system-base, native-base, radare2]
+    optional: [native-debug, native-emulation, checksec, jadx, apktool]
   browser-js:
     required: [system-base, chromium]
     optional: [semgrep]
@@ -24,7 +24,7 @@ profiles:
     optional: [httpx, katana, ffuf, semgrep, interactsh-client]
   assessment-android:
     required: [system-base, java-runtime, adb, apktool, jadx]
-    optional: [frida, objection]
+    optional: [native-base, radare2, frida, objection]
   assessment-ios:
     required: [system-base, radare2]
     optional: [ios-device, frida, objection]
@@ -40,18 +40,37 @@ profiles:
   assessment-source:
     required: [system-base, semgrep]
     optional: [trufflehog]
+  assessment-reverse:
+    required: [system-base, native-base, radare2]
+    optional: [native-debug, native-emulation, checksec]
   analysis-android:
     required: [system-base, java-runtime, apktool, jadx]
-    optional: [adb, frida, objection]
+    optional: [native-base, radare2, adb, frida, objection]
   analysis-reverse:
-    required: [system-base, radare2]
-    optional: [jadx, apktool]
+    required: [system-base, native-base, radare2]
+    optional: [native-debug, native-emulation, checksec, jadx, apktool]
 
 installers:
   system-base:
     kind: apt
     checks: [curl, jq, openssl, git, python3]
     packages: [ca-certificates, curl, git, jq, openssl, python3, python3-venv, unzip]
+  native-base:
+    kind: apt
+    checks: [file, readelf, objdump, nm, strings]
+    packages: [binutils, file]
+  native-debug:
+    kind: apt
+    checks: [gdb]
+    packages: [gdb]
+  native-emulation:
+    kind: apt
+    checks: [qemu-aarch64, qemu-arm]
+    packages: [qemu-user]
+  checksec:
+    kind: apt
+    checks: [checksec]
+    packages: [checksec]
   chromium:
     kind: apt
     checks: [chromium]

@@ -236,7 +236,7 @@
       "required": ["kind"],
       "properties": {
         "kind": {
-          "enum": ["ctf-web", "web", "web-assessment", "ctf-android", "android", "android-assessment", "android-analysis", "ios-assessment", "ctf-reverse", "reverse", "reverse-analysis", "network-assessment", "cloud-assessment", "llm-assessment", "source-audit", "browser-js", "lab"]
+          "enum": ["ctf-web", "web", "web-assessment", "ctf-android", "android", "android-assessment", "android-analysis", "ios-assessment", "ctf-reverse", "reverse", "reverse-analysis", "reverse-assessment", "network-assessment", "cloud-assessment", "llm-assessment", "source-audit", "browser-js", "lab"]
         }
       }
     }

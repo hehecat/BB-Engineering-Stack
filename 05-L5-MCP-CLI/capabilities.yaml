@@ -482,6 +482,78 @@ providers:
     context_cost: low
     side_effects: [local-read, local-write, process-execution]
 
+  file-identify:
+    kind: cli
+    locator: {type: command, value: file}
+    placement: bounded-worker
+    stateful: false
+    context_cost: none
+    side_effects: [local-read]
+
+  readelf:
+    kind: cli
+    locator: {type: command, value: readelf}
+    placement: bounded-worker
+    stateful: false
+    context_cost: low
+    side_effects: [local-read]
+
+  objdump:
+    kind: cli
+    locator: {type: command, value: objdump}
+    placement: bounded-worker
+    stateful: false
+    context_cost: low
+    side_effects: [local-read]
+
+  nm:
+    kind: cli
+    locator: {type: command, value: nm}
+    placement: bounded-worker
+    stateful: false
+    context_cost: low
+    side_effects: [local-read]
+
+  strings:
+    kind: cli
+    locator: {type: command, value: strings}
+    placement: bounded-worker
+    stateful: false
+    context_cost: low
+    side_effects: [local-read]
+
+  checksec:
+    kind: cli
+    locator: {type: command, value: checksec}
+    placement: bounded-worker
+    stateful: false
+    context_cost: low
+    side_effects: [local-read]
+
+  gdb:
+    kind: cli
+    locator: {type: command, value: gdb}
+    placement: bounded-worker
+    stateful: true
+    context_cost: medium
+    side_effects: [local-read, local-write, process-execution]
+
+  qemu-user:
+    kind: cli
+    locator: {type: command, value: qemu-aarch64}
+    placement: bounded-worker
+    stateful: true
+    context_cost: medium
+    side_effects: [local-read, local-write, process-execution]
+
+  ghidra-headless:
+    kind: cli
+    locator: {type: command, value: analyzeHeadless}
+    placement: bounded-worker
+    stateful: true
+    context_cost: high
+    side_effects: [local-read, local-write, process-execution]
+
   unzip:
     kind: cli
     locator: {type: command, value: unzip}
@@ -618,6 +690,12 @@ capabilities:
   ios.static: {strategy: all, providers: [unzip, radare2]}
   ios.device: {strategy: any, providers: [ideviceinstaller, iproxy]}
   reverse.static: {strategy: any, providers: [radare2, jadx]}
+  native.static: {strategy: any, providers: [radare2, ghidra-headless]}
+  native.triage: {strategy: all, providers: [file-identify, readelf, objdump, nm, strings]}
+  native.protections: {strategy: any, providers: [checksec, readelf]}
+  native.debug: {strategy: any, providers: [gdb, radare2]}
+  native.emulate: {strategy: any, providers: [qemu-user]}
+  native.decompile: {strategy: any, providers: [ghidra-headless]}
   cloud.cli: {strategy: any, providers: [aws-cli, azure-cli, gcloud-cli]}
   cloud.posture: {strategy: any, providers: [prowler, steampipe]}
   source.iac: {strategy: any, providers: [checkov, trivy]}

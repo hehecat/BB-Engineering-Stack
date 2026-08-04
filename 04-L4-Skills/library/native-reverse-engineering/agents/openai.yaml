@@ -1,0 +1,4 @@
+interface:
+  display_name: "Native Reverse Engineering"
+  short_description: "Analyze native binaries and firmware safely"
+  default_prompt: "Use $native-reverse-engineering to triage this native artifact and recover its behavior with reproducible evidence."

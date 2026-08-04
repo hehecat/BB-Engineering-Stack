@@ -1,5 +1,5 @@
 schema_version: 1
 name: analysis-reverse
 orchestrator: reverse-orchestrator
-required: [reverse-orchestrator]
+required: [reverse-orchestrator, native-reverse-engineering]
 optional: [android-reverse-engineering, android-pentest]

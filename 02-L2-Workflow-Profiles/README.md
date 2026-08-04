@@ -22,6 +22,7 @@ profile, L5 capability profile, and Prompt mode.
 | `assessment-cloud` | append | Assessment + Cloud | AWS/Azure/GCP posture and IAM test |
 | `assessment-llm` | append | Assessment + LLM/Agent | model application and agent boundary test |
 | `assessment-source` | append | Assessment + Source | SAST, IaC, container, SCA, and threat-model work |
+| `assessment-reverse` | append | Assessment + Reverse | authorized native binary, firmware, and component testing |
 
 Platform metadata is in `platforms/platforms.yaml`; model-facing differences are
 in adjacent Markdown overlays. Add a platform once, then reference it from

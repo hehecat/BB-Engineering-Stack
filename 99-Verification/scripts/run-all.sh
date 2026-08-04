@@ -36,6 +36,7 @@ doctor_if_installed() {
 "$PYTHON" "$ROOT/99-Verification/scripts/test_updates.py"
 "$PYTHON" "$ROOT/99-Verification/scripts/test_keysmith.py"
 "$PYTHON" "$ROOT/99-Verification/scripts/test_android_reverse_skill.py"
+"$PYTHON" "$ROOT/99-Verification/scripts/test_native_reverse_skill.py"
 "$PYTHON" "$ROOT/99-Verification/scripts/test_browser_runtime.py"
 "$PYTHON" "$ROOT/99-Verification/scripts/test_workspace.py"
 "$STACK" validate --json >/dev/null

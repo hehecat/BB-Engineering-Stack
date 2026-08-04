@@ -57,6 +57,7 @@ claude
 这是 HackerOne 项目，先读取我提供的 Scope 再开始
 对 inbox/product.apk 做 Android 安全评估
 反编译 inbox/library.apk，还原签名算法，不做漏洞测试
+对 inbox/service.elf 做已授权的 native 组件安全评估
 分析 https://app.example 的请求签名并交付可复用 Node 模块
 对书面授权的 10.20.0.0/24 做内网和 AD 评估
 审计这个 AWS 账户的 IAM 和对象存储

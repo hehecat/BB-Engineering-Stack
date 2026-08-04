@@ -4,6 +4,7 @@ skills:
   bb-orchestrator: {role: orchestrator, source: library/bb-orchestrator, provenance: stack}
   ctf-orchestrator: {role: orchestrator, source: library/ctf-orchestrator, provenance: stack}
   reverse-orchestrator: {role: orchestrator, source: library/reverse-orchestrator, provenance: stack}
+  native-reverse-engineering: {role: specialist, source: library/native-reverse-engineering, provenance: stack}
   browser-js-orchestrator: {role: orchestrator, source: library/browser-js-orchestrator, provenance: stack}
   security-orchestrator: {role: orchestrator, source: library/security-orchestrator, provenance: stack}
   account-takeover: {role: specialist, source: vendor/community/account-takeover, provenance: local-snapshot}

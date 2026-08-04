@@ -124,7 +124,7 @@ ROUTES: dict[str, dict[str, Any]] = {
         "profile": "ctf-reverse",
         "skill_profile": "reverse",
         "l5_profile": "reverse",
-        "skill_route": ["reverse-orchestrator"],
+        "skill_route": ["reverse-orchestrator", "native-reverse-engineering"],
         "slug_suffix": "reverse-ctf",
     },
     "reverse": {
@@ -133,7 +133,7 @@ ROUTES: dict[str, dict[str, Any]] = {
         "profile": "ctf-reverse",
         "skill_profile": "reverse",
         "l5_profile": "reverse",
-        "skill_route": ["reverse-orchestrator"],
+        "skill_route": ["reverse-orchestrator", "native-reverse-engineering"],
         "slug_suffix": "reverse",
     },
     "reverse-analysis": {
@@ -142,8 +142,17 @@ ROUTES: dict[str, dict[str, Any]] = {
         "profile": "analysis-reverse",
         "skill_profile": "analysis-reverse",
         "l5_profile": "analysis-reverse",
-        "skill_route": ["reverse-orchestrator"],
+        "skill_route": ["reverse-orchestrator", "native-reverse-engineering"],
         "slug_suffix": "analysis",
+    },
+    "reverse-assessment": {
+        "workflow": "assessment",
+        "platform": "authorized-assessment",
+        "profile": "assessment-reverse",
+        "skill_profile": "assessment-reverse",
+        "l5_profile": "assessment-reverse",
+        "skill_route": ["security-orchestrator", "native-reverse-engineering"],
+        "slug_suffix": "native",
     },
     "network-assessment": {
         "workflow": "assessment",
@@ -712,6 +721,8 @@ class WorkspaceManager:
                 return "network-assessment"
             if asset_type == "repository":
                 return "source-audit"
+            if asset_type == "other":
+                return "reverse-assessment"
             return "web-assessment"
         if state["workflow"] == "lab":
             return "lab"
