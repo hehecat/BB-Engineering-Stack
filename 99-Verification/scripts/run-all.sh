@@ -24,6 +24,7 @@ doctor_if_installed() {
 
 "$PYTHON" -m py_compile "$ROOT"/00-L0-Runtime/lib/bb_stack/*.py
 "$PYTHON" "$ROOT/99-Verification/scripts/test_contracts.py"
+"$PYTHON" "$ROOT/99-Verification/scripts/test_cli.py"
 "$PYTHON" "$ROOT/99-Verification/scripts/test_lifecycle.py"
 "$PYTHON" "$ROOT/99-Verification/scripts/test_mail_otp.py"
 "$PYTHON" "$ROOT/99-Verification/scripts/test_status.py"
@@ -32,6 +33,8 @@ doctor_if_installed() {
 "$PYTHON" "$ROOT/99-Verification/scripts/test_evaluation.py"
 "$PYTHON" "$ROOT/99-Verification/scripts/test_runtime_installers.py"
 "$PYTHON" "$ROOT/99-Verification/scripts/test_data.py"
+"$PYTHON" "$ROOT/99-Verification/scripts/test_updates.py"
+"$PYTHON" "$ROOT/99-Verification/scripts/test_keysmith.py"
 "$PYTHON" "$ROOT/99-Verification/scripts/test_android_reverse_skill.py"
 "$PYTHON" "$ROOT/99-Verification/scripts/test_browser_runtime.py"
 "$PYTHON" "$ROOT/99-Verification/scripts/test_workspace.py"

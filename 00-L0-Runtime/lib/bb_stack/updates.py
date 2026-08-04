@@ -830,6 +830,7 @@ class UpdateManager:
             "BB_WORK_ROOT": str(candidate / "work"),
             "BB_CONFIG_HOME": str(candidate / "config"),
             "BB_ARTIFACT_ROOT": str(artifacts),
+            "BB_BROWSER_URL": "http://127.0.0.1:9222",
             "CHROME_DEVTOOLS_MCP_NO_USAGE_STATISTICS": "1",
             "CHROME_DEVTOOLS_MCP_NO_UPDATE_CHECKS": "1",
             "NPM_CONFIG_USERCONFIG": "/dev/null",
@@ -1253,9 +1254,17 @@ class UpdateManager:
         return summary
 
     @staticmethod
-    def _run(command: list[str], *, timeout: int) -> None:
+    def _run(
+        command: list[str], *, env: dict[str, str] | None = None, timeout: int
+    ) -> None:
         try:
-            subprocess.run(command, text=True, timeout=timeout, check=True)
+            subprocess.run(
+                command,
+                env=env,
+                text=True,
+                timeout=timeout,
+                check=True,
+            )
         except (
             OSError,
             subprocess.CalledProcessError,

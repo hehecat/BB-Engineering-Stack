@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[2]
 os.environ["BB_STACK_ROOT"] = str(ROOT)
 
 from bb_stack.data import DataManager
-from bb_stack.errors import CommandError
+from bb_stack.errors import CommandError, ValidationError
 from bb_stack.paths import StackPaths
 
 
@@ -188,6 +188,85 @@ class DataManagerTests(unittest.TestCase):
             report = self.manager.update_check("demo")
         self.assertTrue(report["items"]["demo"]["update_available"])
         self.assertEqual(report["items"]["demo"]["latest_revision"], newer)
+
+    def test_catalog_and_selector_validation(self) -> None:
+        manager = DataManager(self.paths)
+        unknown_dataset = self._document(self.first_revision)
+        unknown_dataset["profiles"]["demo"]["required"][0]["dataset"] = "missing"
+        with (
+            patch("bb_stack.data.load_yaml", return_value=unknown_dataset),
+            patch("bb_stack.data.validate"),
+            self.assertRaisesRegex(ValidationError, "unknown dataset"),
+        ):
+            manager.catalog()
+
+        unknown_bundle = self._document(self.first_revision)
+        unknown_bundle["profiles"]["demo"]["required"][0]["bundles"] = ["missing"]
+        with (
+            patch("bb_stack.data.load_yaml", return_value=unknown_bundle),
+            patch("bb_stack.data.validate"),
+            self.assertRaisesRegex(ValidationError, "unknown demo bundle"),
+        ):
+            manager.catalog()
+
+        with self.assertRaisesRegex(ValidationError, "choose either"):
+            self.manager.status("demo", profile="demo")
+        with self.assertRaisesRegex(ValidationError, "unknown data profile"):
+            self.manager.status(profile="missing")
+        with self.assertRaisesRegex(ValidationError, "unknown data profile"):
+            self.manager.ensure_profile("missing")
+        with self.assertRaisesRegex(ValidationError, "unknown demo bundle"):
+            self.manager.ensure("demo", ["missing"])
+
+    def test_status_and_profile_ensure_variants(self) -> None:
+        with patch("bb_stack.data.load_yaml", return_value=self.document):
+            self.assertEqual(self.manager.path("demo"), self.paths.data_root / "demo")
+        self.assertFalse(self.manager.status("demo")["ready"])
+        self.assertFalse(self.manager.status()["ready"])
+        required = self.manager.ensure_profile("demo")
+        self.assertEqual(len(required), 1)
+        self.assertEqual(required[0]["installed_bundles"], ["alpha"])
+        optional = self.manager.ensure_profile("demo", include_optional=True)
+        self.assertEqual(optional[0]["installed_bundles"], ["alpha", "beta"])
+        ready = self.manager.ensure("demo", ["alpha", "beta"])
+        self.assertEqual(ready["state"], "ready")
+
+    def test_invalid_specs_and_remote_output_are_rejected(self) -> None:
+        outside = self._document(self.first_revision)
+        outside["datasets"]["demo"]["destination"] = str(self.paths.home / "outside")
+        with self.assertRaisesRegex(ValidationError, "below BB_DATA_ROOT"):
+            self.manager._dataset_spec("demo", outside)
+
+        unsafe = self._document(self.first_revision)
+        unsafe["datasets"]["demo"]["bundles"]["alpha"]["paths"] = ["../escape"]
+        with self.assertRaisesRegex(ValidationError, "unsafe path"):
+            self.manager._dataset_spec("demo", unsafe)
+        with self.assertRaisesRegex(ValidationError, "unknown dataset"):
+            self.manager._dataset_spec("missing", self.document)
+        with (
+            patch.object(self.manager, "_run_capture", return_value="invalid"),
+            self.assertRaisesRegex(CommandError, "unexpected git ls-remote"),
+        ):
+            self.manager.update_check("demo")
+
+    def test_command_failures_are_operator_errors(self) -> None:
+        with (
+            patch("bb_stack.data.subprocess.run", side_effect=OSError("missing")),
+            self.assertRaisesRegex(CommandError, "command failed"),
+        ):
+            self.manager._run(["missing-command"], timeout=1)
+        with (
+            patch(
+                "bb_stack.data.subprocess.run",
+                side_effect=subprocess.CalledProcessError(
+                    1, ["git"], stderr="network failed"
+                ),
+            ),
+            self.assertRaisesRegex(CommandError, "network failed"),
+        ):
+            self.manager._run_capture(["git"], timeout=1)
+        self.assertIsNone(self.manager._git_output(self.paths.home, ["status"]))
+        self.assertEqual(self.manager._sparse_paths(self.paths.home), [])
 
 
 if __name__ == "__main__":

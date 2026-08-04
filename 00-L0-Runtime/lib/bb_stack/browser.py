@@ -67,17 +67,16 @@ class BrowserRuntimeManager:
         log_fd = os.open(log_path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
         null_fd = os.open(os.devnull, os.O_RDONLY)
         try:
-            pid = os.posix_spawn(
-                chromium,
+            process = subprocess.Popen(
                 command,
-                env,
-                file_actions=[
-                    (os.POSIX_SPAWN_DUP2, null_fd, 0),
-                    (os.POSIX_SPAWN_DUP2, log_fd, 1),
-                    (os.POSIX_SPAWN_DUP2, log_fd, 2),
-                ],
-                setsid=True,
+                stdin=null_fd,
+                stdout=log_fd,
+                stderr=log_fd,
+                env=env,
+                start_new_session=True,
+                close_fds=True,
             )
+            pid = process.pid
         finally:
             os.close(null_fd)
             os.close(log_fd)

@@ -10,8 +10,13 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 os.environ["BB_STACK_ROOT"] = str(ROOT)
 
-from bb_stack.engagement import EngagementManager
-from bb_stack.errors import CommandError, ValidationError
+from bb_stack.engagement import (
+    EngagementManager,
+    infer_asset,
+    normalize_target,
+)
+from bb_stack.errors import CommandError, StackError, ValidationError
+from bb_stack.io import dump_yaml, load_yaml
 from bb_stack.paths import StackPaths
 from bb_stack.runtime import RuntimeManager
 
@@ -86,6 +91,7 @@ class LifecycleTests(unittest.TestCase):
         )
         state = self.manager.validate(root)
         self.assertEqual(state["authorization"]["status"], "pending")
+        self.assertIn("verify", state["current"]["next_action"].lower())
         with self.assertRaises(ValidationError):
             self.manager.authorize(root, status="verified", source=None)
         state = self.manager.authorize(
@@ -217,6 +223,148 @@ class LifecycleTests(unittest.TestCase):
                 platform=None,
                 claude_args=[],
                 dry_run=True,
+            )
+
+    def test_target_normalization_edges(self) -> None:
+        ipv6, sensitive = normalize_target("https://[2001:db8::1]:8443/path?secret=1")
+        self.assertEqual(ipv6["pattern"], "https://[2001:db8::1]:8443/path")
+        self.assertIsNotNone(sensitive)
+        self.assertEqual(
+            infer_asset("192.0.2.4"), {"type": "host", "pattern": "192.0.2.4"}
+        )
+        self.assertEqual(infer_asset("fixture.zip")["type"], "other")
+        with self.assertRaisesRegex(ValidationError, "invalid target URL"):
+            normalize_target("https:///missing-host")
+        with self.assertRaisesRegex(ValidationError, "invalid target URL port"):
+            normalize_target("https://example.invalid:invalid")
+        with self.assertRaisesRegex(ValidationError, "control characters"):
+            normalize_target("bad\ntarget")
+
+    def test_create_rejects_invalid_contract_combinations(self) -> None:
+        cases = (
+            ({"slug": "Bad", "workflow": "ctf"}, "slug"),
+            ({"slug": "bad-workflow", "workflow": "missing"}, "unsupported workflow"),
+            (
+                {"slug": "bad-mode", "workflow": "ctf", "mode": "batch"},
+                "unsupported mode",
+            ),
+            (
+                {"slug": "bad-platform", "workflow": "ctf", "platform": "missing"},
+                "unknown platform",
+            ),
+            (
+                {"slug": "bad-mapping", "workflow": "ctf", "platform": "hackerone"},
+                "does not support workflow",
+            ),
+            (
+                {
+                    "slug": "bad-auth",
+                    "workflow": "assessment",
+                    "authorization_status": "exempt",
+                },
+                "protected workflows require",
+            ),
+            (
+                {
+                    "slug": "missing-source",
+                    "workflow": "assessment",
+                    "authorization_status": "verified",
+                },
+                "authorization source is required",
+            ),
+            (
+                {
+                    "slug": "ctf-auth",
+                    "workflow": "ctf",
+                    "authorization_status": "verified",
+                },
+                "uses exempt authorization",
+            ),
+        )
+        for arguments, message in cases:
+            with (
+                self.subTest(message=message),
+                self.assertRaisesRegex(ValidationError, message),
+            ):
+                self.manager.create(target="example.invalid", **arguments)
+
+        root = self.manager.create("duplicate", "example.invalid", workflow="ctf")
+        self.assertTrue(root.is_dir())
+        with self.assertRaisesRegex(StackError, "already exists"):
+            self.manager.create("duplicate", "example.invalid", workflow="ctf")
+
+    def test_validation_authorization_and_listing_edges(self) -> None:
+        missing = self.paths.engagements_root / "missing"
+        with self.assertRaisesRegex(ValidationError, "missing engagement.yaml"):
+            self.manager.validate(missing)
+
+        root = self.manager.create(
+            "edge-state", "example.invalid", workflow="assessment"
+        )
+        with self.assertRaisesRegex(ValidationError, "does not require"):
+            exempt = self.manager.create("edge-ctf", "example.invalid", workflow="ctf")
+            self.manager.authorize(exempt, status="pending", source=None)
+        with self.assertRaisesRegex(ValidationError, "unsupported authorization"):
+            self.manager.authorize(root, status="invalid", source=None)
+
+        pending = self.manager.authorize(root, status="pending", source=None)
+        self.assertEqual(pending["authorization"]["status"], "pending")
+        same = self.manager.transition(root, pending["lifecycle"])
+        self.assertEqual(same["lifecycle"], "active")
+        with self.assertRaisesRegex(ValidationError, "invalid lifecycle transition"):
+            self.manager.transition(root, "preview")
+        checkpointed = self.manager.checkpoint(root)
+        self.assertEqual(checkpointed["slug"], "edge-state")
+
+        state = load_yaml(root / "engagement.yaml")
+        state["slug"] = "wrong"
+        dump_yaml(root / "engagement.yaml", state)
+        listed = self.manager.list()
+        self.assertTrue(any("error" in item for item in listed))
+
+    def test_validation_detects_missing_control_and_sensitive_files(self) -> None:
+        root = self.manager.create(
+            "sensitive-edge",
+            "https://user:secret@example.invalid/path",
+            workflow="bug-bounty",
+        )
+        sensitive = root / "notes" / "TARGET.local.json"
+        sensitive.unlink()
+        with self.assertRaisesRegex(ValidationError, "missing sensitive target"):
+            self.manager.validate(root)
+
+        sensitive.write_text('{"target":"https://example.invalid"}\n', encoding="utf-8")
+        sensitive.chmod(0o644)
+        with self.assertRaisesRegex(ValidationError, "permissions"):
+            self.manager.validate(root)
+        sensitive.chmod(0o600)
+        (root / "STATUS.md").unlink()
+        with self.assertRaisesRegex(ValidationError, "missing engagement control"):
+            self.manager.validate(root)
+
+    def test_legacy_migration_copies_only_allowed_content(self) -> None:
+        source = Path(self.temporary.name) / "legacy-content"
+        source.mkdir()
+        (source / "notes.txt").write_text("keep\n", encoding="utf-8")
+        (source / "cookies.txt").write_text("drop\n", encoding="utf-8")
+        created = self.manager.migrate_legacy(
+            source,
+            "migrated-content",
+            "example.invalid",
+            workflow="bug-bounty",
+            platform="generic-vdp",
+            yes=True,
+        )
+        self.assertTrue((created / "legacy-import" / "notes.txt").is_file())
+        self.assertFalse((created / "legacy-import" / "cookies.txt").exists())
+        with self.assertRaisesRegex(ValidationError, "not a directory"):
+            self.manager.migrate_legacy(
+                source / "missing",
+                "missing-source",
+                "example.invalid",
+                workflow="bug-bounty",
+                platform="generic-vdp",
+                yes=True,
             )
 
 

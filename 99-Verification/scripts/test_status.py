@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -323,6 +324,103 @@ class StatusTests(unittest.TestCase):
         self.assertFalse(report["contract_matches"])
         self.assertEqual(actions[0]["id"], "evaluation.agent")
         self.assertEqual(actions[0]["level"], "optional")
+
+    def test_status_helper_probes_cover_url_and_process_edges(self) -> None:
+        self.assertEqual(StackStatus._state_counts([]), {})
+        self.assertEqual(
+            StackStatus._state_counts(
+                [{"state": "ready"}, {"state": "missing"}, {"state": "ready"}]
+            ),
+            {"missing": 1, "ready": 2},
+        )
+        self.assertEqual(
+            StackStatus._url_endpoint("https://example.test"), ("example.test", 443)
+        )
+        self.assertEqual(
+            StackStatus._url_endpoint("http://127.0.0.1:8080/path"), ("127.0.0.1", 8080)
+        )
+        self.assertIsNone(StackStatus._url_endpoint("not a url"))
+        self.assertIsNone(StackStatus._url_endpoint("http://host:bad"))
+
+        self.assertEqual(
+            StackStatus._redact_url("https://user:secret@example.test:8443/x"),
+            "https://example.test:8443",
+        )
+        self.assertEqual(StackStatus._redact_url("not-url"), "configured-invalid-url")
+        self.assertEqual(StackStatus._redact_url(""), "")
+        self.assertTrue(StackStatus._valid_delivery_url("https://example.test"))
+        self.assertTrue(StackStatus._valid_delivery_url("http://127.0.0.1:8080/"))
+        for invalid in (
+            "ftp://example.test",
+            "https://user:pass@example.test",
+            "https://example.test/path",
+            "https://example.test/?token=secret",
+            "https://example.test:99999",
+        ):
+            self.assertFalse(StackStatus._valid_delivery_url(invalid))
+
+        completed = subprocess.CompletedProcess(
+            ["fixture"], 0, stdout="fixture 1.2.3\n"
+        )
+        with patch("bb_stack.status.subprocess.run", return_value=completed):
+            self.assertEqual(
+                StackStatus._command_version("node", "/bin/node"), "fixture 1.2.3"
+            )
+        empty = subprocess.CompletedProcess(["fixture"], 0, stdout="")
+        with patch("bb_stack.status.subprocess.run", return_value=empty):
+            self.assertIsNone(StackStatus._command_version("node", "/bin/node"))
+        with patch("bb_stack.status.subprocess.run", side_effect=OSError("missing")):
+            self.assertIsNone(StackStatus._command_version("node", "/bin/node"))
+
+        with patch("bb_stack.status.socket.create_connection"):
+            self.assertTrue(StackStatus._tcp_ready("127.0.0.1", 80))
+        with patch(
+            "bb_stack.status.socket.create_connection", side_effect=OSError("closed")
+        ):
+            self.assertFalse(StackStatus._tcp_ready("127.0.0.1", 80))
+
+    def test_status_mail_and_delivery_checks_report_all_states(self) -> None:
+        self.assertEqual(StackStatus._check_mail({"usable": False}), "not-configured")
+        mail = {"usable": True, "resolved": "/usr/bin/mail-otp"}
+        with patch(
+            "bb_stack.status.subprocess.run",
+            return_value=subprocess.CompletedProcess(["mail"], 0),
+        ):
+            self.assertEqual(StackStatus._check_mail(mail), "passed")
+        with patch(
+            "bb_stack.status.subprocess.run",
+            return_value=subprocess.CompletedProcess(["mail"], 1),
+        ):
+            self.assertEqual(StackStatus._check_mail(mail), "failed")
+        with patch(
+            "bb_stack.status.subprocess.run",
+            side_effect=subprocess.TimeoutExpired(["mail"], 30),
+        ):
+            self.assertEqual(StackStatus._check_mail(mail), "failed")
+
+        self.assertEqual(StackStatus._check_delivery("", {}), "not-configured")
+        self.assertEqual(
+            StackStatus._check_delivery("ftp://example.test", {}), "invalid-config"
+        )
+        failed_opener = type(
+            "Opener",
+            (),
+            {
+                "open": lambda self, request, timeout: (_ for _ in ()).throw(
+                    OSError("offline")
+                )
+            },
+        )()
+        with patch("bb_stack.status.build_opener", return_value=failed_opener):
+            self.assertEqual(
+                StackStatus._check_delivery("https://example.test", {}), "failed"
+            )
+        response = type("Response", (), {"close": lambda self: None})()
+        opener = type("Opener", (), {"open": lambda self, request, timeout: response})()
+        with patch("bb_stack.status.build_opener", return_value=opener):
+            self.assertEqual(
+                StackStatus._check_delivery("https://example.test", {}), "passed"
+            )
 
 
 if __name__ == "__main__":
