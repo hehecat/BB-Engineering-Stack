@@ -45,3 +45,6 @@ the distribution repository does not.
 Bootstrap also installs the first-party `mail-otp` compatibility command. Use
 `bb-stack mail configure` and `bb-stack mail test`; mailbox credentials remain
 outside the repository in a mode-600 local config.
+
+The first-party `bb-recon` wrapper exposes the scoped Recon state machine to
+Agents without requiring them to reconstruct Provider command chains.

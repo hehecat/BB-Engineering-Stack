@@ -1,0 +1,133 @@
+schema_version: 1
+
+limits:
+  dns_requests_per_second: 100
+  http_requests_per_second: 50
+  fuzz_requests_per_second: 20
+  network_packets_per_second: 100
+  stage_timeout_seconds: 900
+
+stages:
+  - id: scope
+    artifact_dir: inventory
+    depends_on: []
+    required_providers: []
+    optional_providers: []
+    data: []
+
+  - id: organization-assets
+    artifact_dir: inventory
+    depends_on: [scope]
+    required_providers: []
+    optional_providers: [bbot, asnmap, amass]
+    data: []
+
+  - id: passive-assets
+    artifact_dir: inventory
+    depends_on: [scope]
+    required_providers: [subfinder]
+    optional_providers: [assetfinder, amass, bbot]
+    data: []
+
+  - id: dns-active
+    artifact_dir: dns
+    depends_on: [passive-assets]
+    required_providers: [dnsx]
+    optional_providers: [alterx, puredns]
+    data:
+      - {dataset: seclists, bundles: [dns]}
+      - {dataset: trickest-wordlists, bundles: [recon]}
+
+  - id: dns-resolution
+    artifact_dir: dns
+    depends_on: [passive-assets, dns-active]
+    required_providers: [dnsx]
+    optional_providers: []
+    data: []
+
+  - id: web-probe
+    artifact_dir: services
+    depends_on: [dns-resolution]
+    required_providers: [httpx]
+    optional_providers: []
+    data: []
+
+  - id: vhost-content
+    artifact_dir: services
+    depends_on: [web-probe]
+    required_providers: [ffuf]
+    optional_providers: []
+    data:
+      - {dataset: seclists, bundles: [web]}
+
+  - id: network-services
+    artifact_dir: services
+    depends_on: [dns-resolution]
+    required_providers: []
+    optional_providers: [naabu, nmap]
+    data: []
+
+  - id: crawl-archives
+    artifact_dir: urls
+    depends_on: [web-probe]
+    required_providers: [katana]
+    optional_providers: [gau, waybackurls]
+    data: []
+
+  - id: javascript-api
+    artifact_dir: javascript
+    depends_on: [crawl-archives]
+    required_providers: []
+    optional_providers: [jsluice, arjun]
+    data: []
+
+  - id: cloud-source
+    artifact_dir: cloud
+    depends_on: [passive-assets, web-probe]
+    required_providers: []
+    optional_providers: [bbot]
+    data:
+      - {dataset: trickest-wordlists, bundles: [recon]}
+
+  - id: templates
+    artifact_dir: findings
+    depends_on: [web-probe]
+    required_providers: [nuclei]
+    optional_providers: []
+    data: []
+
+  - id: normalize
+    artifact_dir: inventory
+    depends_on:
+      - organization-assets
+      - passive-assets
+      - dns-active
+      - dns-resolution
+      - web-probe
+      - vhost-content
+      - network-services
+      - crawl-archives
+      - javascript-api
+      - cloud-source
+      - templates
+    required_providers: []
+    optional_providers: []
+    data: []
+
+  - id: coverage
+    artifact_dir: leads
+    depends_on: [normalize]
+    required_providers: []
+    optional_providers: []
+    data: []
+
+expansions:
+  organization: [bbot, asnmap, amass]
+  dns: [alterx, dnsx]
+  network: [naabu, nmap]
+  web: [httpx, katana, ffuf]
+  javascript: [katana, jsluice]
+  api: [arjun, katana]
+  graphql: [katana]
+  cloud: [bbot]
+  source: [trufflehog]

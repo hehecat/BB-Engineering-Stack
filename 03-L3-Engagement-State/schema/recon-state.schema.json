@@ -1,0 +1,247 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:bb-engineering-stack:schema:recon-state:v1",
+  "title": "BB Engineering Stack Recon State",
+  "type": "object",
+  "additionalProperties": false,
+  "$defs": {
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "provider": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state", "error"],
+      "properties": {
+        "state": {
+          "enum": ["missing", "completed", "failed"]
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "command": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "error": {
+          "type": ["string", "null"]
+        },
+        "artifact": {
+          "type": ["string", "null"]
+        },
+        "log": {
+          "type": "string"
+        }
+      }
+    },
+    "stage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "state",
+        "depends_on",
+        "required_providers",
+        "optional_providers",
+        "attempts",
+        "started_at",
+        "completed_at",
+        "providers",
+        "missing",
+        "errors",
+        "artifacts"
+      ],
+      "properties": {
+        "state": {
+          "enum": ["pending", "running", "completed", "partial", "blocked", "skipped"]
+        },
+        "depends_on": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "string"}
+        },
+        "required_providers": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "string"}
+        },
+        "optional_providers": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "string"}
+        },
+        "attempts": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "started_at": {
+          "oneOf": [{"$ref": "#/$defs/timestamp"}, {"type": "null"}]
+        },
+        "completed_at": {
+          "oneOf": [{"$ref": "#/$defs/timestamp"}, {"type": "null"}]
+        },
+        "providers": {
+          "type": "object",
+          "additionalProperties": {"$ref": "#/$defs/provider"}
+        },
+        "missing": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "string"}
+        },
+        "errors": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "artifacts": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "string"}
+        }
+      }
+    },
+    "signal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type", "area", "value", "state", "source"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "type": {"type": "string", "minLength": 1},
+        "area": {"type": "string", "minLength": 1},
+        "value": {"type": "string", "minLength": 1},
+        "state": {"enum": ["open", "expanded", "accepted"]},
+        "source": {"type": "string", "minLength": 1},
+        "branch_id": {"type": "string", "minLength": 1},
+        "accepted_reason": {"type": "string", "minLength": 1}
+      }
+    },
+    "scopeCandidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "value", "kind", "state", "source"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^C-[0-9a-f]{12}$"},
+        "value": {"type": "string", "minLength": 1},
+        "kind": {"enum": ["host", "url", "other"]},
+        "state": {"enum": ["candidate", "accepted"]},
+        "source": {"type": "string", "minLength": 1},
+        "accepted_reason": {"type": "string", "minLength": 1}
+      }
+    }
+  },
+  "required": [
+    "schema_version",
+    "engagement",
+    "mode",
+    "state",
+    "created_at",
+    "updated_at",
+    "closed_at",
+    "close_reason",
+    "stages",
+    "branches",
+    "signals",
+    "scope_candidates",
+    "coverage_gaps",
+    "recommended_actions"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "engagement": {"type": "string", "minLength": 1},
+    "mode": {"enum": ["baseline", "adaptive"]},
+    "state": {
+      "enum": [
+        "pending",
+        "running",
+        "blocked",
+        "needs_agent_decision",
+        "baseline_completed",
+        "completed",
+        "closed_with_gaps"
+      ]
+    },
+    "created_at": {"$ref": "#/$defs/timestamp"},
+    "updated_at": {"$ref": "#/$defs/timestamp"},
+    "closed_at": {
+      "oneOf": [{"$ref": "#/$defs/timestamp"}, {"type": "null"}]
+    },
+    "close_reason": {"type": ["string", "null"]},
+    "stages": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {"$ref": "#/$defs/stage"}
+    },
+    "branches": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "area",
+          "target",
+          "reason",
+          "state",
+          "created_at",
+          "completed_at",
+          "providers",
+          "artifacts"
+        ],
+        "properties": {
+          "id": {"type": "string", "minLength": 1},
+          "area": {"type": "string", "minLength": 1},
+          "target": {"type": "string", "minLength": 1},
+          "reason": {"type": "string", "minLength": 1},
+          "state": {"enum": ["running", "completed", "blocked"]},
+          "created_at": {"$ref": "#/$defs/timestamp"},
+          "completed_at": {
+            "oneOf": [{"$ref": "#/$defs/timestamp"}, {"type": "null"}]
+          },
+          "providers": {
+            "type": "object",
+            "additionalProperties": {"$ref": "#/$defs/provider"}
+          },
+          "artifacts": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {"type": "string"}
+          }
+        }
+      }
+    },
+    "signals": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/signal"}
+    },
+    "scope_candidates": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/scopeCandidate"}
+    },
+    "coverage_gaps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "stage", "provider", "impact", "accepted"],
+        "properties": {
+          "id": {"type": "string", "minLength": 1},
+          "stage": {"type": "string", "minLength": 1},
+          "provider": {"type": "string", "minLength": 1},
+          "impact": {"type": "string", "minLength": 1},
+          "accepted": {"type": "boolean"}
+        }
+      }
+    },
+    "recommended_actions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["action", "reason"],
+        "properties": {
+          "action": {"type": "string", "minLength": 1},
+          "reason": {"type": "string", "minLength": 1}
+        }
+      }
+    }
+  }
+}

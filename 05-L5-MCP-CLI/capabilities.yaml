@@ -45,6 +45,22 @@ providers:
       python_modules: [jwt, requests, yaml]
       python_from: "${BB_STACK_ROOT}/.runtime/venv/bin/python"
 
+  bb-recon:
+    kind: cli
+    locator: {type: command, value: bb-recon}
+    placement: main
+    stateful: true
+    context_cost: low
+    side_effects: [network-request, local-read, local-write]
+
+  bbot:
+    kind: cli
+    locator: {type: command, value: bbot}
+    placement: bounded-worker
+    stateful: false
+    context_cost: none
+    side_effects: [passive-network, network-request, local-write]
+
   subfinder:
     kind: cli
     locator: {type: command, value: subfinder}
@@ -71,6 +87,38 @@ providers:
     stateful: false
     context_cost: none
     side_effects: [passive-network]
+
+  asnmap:
+    kind: cli
+    locator: {type: command, value: asnmap}
+    placement: bounded-worker
+    stateful: false
+    context_cost: none
+    side_effects: [passive-network]
+
+  mapcidr:
+    kind: cli
+    locator: {type: command, value: mapcidr}
+    placement: bounded-worker
+    stateful: false
+    context_cost: none
+    side_effects: [local-read]
+
+  alterx:
+    kind: cli
+    locator: {type: command, value: alterx}
+    placement: bounded-worker
+    stateful: false
+    context_cost: none
+    side_effects: [local-read, local-write]
+
+  puredns:
+    kind: cli
+    locator: {type: command, value: puredns}
+    placement: bounded-worker
+    stateful: false
+    context_cost: none
+    side_effects: [high-volume-network, local-read, local-write]
 
   dnsx:
     kind: cli
@@ -111,6 +159,22 @@ providers:
     stateful: false
     context_cost: none
     side_effects: [passive-network]
+
+  jsluice:
+    kind: cli
+    locator: {type: command, value: jsluice}
+    placement: bounded-worker
+    stateful: false
+    context_cost: none
+    side_effects: [network-request, local-read]
+
+  arjun:
+    kind: cli
+    locator: {type: command, value: arjun}
+    placement: bounded-worker
+    stateful: false
+    context_cost: none
+    side_effects: [high-volume-network, local-write]
 
   ffuf:
     kind: cli
@@ -655,8 +719,13 @@ capabilities:
   data.json: {strategy: any, providers: [jq]}
   tls.inspect: {strategy: any, providers: [openssl]}
   runtime.python: {strategy: any, providers: [pentest-python, project-python]}
-  recon.subdomains: {strategy: any, providers: [subfinder, assetfinder, amass]}
-  recon.resolve: {strategy: any, providers: [dnsx]}
+  recon.pipeline: {strategy: all, providers: [bb-recon]}
+  recon.organization: {strategy: any, providers: [bbot, asnmap]}
+  recon.subdomains: {strategy: any, providers: [subfinder, assetfinder, amass, bbot]}
+  recon.permutations: {strategy: any, providers: [alterx]}
+  recon.resolve: {strategy: any, providers: [dnsx, puredns]}
+  recon.javascript: {strategy: any, providers: [jsluice]}
+  recon.parameters: {strategy: any, providers: [arjun]}
   web.probe: {strategy: any, providers: [httpx]}
   web.crawl: {strategy: any, providers: [katana, gau, waybackurls]}
   web.fuzz: {strategy: any, providers: [ffuf, feroxbuster, dirsearch]}

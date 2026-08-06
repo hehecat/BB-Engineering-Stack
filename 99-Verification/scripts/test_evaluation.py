@@ -159,7 +159,7 @@ class EvaluationTests(unittest.TestCase):
                     'handoff_marker': marker(root / 'SESSION-HANDOFF.md', 'EVAL_HANDOFF'),
                     'status_marker': marker(root / 'STATUS.md', 'EVAL_STATUS'),
                     'next_action': next_action,
-                    'selected_skill_route': ['bb-orchestrator', 'api-security'],
+                    'selected_skill_route': ['bb-orchestrator', 'bb-recon', 'api-security'],
                     'artifact_policy': 'artifacts/',
                     'behavior_decision': {
                         'candidate_asset_action': 'record-candidate',
@@ -180,6 +180,11 @@ class EvaluationTests(unittest.TestCase):
                         },
                         'secret_handling': 'local-reference',
                         'canonical_log': 'notes/findings-live.md',
+                        'recon_decision': {
+                            'expansion': 'expand-now',
+                            'completion': 'unfinished',
+                            'follow_up': 'resume-baseline',
+                        },
                     },
                 }
                 target = root / 'artifacts/evaluation/agent-result.json'
@@ -205,7 +210,7 @@ class EvaluationTests(unittest.TestCase):
         self.assertTrue(report["passed"])
         self.assertEqual(
             report["expected_skill_route"],
-            ["bb-orchestrator", "api-security"],
+            ["bb-orchestrator", "bb-recon", "api-security"],
         )
         scope = (
             Path(report["workspace"]) / "work/engagements/agent-eval/notes/SCOPE.md"
@@ -228,7 +233,7 @@ class EvaluationTests(unittest.TestCase):
             "handoff_marker": "handoff-marker",
             "status_marker": "status-marker",
             "next_action": "inspect-fixture",
-            "selected_skill_route": ["bb-orchestrator", "api-security"],
+            "selected_skill_route": ["bb-orchestrator", "bb-recon", "api-security"],
             "artifact_policy": "artifacts/",
             "behavior_decision": WEB_BEHAVIOR_EXPECTED,
         }
@@ -254,7 +259,7 @@ class EvaluationTests(unittest.TestCase):
             "handoff_marker": "handoff-marker",
             "status_marker": "status-marker",
             "next_action": "inspect-fixture",
-            "selected_skill_route": ["bb-orchestrator", "api-security"],
+            "selected_skill_route": ["bb-orchestrator", "bb-recon", "api-security"],
             "artifact_policy": "artifacts/",
             "behavior_decision": behavior,
         }

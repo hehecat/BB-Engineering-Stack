@@ -110,7 +110,9 @@ HANDOFF, STATUS, next-action, the complete Skill route, and artifact placement.
 The Web profile also applies the current `bb-orchestrator` snapshot to a local
 decision fixture and scores candidate-asset handling, high-signal Lead choice,
 proof labels, root-cause clustering, action counts, canonical logs, and a
-synthetic secret canary.
+synthetic secret canary. It also scores that an early high-signal branch may
+expand immediately while unfinished baseline stages remain incomplete and are
+resumed afterward.
 The Browser-JS profile uses a separate local decision fixture to score runtime
 observation, narrow call-chain selection, Hook-before-breakpoint behavior,
 minimal environment reconstruction, differential validation, and outcome-led

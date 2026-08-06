@@ -1,11 +1,12 @@
 ---
 name: bb-methodology
-description: Use at the START of any bug bounty hunting session, when switching targets, or when feeling lost about what to do next. Master orchestrator that combines the 5-phase non-linear hunting workflow with the critical thinking framework (developer psychology, anomaly detection, What-If experiments). Routes to all other skills based on current hunting phase. Also use when asking "what should I do next" or "where am I in the process."
+description: Use when a Bug Bounty lead queue is empty, stale, too narrow, or needs a new hypothesis and testing mindset.
 ---
 
 # Bug Bounty Methodology: Workflow + Mindset
 
-Master orchestrator for hunting sessions. Combines the 5-phase non-linear workflow with the critical thinking framework that separates top 1% hunters from the rest.
+Provide hypothesis and testing methodology under `bb-orchestrator`. Do not own
+Engagement routing, Recon completion, Scope decisions, or final delivery.
 
 ---
 
@@ -195,7 +196,7 @@ Google Dorks -> JS file download -> Hidden param discovery -> API mapping
 | 403 **or 200 + block page** on endpoint | `tools/bypass_403.sh <url>` auto-detects soft blocks (200+block-body). Verdict: bypassed/needs_review/blocked. If all blocked after 5 min, skip |
 | Nothing after 5 min on a host | Skip, try next host (5-minute rule) |
 
-**Command**: `/recon target.com`
+**Command**: Run `bb-recon status`, then `bb-recon run` or `bb-recon resume`.
 
 ### Phase 2: MAPPING & ANALYSIS
 
@@ -351,6 +352,9 @@ Every 20 minutes ask yourself: **"Am I making progress?"**
 - Been on same target 2+ weeks with no findings? -> Consider switching program
 
 ### Tool Routing by Phase
+
+Use the table to choose adaptive Providers after reading `bb-recon` coverage.
+Do not replace the baseline executor with this manual sequence.
 
 | Phase | Tools | Why this order |
 |-------|-------|----------------|

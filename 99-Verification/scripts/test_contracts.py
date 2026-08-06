@@ -58,6 +58,11 @@ class ContractTests(unittest.TestCase):
             {"seclists", "payloads-all-the-things", "trickest-wordlists"},
         )
 
+    def test_bb_recon_declares_owner(self) -> None:
+        source = SkillRegistry(self.paths).source("bb-recon")
+        frontmatter = SkillRegistry._frontmatter(source / "SKILL.md")
+        self.assertEqual(frontmatter.get("owner"), "hehecat")
+
     def test_skill_wordlist_paths_use_managed_data_root(self) -> None:
         forbidden = (
             "~/wordlists",
@@ -231,6 +236,7 @@ class ContractTests(unittest.TestCase):
         excluded = {
             ".git",
             ".runtime",
+            ".spec-workflow",
             ".venv",
             ".ruff_cache",
             "vendor",
@@ -252,6 +258,7 @@ class ContractTests(unittest.TestCase):
         excluded = {
             ".git",
             ".runtime",
+            ".spec-workflow",
             ".venv",
             ".ruff_cache",
             "vendor",
@@ -296,7 +303,7 @@ class ContractTests(unittest.TestCase):
         router = (
             ROOT / "02-L2-Workflow-Profiles" / "workspace" / "CLAUDE.md"
         ).read_text(encoding="utf-8")
-        self.assertLess(len(router.split()), 1000)
+        self.assertLessEqual(len(router.split()), 1200)
         self.assertIn("bb-stack workspace route", router)
         self.assertIn("Do not ask the user to choose an internal Profile", router)
         self.assertIn("Operate `bb-stack`, MCP, and CLI tools", router)

@@ -4,6 +4,7 @@ required:
   - http.raw
   - data.json
   - runtime.python
+  - recon.pipeline
   - recon.subdomains
   - recon.resolve
   - web.probe
@@ -19,6 +20,10 @@ required:
   - data.wordlists.recon
   - data.payloads.web
 optional:
+  - recon.organization
+  - recon.permutations
+  - recon.javascript
+  - recon.parameters
   - tls.inspect
   - network.scan
   - web.sqli-assist

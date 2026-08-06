@@ -131,6 +131,7 @@ bb-stack status --profile web --strict --probe-mcp
 
 bb-stack new example-bb https://example.com \
   --workflow bug-bounty --platform generic-vdp --mode interactive
+bb-recon run example-bb --json
 bb-stack launch --profile bb-interactive --engagement example-bb
 ```
 

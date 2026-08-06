@@ -2,6 +2,7 @@ schema_version: 1
 
 skills:
   bb-orchestrator: {role: orchestrator, source: library/bb-orchestrator, provenance: stack}
+  bb-recon: {role: automation, source: library/bb-recon, provenance: stack}
   ctf-orchestrator: {role: orchestrator, source: library/ctf-orchestrator, provenance: stack}
   reverse-orchestrator: {role: orchestrator, source: library/reverse-orchestrator, provenance: stack}
   native-reverse-engineering: {role: specialist, source: library/native-reverse-engineering, provenance: stack}

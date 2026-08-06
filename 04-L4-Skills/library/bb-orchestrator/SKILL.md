@@ -1,6 +1,6 @@
 ---
 name: bb-orchestrator
-description: Orchestrate an authorized Bug Bounty or VDP engagement from written scope and L3 state. Use at engagement start, resume, target switch, lead selection, evidence grading, root-cause clustering, or specialist Skill coordination without ending the overall engagement.
+description: Use when coordinating an authorized Bug Bounty or VDP Engagement across recon, lead selection, specialist testing, evidence, and reporting.
 ---
 
 # Bug Bounty Orchestrator
@@ -23,6 +23,10 @@ before choosing work.
 4. Out-of-scope candidates never block work on remaining in-scope leads.
 
 ## Rank A Small Queue
+
+Use `bb-recon` for initial and resumed reconnaissance. Read its coverage and
+signals before ranking leads. Adaptive recon may run beside later testing, but
+unfinished baseline stages remain visible until completed or blocked.
 
 Keep at most five active leads. Rank them softly by:
 

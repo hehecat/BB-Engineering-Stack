@@ -76,7 +76,8 @@
         "clustered_impacts",
         "planned_actions",
         "secret_handling",
-        "canonical_log"
+        "canonical_log",
+        "recon_decision"
       ],
       "properties": {
         "candidate_asset_action": {
@@ -151,6 +152,16 @@
         },
         "canonical_log": {
           "enum": ["notes/findings-live.md", "notes/FINDINGS.md"]
+        },
+        "recon_decision": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["expansion", "completion", "follow_up"],
+          "properties": {
+            "expansion": {"enum": ["expand-now", "defer-signal"]},
+            "completion": {"enum": ["unfinished", "completed"]},
+            "follow_up": {"enum": ["resume-baseline", "close-recon"]}
+          }
         }
       }
     }

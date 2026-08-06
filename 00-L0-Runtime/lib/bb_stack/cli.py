@@ -22,6 +22,7 @@ from .mail_otp import add_mail_subcommands, run_mail_command
 from .paths import StackPaths
 from .portable import PortableManager
 from .profiles import ProfileRegistry
+from .recon import ReconManager
 from .runtime import RuntimeManager
 from .skills import SkillRegistry
 from .status import StackStatus
@@ -57,6 +58,17 @@ PLATFORMS = [
     "standalone-analysis",
 ]
 WORKFLOWS = ["bug-bounty", "assessment", "ctf", "lab", "analysis"]
+RECON_AREAS = [
+    "organization",
+    "dns",
+    "network",
+    "web",
+    "javascript",
+    "api",
+    "graphql",
+    "cloud",
+    "source",
+]
 
 
 def emit(value: Any, json_output: bool = False) -> None:
@@ -296,6 +308,33 @@ def build_parser() -> argparse.ArgumentParser:
         transition.add_argument("engagement", nargs="?")
         transition.add_argument("--reason")
         transition.add_argument("--json", action="store_true")
+
+    recon = commands.add_parser(
+        "recon", help="run and review the scoped Bug Bounty recon pipeline"
+    )
+    recon_sub = recon.add_subparsers(dest="recon_command", required=True)
+    recon_run = recon_sub.add_parser("run")
+    recon_run.add_argument("engagement", nargs="?")
+    recon_run.add_argument("--mode", choices=["baseline", "adaptive"], default="adaptive")
+    recon_run.add_argument("--json", action="store_true")
+    for action in ("resume", "status"):
+        recon_action = recon_sub.add_parser(action)
+        recon_action.add_argument("engagement", nargs="?")
+        recon_action.add_argument("--json", action="store_true")
+    recon_expand = recon_sub.add_parser("expand")
+    recon_expand.add_argument("engagement", nargs="?")
+    recon_expand.add_argument("--area", required=True, choices=RECON_AREAS)
+    recon_expand.add_argument("--target", required=True)
+    recon_expand.add_argument("--reason", required=True)
+    recon_expand.add_argument("--signal")
+    recon_expand.add_argument("--json", action="store_true")
+    recon_close = recon_sub.add_parser("close")
+    recon_close.add_argument("engagement", nargs="?")
+    recon_close.add_argument("--reason", required=True)
+    recon_close.add_argument("--accept-gap", action="append", default=[])
+    recon_close.add_argument("--accept-signal", action="append", default=[])
+    recon_close.add_argument("--accept-candidate", action="append", default=[])
+    recon_close.add_argument("--json", action="store_true")
     migrate = engagement_sub.add_parser("migrate")
     migrate.add_argument("source", type=Path)
     migrate.add_argument("slug")
@@ -655,6 +694,33 @@ def command(args: argparse.Namespace, paths: StackPaths) -> int:
                 "reopen": "active",
             }[args.engagement_command]
             emit(manager.transition(root, lifecycle, args.reason), args.json)
+        return 0
+    if args.command == "recon":
+        manager = ReconManager(paths)
+        root = paths.engagement(args.engagement)
+        if args.recon_command == "run":
+            result = manager.run(root, mode=args.mode)
+        elif args.recon_command == "resume":
+            result = manager.resume(root)
+        elif args.recon_command == "status":
+            result = manager.status(root)
+        elif args.recon_command == "expand":
+            result = manager.expand(
+                root,
+                area=args.area,
+                target=args.target,
+                reason=args.reason,
+                signal_id=args.signal,
+            )
+        else:
+            result = manager.close(
+                root,
+                reason=args.reason,
+                accept_gaps=args.accept_gap,
+                accept_signals=args.accept_signal,
+                accept_candidates=args.accept_candidate,
+            )
+        emit(result, args.json)
         return 0
     if args.command == "skills":
         registry = SkillRegistry(paths)

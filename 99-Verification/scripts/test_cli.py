@@ -55,6 +55,7 @@ class CliTests(unittest.TestCase):
             ["profile", "list"],
             ["new", "fixture", "https://example.invalid"],
             ["engagement", "list"],
+            ["recon", "status"],
             ["skills", "list"],
             ["mcp", "probe", "/tmp/mcp.json"],
             ["doctor"],
@@ -160,6 +161,69 @@ class CliTests(unittest.TestCase):
             self.assertEqual(self.run_command(["browser", "stop"]), 0)
         browser.status.assert_called_once_with(None)
         browser.stop.assert_called_once_with(None)
+
+    def test_recon_dispatch_covers_every_action(self) -> None:
+        manager = MagicMock()
+        manager.run.return_value = {"state": "baseline_completed"}
+        manager.resume.return_value = {"state": "baseline_completed"}
+        manager.status.return_value = {"state": "needs_agent_decision"}
+        manager.expand.return_value = {"id": "B-001-api"}
+        manager.close.return_value = {"state": "closed_with_gaps"}
+        cases = (
+            ["recon", "run", "fixture", "--mode", "baseline"],
+            ["recon", "resume", "fixture"],
+            ["recon", "status", "fixture"],
+            [
+                "recon",
+                "expand",
+                "fixture",
+                "--area",
+                "api",
+                "--target",
+                "https://example.invalid/graphql",
+                "--reason",
+                "GraphQL signal",
+                "--signal",
+                "S-001",
+            ],
+            [
+                "recon",
+                "close",
+                "fixture",
+                "--reason",
+                "Coverage reviewed",
+                "--accept-gap",
+                "javascript-api.jsluice",
+                "--accept-signal",
+                "S-002",
+                "--accept-candidate",
+                "C-0123456789ab",
+            ],
+        )
+        with (
+            patch("bb_stack.cli.ReconManager", return_value=manager),
+            patch("bb_stack.cli.StackPaths.engagement", return_value=Path("/tmp/fixture")),
+        ):
+            for arguments in cases:
+                with self.subTest(arguments=arguments):
+                    self.assertEqual(self.run_command(arguments), 0)
+        manager.run.assert_called_once_with(Path("/tmp/fixture"), mode="baseline")
+        manager.resume.assert_called_once_with(Path("/tmp/fixture"))
+        manager.status.assert_called_once_with(Path("/tmp/fixture"))
+        manager.expand.assert_called_once_with(
+            Path("/tmp/fixture"),
+            area="api",
+            target="https://example.invalid/graphql",
+            reason="GraphQL signal",
+            signal_id="S-001",
+        )
+        manager.close.assert_called_once_with(
+            Path("/tmp/fixture"),
+            reason="Coverage reviewed",
+            accept_gaps=["javascript-api.jsluice"],
+            accept_signals=["S-002"],
+            accept_candidates=["C-0123456789ab"],
+        )
 
     def test_main_converts_expected_errors_to_exit_two(self) -> None:
         parsed = self.parser.parse_args(["paths"])

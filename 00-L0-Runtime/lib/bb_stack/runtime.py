@@ -549,6 +549,7 @@ class RuntimeManager:
     def _install_wrappers(self, dry_run: bool) -> list[dict[str, Any]]:
         wrappers = [
             "bb-stack",
+            "bb-recon",
             "bb-claude",
             "bootstrap",
             "filecodebox-upload",
@@ -827,6 +828,24 @@ class RuntimeManager:
                 ):
                     return False
             return True
+        if spec["kind"] == "git-build":
+            destination = Path(spec["destination"])
+            marker = destination / ".bb-stack-build-revision"
+            if (
+                not marker.is_file()
+                or marker.read_text(encoding="utf-8").strip() != spec["revision"]
+            ):
+                return False
+            for command, relative in spec["executables"].items():
+                wrapper = self.paths.runtime_bin / command
+                target = destination / relative
+                if (
+                    not target.is_file()
+                    or not wrapper.is_symlink()
+                    or wrapper.resolve() != target.resolve()
+                ):
+                    return False
+            return True
         commands_ready = all(
             shutil.which(item, path=env["PATH"]) for item in spec.get("checks", [])
         )
@@ -857,8 +876,48 @@ class RuntimeManager:
                         f"pipx installation did not expose its command for {name}"
                     )
             self._run([pipx, "install", spec["package"]], env=env)
+        elif kind == "uv-tool":
+            uv = shutil.which("uv", path=env["PATH"])
+            if not uv:
+                raise CommandError(f"uv is required to install {name}")
+            tool_env = {
+                **env,
+                "UV_TOOL_BIN_DIR": str(self.paths.runtime_bin),
+                "UV_TOOL_DIR": str(self.paths.runtime / "uv-tools"),
+            }
+            self._run(
+                [
+                    uv,
+                    "tool",
+                    "install",
+                    "--python",
+                    spec.get("python", "3.12"),
+                    "--force",
+                    spec["package"],
+                ],
+                env=tool_env,
+            )
         elif kind == "git-data":
             self._install_git_data(name, spec, env)
+        elif kind == "git-build":
+            self._install_git_data(name, spec, env)
+            destination = Path(spec["destination"])
+            self._run(list(spec["build"]), cwd=destination, env=env)
+            for command, relative in spec["executables"].items():
+                target = destination / relative
+                if not target.is_file():
+                    raise CommandError(
+                        f"build for {name} is missing executable {relative}"
+                    )
+                target.chmod(target.stat().st_mode | 0o755)
+                wrapper = self.paths.runtime_bin / command
+                replacement = wrapper.with_name(f".{wrapper.name}.{os.getpid()}")
+                replacement.symlink_to(target)
+                os.replace(replacement, wrapper)
+            atomic_write(
+                destination / ".bb-stack-build-revision",
+                spec["revision"] + "\n",
+            )
         elif kind == "archive-binary":
             if platform.system() != "Linux" or platform.machine() not in spec["files"]:
                 raise CommandError(

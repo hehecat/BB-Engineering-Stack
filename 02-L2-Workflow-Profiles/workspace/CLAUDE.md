@@ -5,12 +5,10 @@ data under `engagements/<slug>/`; use `inbox/` only for unclassified input.
 
 ## User Experience Contract
 
-Conversation is the primary interface. Operate `bb-stack`, MCP, and CLI tools
-yourself. Do not tell the user to choose a Profile, remember a route kind, run a
-repair command, create directories, or launch another session when you can do
-the work directly.
+Conversation is primary. Operate `bb-stack`, MCP, and CLI tools yourself. Do not
+ask users to choose Profiles, routes, repair commands, directories, or sessions.
 
-Inspect local config, files, active Engagements, and tool status before asking.
+Inspect local config, files, Engagements, and tool status before asking.
 Ask one compact question only when an answer materially changes the next safe
 action, for example:
 
@@ -22,24 +20,26 @@ action, for example:
 - a Browser-JS or standalone-analysis task lacks an acceptance criterion that
   changes the deliverable.
 
-Never ask for an internal Profile, tool choice, slug, output directory, or
-phase. Infer them. CTF, standalone analysis, and lab work uses exempt
+Do not ask the user to choose an internal Profile, tool, slug, output directory,
+or phase. Infer them. CTF, standalone analysis, and lab work uses exempt
 authorization. Bug Bounty and assessment work requires a recorded source and
 `authorization.status=verified` before active target traffic. Never invent a
 source or infer authorization from access or ownership. Pending work permits
 only local inspection and Scope preparation. Related assets remain candidates
 until written rules cover them.
 
-Environment, proxy, identity, mailbox, FileCodeBox delivery
-(`filecodebox-upload <path> --json`), managed data, update, and
-migration requests are stack operations, not Engagements. Inspect status, make
+Environment, proxy, identity, mailbox, FileCodeBox delivery, managed data,
+update, and migration requests are stack operations, not Engagements. Inspect
+status, make
 and verify the machine-local change, then report it. Personal integrations
 remain optional.
 
+For FileCodeBox delivery, use `filecodebox-upload <path> --json` after checking
+the configured delivery status. Keep tokens on stdin with `--token-stdin`.
+
 ## Route Before Acting
 
-For each new security task, infer the route from the user's words and supplied
-target. Do not ask the user to choose an internal Profile.
+Infer each route from the user's words and target.
 
 | User intent | Route kind | Default platform |
 | --- | --- | --- |
@@ -103,11 +103,14 @@ work, confirm lifecycle is `active` and authorization is `verified`. A
 `DESCRIPTION` repair requires the real written source; never fabricate it. Use
 the reported `bb-stack data ensure` action for missing managed data. After
 routing, start the first permitted useful action instead of ending with status.
+Bug Bounty Recon: run `bb-recon status`, then use its structured `run`,
+`resume`, `expand`, or `close` action.
 
 ## Session Discipline
 
 - Stay in the selected Engagement until the user changes target or task.
-- Resume from `SESSION-HANDOFF.md` and `STATUS.md`; do not restart recon by default.
+- Resume from `SESSION-HANDOFF.md`, `STATUS.md`, and `bb-recon status`; do not
+  restart completed stages.
 - Keep large output in files and record material evidence paths and next action.
 - Never place target recon, credentials, tokens, APK output, or reports in this root.
 - `.mcp.json` intentionally has no domain MCP. For browser work in a normal

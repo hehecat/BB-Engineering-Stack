@@ -26,10 +26,11 @@
         "type": "object",
         "required": ["kind", "checks"],
         "properties": {
-          "kind": {"enum": ["apt", "go", "pipx", "git-data", "archive-binary", "archive-tree", "deb", "service"]},
+          "kind": {"enum": ["apt", "go", "pipx", "uv-tool", "git-data", "git-build", "archive-binary", "archive-tree", "deb", "service"]},
           "checks": {"type": "array", "items": {"type": "string"}},
           "packages": {"type": "array", "items": {"type": "string"}},
           "package": {"type": "string"},
+          "python": {"type": "string"},
           "binary": {"type": "string"},
           "format": {"enum": ["zip", "tar"]},
           "executables": {
@@ -37,6 +38,7 @@
             "minProperties": 1,
             "additionalProperties": {"type": "string"}
           },
+          "build": {"type": "array", "minItems": 1, "items": {"type": "string"}},
           "top_directory": {"type": "string"},
           "files": {
             "type": "object",

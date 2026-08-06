@@ -1,0 +1,99 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:bb-engineering-stack:schema:recon:v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "limits", "stages", "expansions"],
+  "$defs": {
+    "name": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+    },
+    "dataRequirement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["dataset", "bundles"],
+      "properties": {
+        "dataset": {"$ref": "#/$defs/name"},
+        "bundles": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/name"}
+        }
+      }
+    },
+    "stage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "artifact_dir",
+        "depends_on",
+        "required_providers",
+        "optional_providers",
+        "data"
+      ],
+      "properties": {
+        "id": {"$ref": "#/$defs/name"},
+        "artifact_dir": {"$ref": "#/$defs/name"},
+        "depends_on": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/name"}
+        },
+        "required_providers": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/name"}
+        },
+        "optional_providers": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/name"}
+        },
+        "data": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/dataRequirement"}
+        }
+      }
+    }
+  },
+  "properties": {
+    "schema_version": {"const": 1},
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "dns_requests_per_second",
+        "http_requests_per_second",
+        "fuzz_requests_per_second",
+        "network_packets_per_second",
+        "stage_timeout_seconds"
+      ],
+      "properties": {
+        "dns_requests_per_second": {"type": "integer", "minimum": 1, "maximum": 10000},
+        "http_requests_per_second": {"type": "integer", "minimum": 1, "maximum": 1000},
+        "fuzz_requests_per_second": {"type": "integer", "minimum": 1, "maximum": 1000},
+        "network_packets_per_second": {"type": "integer", "minimum": 1, "maximum": 10000},
+        "stage_timeout_seconds": {"type": "integer", "minimum": 30, "maximum": 7200}
+      }
+    },
+    "stages": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/stage"}
+    },
+    "expansions": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {"$ref": "#/$defs/name"},
+      "additionalProperties": {
+        "type": "array",
+        "minItems": 1,
+        "uniqueItems": true,
+        "items": {"$ref": "#/$defs/name"}
+      }
+    }
+  }
+}

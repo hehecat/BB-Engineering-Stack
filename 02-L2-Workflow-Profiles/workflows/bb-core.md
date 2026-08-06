@@ -11,7 +11,11 @@ revoked, stop active testing, preserve state, and complete the authorization
 repair first. Never infer verification from asset ownership or target access.
 
 At engagement start, resume, or target switch, route first through
-`bb-orchestrator`, then load only the specialist Skill matching the active lead.
+`bb-orchestrator`, inspect Recon with `bb-recon status`, then run or resume the
+baseline before loading only the specialist Skill matching the active lead.
+Expand early high-signal branches when useful, but do not call Recon complete
+while baseline stages remain unfinished. Keep partial coverage, open signals,
+and Scope candidates visible until explicitly resolved.
 Use `bb-methodology` only when the current queue needs new hunting ideas.
 Platform overlays supply program rules and are not Skills.
 

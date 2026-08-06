@@ -123,6 +123,71 @@ class RuntimeInstallerTests(unittest.TestCase):
             env={"PATH": "/usr/bin:/bin"},
         )
 
+    def test_uv_tool_installs_into_stack_managed_directories(self) -> None:
+        spec = {
+            "kind": "uv-tool",
+            "checks": ["demo"],
+            "package": "demo==1.2.3",
+            "python": "3.12",
+        }
+        env = {"PATH": self.paths.runtime_path()}
+        with (
+            patch("bb_stack.runtime.shutil.which", return_value="/usr/bin/uv"),
+            patch.object(self.manager, "_run") as run,
+        ):
+            self.manager._install_tool("demo", spec, env)
+        expected_env = {
+            **env,
+            "UV_TOOL_BIN_DIR": str(self.paths.runtime_bin),
+            "UV_TOOL_DIR": str(self.paths.runtime / "uv-tools"),
+        }
+        run.assert_called_once_with(
+            [
+                "/usr/bin/uv",
+                "tool",
+                "install",
+                "--python",
+                "3.12",
+                "--force",
+                "demo==1.2.3",
+            ],
+            env=expected_env,
+        )
+
+    def test_git_build_creates_managed_executable(self) -> None:
+        destination = self.paths.runtime / "tools" / "demo-1.0.0"
+        spec = {
+            "kind": "git-build",
+            "checks": ["demo"],
+            "repository": "https://example.invalid/demo.git",
+            "revision": "a" * 40,
+            "destination": str(destination),
+            "build": ["make"],
+            "executables": {"demo": "bin/demo"},
+        }
+
+        def prepare(*_: object) -> None:
+            target = destination / "bin/demo"
+            target.parent.mkdir(parents=True)
+            target.write_text("#!/bin/sh\n", encoding="utf-8")
+
+        with (
+            patch.object(self.manager, "_install_git_data", side_effect=prepare),
+            patch.object(self.manager, "_run") as run,
+        ):
+            self.manager._install_tool("demo", spec, {"PATH": "/usr/bin:/bin"})
+
+        run.assert_called_once_with(
+            ["make"], cwd=destination, env={"PATH": "/usr/bin:/bin"}
+        )
+        wrapper = self.paths.runtime_bin / "demo"
+        self.assertTrue(wrapper.is_symlink())
+        self.assertEqual(wrapper.resolve(), (destination / "bin/demo").resolve())
+        self.assertEqual(
+            (destination / ".bb-stack-build-revision").read_text(encoding="utf-8"),
+            "a" * 40 + "\n",
+        )
+
     def test_bootstrap_dry_run_has_no_persistent_writes(self) -> None:
         base = Path(self.temporary.name) / "dry-run"
         stack = isolated_stack_source(ROOT, base / "stack")

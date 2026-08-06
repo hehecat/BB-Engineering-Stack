@@ -24,6 +24,19 @@ The launcher changes its working directory to the Engagement. Claude reads
 `engagement.yaml`, `notes/SCOPE.md`, `SESSION-HANDOFF.md`, and `STATUS.md` before
 selecting work.
 
+For Bug Bounty Recon:
+
+```bash
+bb-recon status SLUG --json
+bb-recon run SLUG --json
+bb-recon resume SLUG --json
+bb-recon expand SLUG --area AREA --target TARGET --reason REASON --signal SIGNAL_ID --json
+bb-recon close SLUG --reason REASON --accept-gap GAP_ID
+```
+
+`close` also accepts repeated `--accept-signal` and `--accept-candidate` IDs.
+Read `recon/coverage.json` before acknowledging any limit.
+
 For Bug Bounty, use profile `web` with `bb-interactive` or `bb-continuous`.
 `bb-stack status --profile web --engagement SLUG` derives the platform and mode
 from `engagement.yaml`, then checks the matching personal requirements.

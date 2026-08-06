@@ -1,5 +1,5 @@
 schema_version: 1
 name: web
 orchestrator: bb-orchestrator
-required: [bb-orchestrator, bb-methodology, bug-bounty, web2-recon, triage-validation, report-writing]
-optional: [browser-js-orchestrator, account-takeover, api-hacking, api-security, auth-hacking, authorization-bypass, business-logic, csrf, dast-automation, file-reading, file-upload, graphql, graphql-audit, idor, information-disclosure, llm-security, mfa-bypass, oauth, open-redirect, openid-sso, race-condition, request-smuggling, security-arsenal, sqli, ssrf, ssti, subdomain-takeover, web-cache, xss, xxe]
+required: [bb-orchestrator, bb-recon, triage-validation, report-writing]
+optional: [bb-methodology, bug-bounty, web2-recon, browser-js-orchestrator, account-takeover, api-hacking, api-security, auth-hacking, authorization-bypass, business-logic, csrf, dast-automation, file-reading, file-upload, graphql, graphql-audit, idor, information-disclosure, llm-security, mfa-bypass, oauth, open-redirect, openid-sso, race-condition, request-smuggling, security-arsenal, sqli, ssrf, ssti, subdomain-takeover, web-cache, xss, xxe]

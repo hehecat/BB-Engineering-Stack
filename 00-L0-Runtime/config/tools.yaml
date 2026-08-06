@@ -9,7 +9,7 @@ profiles:
     optional: [httpx, katana, gau, sqlmap, interactsh-client]
   web:
     required: [system-base, subfinder, dnsx, httpx, katana, ffuf, nuclei, chromium]
-    optional: [assetfinder, amass, gau, waybackurls, interactsh-client, dalfox, naabu, sqlmap, semgrep, trufflehog]
+    optional: [uv, bbot, assetfinder, amass, asnmap, mapcidr, alterx, massdns, puredns, gau, waybackurls, jsluice, arjun, interactsh-client, dalfox, naabu, nmap, sqlmap, semgrep, trufflehog]
   android:
     required: [system-base, java-runtime, adb, apktool, jadx]
     optional: [native-base, radare2, frida, objection]
@@ -53,8 +53,21 @@ profiles:
 installers:
   system-base:
     kind: apt
-    checks: [curl, jq, openssl, git, python3]
-    packages: [ca-certificates, curl, git, jq, openssl, python3, python3-venv, unzip]
+    checks: [cc, curl, jq, make, openssl, git, python3]
+    packages: [build-essential, ca-certificates, curl, git, jq, openssl, python3, python3-venv, unzip]
+  uv:
+    kind: archive-binary
+    checks: [uv]
+    binary: uv
+    files:
+      x86_64:
+        archive: uv-x86_64-unknown-linux-gnu.tar.gz
+        url: https://github.com/astral-sh/uv/releases/download/0.11.14/uv-x86_64-unknown-linux-gnu.tar.gz
+        sha256: f3b623eb0e6141a7053d571d59a0bdc341e0f238ea8f5f0b4815ddbec9a2a296
+      aarch64:
+        archive: uv-aarch64-unknown-linux-gnu.tar.gz
+        url: https://github.com/astral-sh/uv/releases/download/0.11.14/uv-aarch64-unknown-linux-gnu.tar.gz
+        sha256: c4958f729e216f1610632574ed927b8cf0af1bd02cb88cb30d948571727aee43
   native-base:
     kind: apt
     checks: [file, readelf, objdump, nm, strings]
@@ -138,6 +151,11 @@ installers:
     kind: go
     checks: [subfinder]
     package: github.com/projectdiscovery/subfinder/v2/cmd/subfinder@v2.14.0
+  bbot:
+    kind: uv-tool
+    checks: [bbot]
+    package: bbot==3.0.1
+    python: "3.12"
   assetfinder:
     kind: go
     checks: [assetfinder]
@@ -146,6 +164,30 @@ installers:
     kind: go
     checks: [amass]
     package: github.com/owasp-amass/amass/v5/cmd/amass@v5.1.1
+  asnmap:
+    kind: go
+    checks: [asnmap]
+    package: github.com/projectdiscovery/asnmap/cmd/asnmap@v1.1.1
+  mapcidr:
+    kind: go
+    checks: [mapcidr]
+    package: github.com/projectdiscovery/mapcidr/cmd/mapcidr@v1.1.97
+  alterx:
+    kind: go
+    checks: [alterx]
+    package: github.com/projectdiscovery/alterx/cmd/alterx@v0.1.0
+  massdns:
+    kind: git-build
+    checks: [massdns]
+    repository: https://github.com/blechschmidt/massdns.git
+    revision: ca8114164361f6a296399d8160bb07d55bdc4843
+    destination: "${BB_STACK_ROOT}/.runtime/tools/massdns-1.1.0"
+    build: [make]
+    executables: {massdns: bin/massdns}
+  puredns:
+    kind: go
+    checks: [puredns]
+    package: github.com/d3mondev/puredns/v2@v2.1.1
   dnsx:
     kind: go
     checks: [dnsx]
@@ -166,6 +208,15 @@ installers:
     kind: go
     checks: [waybackurls]
     package: github.com/tomnomnom/waybackurls@v0.1.0
+  jsluice:
+    kind: go
+    checks: [jsluice]
+    package: github.com/BishopFox/jsluice/cmd/jsluice@0ddfab153e060a9eeaded4d8669233f7c071e7e4
+  arjun:
+    kind: uv-tool
+    checks: [arjun]
+    package: arjun==2.2.7
+    python: "3.12"
   ffuf:
     kind: go
     checks: [ffuf]

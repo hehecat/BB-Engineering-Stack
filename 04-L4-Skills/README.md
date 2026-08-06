@@ -7,6 +7,8 @@ copy.
 
 For Bug Bounty, `bb-orchestrator` is the sole startup orchestrator. It owns the
 Scope gate, soft Lead ranking, evidence grading, and root-cause clustering.
+`bb-recon` owns deterministic baseline coverage, resume, adaptive branch state,
+and explicit closure decisions; it does not choose the final hunting lead.
 `bb-methodology` and broad reference Skills are loaded only when the active
 queue needs them; specialist Skills are selected one Lead at a time.
 
@@ -24,6 +26,7 @@ not replace the workflow orchestrator or import another Profile's policy.
 bb-stack skills validate
 bb-stack skills install --profile ctf-web --agent claude --required-only
 bb-stack skills status --profile ctf-web --agent claude
+bb-recon --help
 ```
 
 An existing byte-identical Skill is accepted as `compatible-unmanaged`.
