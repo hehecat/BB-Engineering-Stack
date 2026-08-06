@@ -12,3 +12,4 @@ __pycache__/
 !03-L3-Engagement-State/templates/notes/LAB-CREDS.local.md.example
 05-L5-MCP-CLI/generated/*
 !05-L5-MCP-CLI/generated/.gitignore
+.ace-tool/
