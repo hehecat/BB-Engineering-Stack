@@ -47,6 +47,7 @@ class CliTests(unittest.TestCase):
             ["eval", "contracts"],
             ["status"],
             ["mail", "list"],
+            ["filecodebox", "upload", "/tmp/artifact.zip"],
             ["bootstrap", "--dry-run"],
             ["workspace", "status"],
             ["browser", "status"],

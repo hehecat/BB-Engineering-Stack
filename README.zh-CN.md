@@ -111,6 +111,15 @@ CTF 和本地文件分析不会重复询问授权。普通 Web/API 目标在没�
 检查依赖、Skill 和 MCP 是否有可用更新，但先不要升级
 ```
 
+上传交付文件:
+
+```bash
+bb-stack filecodebox upload ./artifact.zip --json
+```
+
+该命令调用 FileCodeBox 的 `POST /share/file/` API 并返回取件码. 如果关闭游客上传,
+通过 `--token-stdin` 从标准输入提供 Bearer Token.
+
 密码、Token 和邮箱授权保存在机器本地的受限文件中，不进入 Prompt、Git、报告或普通
 聊天记录。Keysmith 是显式可选能力，不会在普通任务中自动部署或修改。
 

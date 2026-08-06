@@ -211,6 +211,40 @@ Local status validates the URL shape and `curl` provider. With
 selected proxy mode. The displayed endpoint is reduced to scheme, host, and
 port.
 
+Upload a local artifact through the configured FileCodeBox API with the
+first-party command:
+
+```bash
+bb-stack filecodebox upload ./artifact.zip --expire-value 7 --expire-style day
+```
+
+The command calls `POST /share/file/` as `multipart/form-data` and returns the
+share code and retrieval URL as JSON. If guest uploads are disabled, pass the
+administrator Bearer token through stdin so it never appears in shell history
+or curl process arguments:
+
+```bash
+printf '%s\n' "$FILECODEBOX_TOKEN" \
+  | bb-stack filecodebox upload ./artifact.zip --token-stdin --json
+```
+
+The equivalent API flow for an agent or custom integration is documented in
+the [FileCodeBox API reference](https://fcb-docs.aiuo.net/api/):
+
+```text
+POST {BB_FILECODEBOX_URL}/share/file/
+Content-Type: multipart/form-data
+file=@<local-file>
+expire_value=<integer>
+expire_style=day|hour|minute|count|forever
+Authorization: Bearer <token>  # only when guest upload is disabled
+```
+
+The successful response contains `detail.code`, which is the retrieval code.
+For large files or S3-backed deployments, use the upstream pre-signed flow:
+`POST /presign/upload/init`, upload to the returned URL, and call
+`POST /presign/upload/confirm/{upload_id}` when `mode` is `direct`.
+
 ## Keysmith
 
 Keysmith is optional persistent Prompt deployment for raw `claude` commands.

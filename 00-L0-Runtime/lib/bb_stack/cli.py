@@ -15,6 +15,7 @@ from .data import DataManager
 from .engagement import EngagementManager
 from .errors import StackError
 from .evaluation import EvaluationManager
+from .filecodebox import add_filecodebox_subcommands, run_filecodebox_command
 from .io import load_yaml
 from .keysmith import KeysmithAdapter
 from .mail_otp import add_mail_subcommands, run_mail_command
@@ -152,6 +153,7 @@ def build_parser() -> argparse.ArgumentParser:
         "mail", help="configure and query the optional lab OTP mailbox"
     )
     add_mail_subcommands(mail)
+    add_filecodebox_subcommands(commands)
 
     bootstrap = commands.add_parser(
         "bootstrap", help="create the local runtime and install a profile"
@@ -493,6 +495,8 @@ def command(args: argparse.Namespace, paths: StackPaths) -> int:
         return 1 if args.strict and not report["ready"] else 0
     if args.command == "mail":
         return run_mail_command(args, paths.home)
+    if args.command == "filecodebox":
+        return run_filecodebox_command(args, paths)
     if args.command == "bootstrap":
         bootstrap_config = {
             key: value

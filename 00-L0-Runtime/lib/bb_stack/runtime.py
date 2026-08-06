@@ -551,6 +551,7 @@ class RuntimeManager:
             "bb-stack",
             "bb-claude",
             "bootstrap",
+            "filecodebox-upload",
             "mail-otp",
             "mail-otp-config",
             "mail-otp-set-pass",

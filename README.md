@@ -99,6 +99,9 @@ needed:
 Use local mihomo on HTTP 7890 and SOCKS 7891
 Set my HackerOne username
 Use my FileCodeBox instance for delivery
+
+Upload a delivery artifact with `bb-stack filecodebox upload ./artifact.zip --json`.
+The command uses FileCodeBox's `POST /share/file/` API and returns the retrieval code.
 Configure the lab mailbox for OTP retrieval
 Check pinned Skill, MCP, and tool updates without upgrading
 ```

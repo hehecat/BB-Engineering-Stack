@@ -338,8 +338,8 @@ providers:
       files_all: ["${HOME}/.local/share/pentest-mail/config.env"]
 
   filecodebox:
-    kind: service
-    locator: {type: command, value: curl}
+    kind: cli
+    locator: {type: command, value: filecodebox-upload}
     placement: main
     stateful: false
     context_cost: none

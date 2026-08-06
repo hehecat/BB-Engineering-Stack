@@ -27,6 +27,7 @@ doctor_if_installed() {
 "$PYTHON" "$ROOT/99-Verification/scripts/test_cli.py"
 "$PYTHON" "$ROOT/99-Verification/scripts/test_lifecycle.py"
 "$PYTHON" "$ROOT/99-Verification/scripts/test_mail_otp.py"
+"$PYTHON" "$ROOT/99-Verification/scripts/test_filecodebox.py"
 "$PYTHON" "$ROOT/99-Verification/scripts/test_status.py"
 "$PYTHON" "$ROOT/99-Verification/scripts/test_configuration.py"
 "$PYTHON" "$ROOT/99-Verification/scripts/test_portable.py"

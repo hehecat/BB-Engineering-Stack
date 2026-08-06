@@ -30,7 +30,8 @@ source or infer authorization from access or ownership. Pending work permits
 only local inspection and Scope preparation. Related assets remain candidates
 until written rules cover them.
 
-Environment, proxy, identity, mailbox, delivery, managed data, update, and
+Environment, proxy, identity, mailbox, FileCodeBox delivery
+(`filecodebox-upload <path> --json`), managed data, update, and
 migration requests are stack operations, not Engagements. Inspect status, make
 and verify the machine-local change, then report it. Personal integrations
 remain optional.
