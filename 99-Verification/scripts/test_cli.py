@@ -60,6 +60,7 @@ class CliTests(unittest.TestCase):
             ["mcp", "probe", "/tmp/mcp.json"],
             ["doctor"],
             ["keysmith", "status"],
+            ["update", "--profile", "minimal", "--check"],
             ["updates", "check"],
             ["launch", "--dry-run"],
         )
@@ -135,6 +136,38 @@ class CliTests(unittest.TestCase):
         manager.check.assert_called_once_with({"skills"}, None)
         manager.approve.assert_called_once_with(
             "skill.fixture", reviewer="Reviewer", note="reviewed"
+        )
+
+    def test_update_dispatches_stack_source_refresh(self) -> None:
+        manager = MagicMock()
+        manager.update.return_value = {"state": "updated"}
+        with patch("bb_stack.cli.SelfUpdateManager", return_value=manager):
+            self.assertEqual(
+                self.run_command(
+                    [
+                        "update",
+                        "--profile",
+                        "web",
+                        "--remote",
+                        "upstream",
+                        "--branch",
+                        "stable",
+                        "--skip-tools",
+                        "--json",
+                    ]
+                ),
+                0,
+            )
+        manager.update.assert_called_once_with(
+            profile="web",
+            remote="upstream",
+            branch="stable",
+            check_only=False,
+            dry_run=False,
+            include_optional=False,
+            skip_tools=True,
+            skip_node=False,
+            skip_skills=False,
         )
 
     def test_keysmith_and_browser_dispatch(self) -> None:

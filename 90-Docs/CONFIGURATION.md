@@ -263,14 +263,35 @@ Bug Bounty profile.
 
 ## Updates
 
-Status checks installed state; update discovery remains a separate read-only
-operation so it never slows normal launch or changes the machine implicitly:
+Update the Stack source and refresh the local installation explicitly:
+
+```bash
+bb-stack update --check
+bb-stack update
+```
+
+The successful Bootstrap Profile is stored in `$BB_CONFIG_HOME/install.json`
+with mode `600`. Existing installations without this marker must pass
+`--profile PROFILE` once. Non-refreshing `--check` and `--dry-run` tolerate local
+source edits; `--check` may refresh Git's remote metadata, while a real update requires a clean Git worktree, fetches the
+selected remote branch, accepts only a fast-forward, runs the updated Bootstrap
+in a child process, and preserves the configured `BB_WORK_ROOT`. A Bootstrap
+dry run executes before persistent refresh so locally changed Workspace-managed
+files stop the operation before they are overwritten. Source fast-forward and
+local refresh are separate transactions: if Bootstrap fails, the source remains
+at the fetched revision and rerunning `bb-stack update` retries the local refresh.
+
+Status checks installed state; component update discovery remains a separate
+read-only operation so it never slows normal launch or changes the machine
+implicitly:
 
 ```bash
 bb-stack updates check --all
 ```
 
-Stage, validate, promote, and roll back through the contracts in `UPDATES.md`.
+The singular `update` command owns Stack source refresh. The plural `updates`
+command owns Skill, MCP, and tool candidates. Stage, validate, promote, and roll
+back component candidates through the contracts in `UPDATES.md`.
 
 ## Portable Machine Intent
 

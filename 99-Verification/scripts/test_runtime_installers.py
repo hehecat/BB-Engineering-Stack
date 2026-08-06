@@ -210,6 +210,35 @@ class RuntimeInstallerTests(unittest.TestCase):
         self.assertFalse(paths.work_root.exists())
         self.assertFalse(paths.config_home.exists())
 
+    def test_bootstrap_records_the_profile_after_success(self) -> None:
+        workspace = {
+            "root": str(self.paths.work_root),
+            "default_entry": f"cd {self.paths.work_root} && claude",
+        }
+        with (
+            patch("bb_stack.runtime.CapabilityRegistry.profile"),
+            patch("bb_stack.runtime.SkillRegistry.profile"),
+            patch.object(
+                self.manager,
+                "_python_runtime",
+                return_value={"component": "python-runtime", "state": "ready"},
+            ),
+            patch.object(self.manager, "_install_wrappers", return_value=[]),
+            patch.object(self.manager, "_write_env"),
+            patch("bb_stack.runtime.WorkspaceManager.initialize", return_value=workspace),
+        ):
+            self.manager.bootstrap(
+                "web",
+                skip_tools=True,
+                skip_node=True,
+                skip_skills=True,
+            )
+
+        state = json.loads(
+            (self.paths.config_home / "install.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(state, {"schema_version": 1, "profile": "web"})
+
     def test_auto_npm_registry_prefers_official_then_falls_back(self) -> None:
         self.assertEqual(
             self.manager.npm_registry_candidates("auto"),

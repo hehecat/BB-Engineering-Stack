@@ -4,6 +4,10 @@ The update manager inventories every managed Skill, MCP package, and tool pin.
 It never updates in the background and never promotes a candidate without an
 explicit command.
 
+Use plural `bb-stack updates` only for these component candidates. Use singular
+`bb-stack update` to fast-forward the Stack source and refresh the installed
+runtime, Skills, data, and Workspace files.
+
 ## Check
 
 ```bash

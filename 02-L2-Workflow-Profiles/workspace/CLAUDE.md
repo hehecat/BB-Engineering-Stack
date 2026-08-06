@@ -34,6 +34,11 @@ status, make
 and verify the machine-local change, then report it. Personal integrations
 remain optional.
 
+For a Stack version update, run `bb-stack update --check`, then
+`bb-stack update`. If the old installation has no saved Bootstrap Profile, run
+`bb-stack update --profile minimal` once. Use plural `bb-stack updates` only
+for Skill, MCP, and tool candidate management.
+
 For FileCodeBox delivery, use `filecodebox-upload <path> --json` after checking
 the configured delivery status. Keep tokens on stdin with `--token-stdin`.
 

@@ -206,7 +206,40 @@ Validate the natural-language matrix after a Prompt or model change:
 ./99-Verification/scripts/router-agent-smoke.sh
 ```
 
-## Update Audit
+## Update An Existing Installation
+
+Check the configured Git remote without changing the working tree:
+
+```bash
+bb-stack update --check
+```
+
+Fast-forward the current branch, preflight the updated Bootstrap, then refresh
+the runtime, installed Skills, data assets, and Workspace-managed files:
+
+```bash
+bb-stack update
+```
+
+Bootstrap saves the last successful Capability Profile in
+`$BB_CONFIG_HOME/install.json`. An installation created by an older release has
+no marker; provide the correct Profile once:
+
+```bash
+bb-stack update --profile minimal
+```
+
+Use `--dry-run` for a read-only remote comparison and planned refresh. Use
+`--skip-tools`, `--skip-node`, `--skip-skills`, or `--with-optional` with the
+same meanings as Bootstrap. Non-refreshing `--check` and `--dry-run` tolerate local
+source edits. A real update stops before fetching when the source tree is dirty,
+fast-forwards only to the revision it fetched, rejects non-fast-forward
+histories, refuses to merge a differently named remote branch into the checked
+out branch, and never forces Workspace files.
+If Bootstrap fails after the fast-forward, the command reports that boundary;
+fix the local installation issue and rerun `bb-stack update` to retry.
+
+## Component Update Audit
 
 After sourcing `env.sh`, check all pins without changing them:
 
@@ -215,4 +248,5 @@ bb-stack updates check --all --json > update-audit.json
 ```
 
 Review `90-Docs/UPDATES.md` before staging or promoting a candidate. The update
-manager never runs in the background.
+manager never runs in the background. `bb-stack updates` manages component
+candidates; it does not update the Stack source repository.

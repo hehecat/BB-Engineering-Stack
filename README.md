@@ -109,6 +109,30 @@ Check pinned Skill, MCP, and tool updates without upgrading
 Secrets remain in machine-local restricted files, not Prompts, Git, reports, or
 normal chat. Keysmith remains opt-in and is not modified during ordinary work.
 
+## Update The Local Installation
+
+After bootstrap, use the singular update command to check and refresh the Stack:
+
+```bash
+bb-stack update --check
+bb-stack update
+```
+
+Bootstrap records the most recently installed Capability Profile and update
+reuses it. When upgrading an older installation without this state, supply the
+Profile once, for example `bb-stack update --profile minimal`. Non-refreshing
+`--check` and `--dry-run` tolerate local source edits (`--check` may refresh Git
+remote metadata); a real refresh rejects
+dirty source, fast-forwards only to the fetched revision, and refuses to
+overwrite locally modified Workspace-managed files. Engagements, credentials,
+and user-local settings are outside its update target. Source fast-forward and
+local refresh are separate transactions; a failed Bootstrap leaves the source
+updated and can be retried with `bb-stack update`.
+
+Singular `bb-stack update` updates the Stack source and local installation.
+Plural `bb-stack updates` audits, stages, and promotes Skill, MCP, and tool
+dependency candidates.
+
 ## Storage Boundaries
 
 ```text

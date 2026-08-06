@@ -27,6 +27,12 @@ update the stack:
    such as a proxy preference, account identity, mailbox authorization, device,
    credential, or written Scope that cannot be inferred locally.
 
+For a Stack version update, run `bb-stack update --check`, then
+`bb-stack update`. If an older installation has no saved Bootstrap Profile,
+use `bb-stack update --profile minimal` once and continue installing domain
+Profiles on demand. Do not substitute plural `bb-stack updates`; that command
+only manages Skill, MCP, and tool candidates.
+
 Treat SecLists, PayloadsAllTheThings, and Trickest wordlists as managed data,
 not generic tool directories. Use `bb-stack data status` and the reported
 `bb-stack data ensure` action; directory existence alone is not readiness.

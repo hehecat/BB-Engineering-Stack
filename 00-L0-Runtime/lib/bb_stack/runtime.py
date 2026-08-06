@@ -24,7 +24,7 @@ from .configuration import ConfigurationManager, load_machine_config
 from .data import DataManager
 from .engagement import EngagementManager
 from .errors import CommandError, ValidationError
-from .io import atomic_write, expand, load_yaml
+from .io import atomic_write, dump_json, expand, load_yaml
 from .paths import StackPaths
 from .profiles import ProfileRegistry
 from .skills import SkillRegistry
@@ -111,6 +111,12 @@ class RuntimeManager:
                 "entry": workspace["default_entry"],
             }
         )
+        if not dry_run:
+            dump_json(
+                self.paths.config_home / "install.json",
+                {"schema_version": 1, "profile": profile},
+                0o600,
+            )
         return {
             "schema_version": 1,
             "profile": profile,

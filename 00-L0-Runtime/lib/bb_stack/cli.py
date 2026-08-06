@@ -24,6 +24,7 @@ from .portable import PortableManager
 from .profiles import ProfileRegistry
 from .recon import ReconManager
 from .runtime import RuntimeManager
+from .self_update import SelfUpdateManager
 from .skills import SkillRegistry
 from .status import StackStatus
 from .updates import UpdateManager
@@ -402,6 +403,21 @@ def build_parser() -> argparse.ArgumentParser:
     keysmith_uninstall = keysmith_sub.add_parser("uninstall")
     keysmith_uninstall.add_argument("--yes", action="store_true")
     keysmith_uninstall.add_argument("--json", action="store_true")
+
+    update = commands.add_parser(
+        "update", help="update the Stack source and refresh the local installation"
+    )
+    update.add_argument("--profile", choices=CAPABILITY_PROFILES)
+    update.add_argument("--remote", default="origin")
+    update.add_argument("--branch")
+    update_mode = update.add_mutually_exclusive_group()
+    update_mode.add_argument("--check", action="store_true")
+    update_mode.add_argument("--dry-run", action="store_true")
+    update.add_argument("--with-optional", action="store_true")
+    update.add_argument("--skip-tools", action="store_true")
+    update.add_argument("--skip-node", action="store_true")
+    update.add_argument("--skip-skills", action="store_true")
+    update.add_argument("--json", action="store_true")
 
     updates = commands.add_parser(
         "updates", help="check, stage, validate, promote, or roll back updates"
@@ -822,6 +838,20 @@ def command(args: argparse.Namespace, paths: StackPaths) -> int:
             emit(adapter.status(), args.json)
         else:
             emit(adapter.uninstall(yes=args.yes), args.json)
+        return 0
+    if args.command == "update":
+        result = SelfUpdateManager(paths).update(
+            profile=args.profile,
+            remote=args.remote,
+            branch=args.branch,
+            check_only=args.check,
+            dry_run=args.dry_run,
+            include_optional=args.with_optional,
+            skip_tools=args.skip_tools,
+            skip_node=args.skip_node,
+            skip_skills=args.skip_skills,
+        )
+        emit(result, args.json)
         return 0
     if args.command == "updates":
         manager = UpdateManager(paths)

@@ -123,6 +123,27 @@ bb-stack filecodebox upload ./artifact.zip --json
 密码、Token 和邮箱授权保存在机器本地的受限文件中，不进入 Prompt、Git、报告或普通
 聊天记录。Keysmith 是显式可选能力，不会在普通任务中自动部署或修改。
 
+## 更新本机安装
+
+初始化后的安装直接通过单数 `update` 命令更新。先检查远端，再执行 fast-forward 和
+本机刷新：
+
+```bash
+bb-stack update --check
+bb-stack update
+```
+
+Bootstrap 会记录最近使用的 Capability Profile，后续更新会自动复用。由旧版本升级且
+尚无安装状态时，首次显式传入一次 Profile，例如
+`bb-stack update --profile minimal`。不刷新安装的 `--check` 和 `--dry-run` 不要求源码树干净；其中 `--check` 可能更新 Git 远端元数据；
+真实刷新拒绝未提交改动，并且只对已 fetch 的版本执行 fast-forward，在覆盖 Workspace
+托管文件前拒绝本地冲突；Engagement、凭据
+和用户本地设置不属于更新目标。源码 fast-forward 与本机刷新是两个独立事务；若
+Bootstrap 失败，源码会保留在新版本，修复本机问题后重新运行 `bb-stack update` 即可重试。
+
+单数 `bb-stack update` 更新 Stack 源码和本机安装。复数 `bb-stack updates` 只审计、
+暂存和提升 Skill、MCP 与工具依赖候选，二者不是同一操作。
+
 ## 工作目录
 
 ```text

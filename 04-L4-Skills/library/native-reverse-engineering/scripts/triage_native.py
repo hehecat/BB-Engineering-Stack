@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -31,6 +32,14 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def stable_environment() -> dict[str, str]:
+    """Pin the C locale so binutils output field names stay stable."""
+    env = os.environ.copy()
+    env["LC_ALL"] = "C"
+    env["LANG"] = "C"
+    return env
+
+
 def trim_output(path: Path) -> bool:
     size = path.stat().st_size
     if size <= MAX_OUTPUT_BYTES:
@@ -54,6 +63,7 @@ def tool_identity(command: str) -> dict[str, Any]:
             text=True,
             timeout=5,
             check=False,
+            env=stable_environment(),
         )
         version = completed.stdout.splitlines()[0][:512] if completed.stdout else None
     except (OSError, subprocess.TimeoutExpired):
@@ -92,6 +102,7 @@ def run_probe(
                 stderr=subprocess.PIPE,
                 timeout=timeout,
                 check=False,
+                env=stable_environment(),
             )
         result["exit_code"] = completed.returncode
         if completed.stderr:
