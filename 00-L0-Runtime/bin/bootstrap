@@ -30,7 +30,7 @@ done
 
 runtime_ready() {
   [ -x "$VENV/bin/python" ] &&
-    "$VENV/bin/python" -c 'import bb_stack, jsonschema, jwt, requests, yaml' >/dev/null 2>&1
+    "$VENV/bin/python" -c 'import pip, bb_stack, jsonschema, jwt, requests, yaml' >/dev/null 2>&1
 }
 
 if [ "$DRY_RUN" -eq 1 ] && ! runtime_ready; then

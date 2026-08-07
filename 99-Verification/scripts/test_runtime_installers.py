@@ -244,6 +244,39 @@ class RuntimeInstallerTests(unittest.TestCase):
         self.assertTrue(report["runtime_bootstrap_required"])
         self.assertFalse((stack / ".runtime").exists())
 
+    def test_bootstrap_runtime_readiness_requires_pip(self) -> None:
+        base = Path(self.temporary.name) / "launcher-no-pip"
+        stack = isolated_stack_source(ROOT, base / "stack")
+        python = stack / ".runtime/venv/bin/python"
+        python.parent.mkdir(parents=True)
+        python.write_text(
+            "#!/bin/sh\n"
+            "case \"$*\" in\n"
+            "  *\"import pip,\"*) exit 1 ;;\n"
+            "  *) exit 0 ;;\n"
+            "esac\n",
+            encoding="utf-8",
+        )
+        python.chmod(0o755)
+        env = {
+            "HOME": str(base / "home"),
+            "BB_STACK_ROOT": str(stack),
+            "PATH": "/usr/bin:/bin",
+        }
+
+        completed = subprocess.run(
+            [str(stack / "00-L0-Runtime/bin/bootstrap"), "--dry-run", "--json"],
+            env=env,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        report = json.loads(completed.stdout)
+        self.assertTrue(report["runtime_bootstrap_required"])
+
     def test_bootstrap_records_the_profile_after_success(self) -> None:
         workspace = {
             "root": str(self.paths.work_root),
