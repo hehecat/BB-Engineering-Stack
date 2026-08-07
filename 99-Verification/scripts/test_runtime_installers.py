@@ -210,6 +210,40 @@ class RuntimeInstallerTests(unittest.TestCase):
         self.assertFalse(paths.work_root.exists())
         self.assertFalse(paths.config_home.exists())
 
+    def test_bootstrap_launcher_dry_run_survives_missing_runtime_dependencies(self) -> None:
+        base = Path(self.temporary.name) / "launcher-dry-run"
+        stack = isolated_stack_source(ROOT, base / "stack")
+        home = base / "home"
+        env = {
+            "HOME": str(home),
+            "BB_STACK_ROOT": str(stack),
+            "BB_CONFIG_HOME": str(base / "config"),
+            "BB_WORK_ROOT": str(base / "work"),
+            "CLAUDE_CONFIG_DIR": str(home / ".claude"),
+            "PATH": "/usr/bin:/bin",
+        }
+
+        completed = subprocess.run(
+            [
+                str(stack / "00-L0-Runtime/bin/bootstrap"),
+                "--profile",
+                "minimal",
+                "--dry-run",
+                "--json",
+            ],
+            env=env,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        report = json.loads(completed.stdout)
+        self.assertTrue(report["dry_run"])
+        self.assertTrue(report["runtime_bootstrap_required"])
+        self.assertFalse((stack / ".runtime").exists())
+
     def test_bootstrap_records_the_profile_after_success(self) -> None:
         workspace = {
             "root": str(self.paths.work_root),
