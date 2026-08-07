@@ -123,6 +123,17 @@ class SelfUpdateManagerTests(unittest.TestCase):
             SelfUpdateManager(self.paths).update(profile="minimal")
         self.assertFalse((self.source / ".git/FETCH_HEAD").exists())
 
+    def test_real_update_allows_untracked_runtime_artifacts(self) -> None:
+        artifact = self.source / ".spec-workflow" / "runtime-state.json"
+        artifact.parent.mkdir(parents=True)
+        artifact.write_text("keep me\n", encoding="utf-8")
+        remote_commit = self._publish_update()
+
+        result = SelfUpdateManager(self.paths).update(profile="minimal")
+
+        self.assertEqual(result["after"], remote_commit)
+        self.assertEqual(artifact.read_text(encoding="utf-8"), "keep me\n")
+
     def test_real_update_does_not_merge_a_different_remote_branch(self) -> None:
         with self.assertRaisesRegex(StackError, "switch to stable first"):
             SelfUpdateManager(self.paths).update(profile="minimal", branch="stable")
@@ -176,7 +187,7 @@ class SelfUpdateManagerTests(unittest.TestCase):
             remote: str, branch: str, *, dry_run: bool
         ) -> str:
             commit = original_read_remote_commit(remote, branch, dry_run=dry_run)
-            (self.source / "local-change.txt").write_text(
+            (self.source / "stack.yaml").write_text(
                 "changed during fetch\n", encoding="utf-8"
             )
             return commit

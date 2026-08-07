@@ -232,7 +232,7 @@ bb-stack update --profile minimal
 Use `--dry-run` for a read-only remote comparison and planned refresh. Use
 `--skip-tools`, `--skip-node`, `--skip-skills`, or `--with-optional` with the
 same meanings as Bootstrap. Non-refreshing `--check` and `--dry-run` tolerate local
-source edits. A real update stops before fetching when the source tree is dirty,
+source edits. A real update stops before fetching when tracked source files are dirty,
 fast-forwards only to the revision it fetched, rejects non-fast-forward
 histories, refuses to merge a differently named remote branch into the checked
 out branch, and never forces Workspace files.

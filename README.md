@@ -122,8 +122,8 @@ Bootstrap records the most recently installed Capability Profile and update
 reuses it. When upgrading an older installation without this state, supply the
 Profile once, for example `bb-stack update --profile minimal`. Non-refreshing
 `--check` and `--dry-run` tolerate local source edits (`--check` may refresh Git
-remote metadata); a real refresh rejects
-dirty source, fast-forwards only to the fetched revision, and refuses to
+remote metadata); a real refresh rejects modifications to tracked source files,
+allows unrelated untracked runtime artifacts, fast-forwards only to the fetched revision, and refuses to
 overwrite locally modified Workspace-managed files. Engagements, credentials,
 and user-local settings are outside its update target. Source fast-forward and
 local refresh are separate transactions; a failed Bootstrap leaves the source

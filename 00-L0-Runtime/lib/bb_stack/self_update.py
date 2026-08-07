@@ -256,10 +256,22 @@ class SelfUpdateManager:
             )
 
     def _require_clean_worktree(
-        self, *, message: str = "Stack source has uncommitted changes; commit or move them before updating"
+        self,
+        *,
+        message: str = (
+            "Stack source has uncommitted changes in tracked files; "
+            "commit or move them before updating"
+        ),
     ) -> None:
-        status = self._git_output("status", "--porcelain", "--untracked-files=normal")
-        if status:
+        status = self._git_output(
+            "status", "--porcelain=v1", "--untracked-files=normal"
+        )
+        tracked_changes = [
+            line
+            for line in status.splitlines()
+            if line and not line.startswith("?? ")
+        ]
+        if tracked_changes:
             raise StackError(message)
 
     def _current_branch(self, *, required: bool) -> str | None:
