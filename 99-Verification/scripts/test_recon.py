@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -148,6 +149,37 @@ class ReconManagerTests(unittest.TestCase):
         self.assertIn("subfinder", report["stages"]["passive-assets"]["missing"])
         self.assertEqual(report["stages"]["dns-resolution"]["state"], "pending")
 
+    def test_status_recommends_declared_providers_before_their_stage_runs(self) -> None:
+        required = set(self.manager.required_providers())
+        with patch.object(
+            self.manager,
+            "_provider_available",
+            side_effect=lambda name: name in required,
+        ):
+            report = self.manager.status(self.engagement)
+
+        actions = report["recommended_actions"]
+        providers = {item.get("provider") for item in actions if item["action"] == "install-provider"}
+        self.assertTrue({"arjun", "gau", "naabu", "puredns", "waybackurls"}.issubset(providers))
+        self.assertNotIn("arjun", {item["provider"] for item in report["coverage_gaps"]})
+
+    def test_status_recommends_missing_required_provider_without_running_stage(self) -> None:
+        with patch.object(
+            self.manager,
+            "_provider_available",
+            side_effect=lambda name: name != "subfinder",
+        ):
+            report = self.manager.status(self.engagement)
+
+        actions = [
+            item
+            for item in report["recommended_actions"]
+            if item["action"] == "install-provider" and item.get("provider") == "subfinder"
+        ]
+        self.assertEqual(len(actions), 1)
+        self.assertTrue(actions[0]["required"])
+        self.assertIn("passive-assets", actions[0]["stages"])
+
     def test_resume_only_retries_unfinished_work(self) -> None:
         available = set(self.manager.required_providers()) - {"subfinder"}
         calls: list[str] = []
@@ -187,6 +219,39 @@ class ReconManagerTests(unittest.TestCase):
         for provider in completed_before:
             self.assertEqual(calls.count(provider), completed_before.count(provider))
         self.assertEqual(calls.count("subfinder"), 1)
+
+    def test_rerun_cascades_to_dependents_without_repeating_unrelated_stages(self) -> None:
+        required = set(self.manager.required_providers())
+        with (
+            patch.object(
+                self.manager,
+                "_provider_available",
+                side_effect=lambda name: name in required,
+            ),
+            patch.object(
+                self.manager, "_execute_provider", side_effect=self._complete_provider
+            ),
+        ):
+            initial = self.manager.run(self.engagement)
+            report = self.manager.rerun(
+                self.engagement,
+                stage_id="passive-assets",
+                cascade=True,
+                force=True,
+            )
+
+        self.assertEqual(
+            report["stages"]["organization-assets"]["attempts"],
+            initial["stages"]["organization-assets"]["attempts"],
+        )
+        self.assertEqual(
+            report["stages"]["passive-assets"]["attempts"],
+            initial["stages"]["passive-assets"]["attempts"] + 1,
+        )
+        self.assertEqual(
+            report["stages"]["dns-resolution"]["attempts"],
+            initial["stages"]["dns-resolution"]["attempts"] + 1,
+        )
 
     def test_stage_data_is_ensured_on_demand(self) -> None:
         required = set(self.manager.required_providers())
@@ -305,6 +370,121 @@ class ReconManagerTests(unittest.TestCase):
         self.assertEqual(result["returncode"], 1)
         self.assertEqual(result["error"], "BBOT did not create output.json")
         self.assertFalse(output.exists())
+
+    def test_subfinder_timeout_promotes_only_the_current_attempt_as_partial(self) -> None:
+        self.manager._ensure_layout(self.engagement)
+        recon = self.engagement / "recon"
+        output = recon / "inventory/passive-assets.subfinder.txt"
+        log = recon / "logs/passive-assets.subfinder.log"
+        output.write_text("stale.example.invalid\n", encoding="utf-8")
+        command = self.manager._provider_command(
+            "subfinder", "passive-assets", "example.invalid", recon, output
+        )
+
+        def timeout(command: list[str], **_: object) -> MagicMock:
+            attempt = Path(command[command.index("-o") + 1])
+            attempt.write_text("fresh.example.invalid\n", encoding="utf-8")
+            raise subprocess.TimeoutExpired(command, 900)
+
+        with patch("bb_stack.recon.subprocess.run", side_effect=timeout):
+            result = self.manager._execute_provider("subfinder", command, output, log)
+
+        self.assertEqual(result["state"], "partial")
+        self.assertTrue(result["artifact_usable"])
+        self.assertEqual(output.read_text(encoding="utf-8"), "fresh.example.invalid\n")
+        self.assertIn("TimeoutExpired", log.read_text(encoding="utf-8"))
+
+    def test_provider_success_without_attempt_file_replaces_stale_output(self) -> None:
+        self.manager._ensure_layout(self.engagement)
+        recon = self.engagement / "recon"
+        output = recon / "inventory/passive-assets.subfinder.txt"
+        log = recon / "logs/passive-assets.subfinder.log"
+        output.write_text("stale.example.invalid\n", encoding="utf-8")
+        command = self.manager._provider_command(
+            "subfinder", "passive-assets", "example.invalid", recon, output
+        )
+
+        with patch(
+            "bb_stack.recon.subprocess.run",
+            return_value=MagicMock(
+                returncode=0,
+                stdout="fresh.example.invalid\n",
+                stderr="",
+            ),
+        ):
+            result = self.manager._execute_provider("subfinder", command, output, log)
+
+        self.assertEqual(result["state"], "completed")
+        self.assertEqual(output.read_text(encoding="utf-8"), "fresh.example.invalid\n")
+
+    def test_stdout_provider_success_replaces_stale_output(self) -> None:
+        self.manager._ensure_layout(self.engagement)
+        recon = self.engagement / "recon"
+        output = recon / "inventory/passive-assets.assetfinder.txt"
+        log = recon / "logs/passive-assets.assetfinder.log"
+        output.write_text("stale.example.invalid\n", encoding="utf-8")
+        command = self.manager._provider_command(
+            "assetfinder", "passive-assets", "example.invalid", recon, output
+        )
+
+        with patch(
+            "bb_stack.recon.subprocess.run",
+            return_value=MagicMock(
+                returncode=0,
+                stdout="fresh.example.invalid\n",
+                stderr="",
+            ),
+        ):
+            result = self.manager._execute_provider("assetfinder", command, output, log)
+
+        self.assertEqual(result["state"], "completed")
+        self.assertEqual(output.read_text(encoding="utf-8"), "fresh.example.invalid\n")
+
+    def test_required_partial_provider_allows_dependents_and_creates_gap(self) -> None:
+        required = set(self.manager.required_providers())
+
+        def execute(
+            provider: str,
+            command: list[str],
+            output: Path,
+            log: Path,
+        ) -> dict[str, object]:
+            result = self._complete_provider(provider, command, output, log)
+            if provider == "subfinder":
+                result.update(
+                    {
+                        "state": "partial",
+                        "returncode": 1,
+                        "artifact_usable": True,
+                        "error": "provider timed out",
+                    }
+                )
+            return result
+
+        with (
+            patch.object(
+                self.manager,
+                "_provider_available",
+                side_effect=lambda name: name in required,
+            ),
+            patch.object(self.manager, "_execute_provider", side_effect=execute),
+        ):
+            report = self.manager.run(self.engagement)
+
+        self.assertEqual(report["stages"]["passive-assets"]["state"], "partial")
+        self.assertNotEqual(report["stages"]["dns-resolution"]["state"], "pending")
+        gaps = {item["id"] for item in report["coverage_gaps"]}
+        self.assertIn("passive-assets.subfinder", gaps)
+        reruns = [
+            item
+            for item in report["recommended_actions"]
+            if item["action"] == "rerun-stage"
+        ]
+        self.assertEqual(reruns[0]["stage"], "passive-assets")
+        self.assertIn("--cascade", reruns[0]["command"])
+
+    def test_provider_timeout_uses_recon_configuration(self) -> None:
+        self.assertEqual(self.manager._provider_timeout("subfinder"), 900)
 
     def test_legacy_state_is_migrated_before_schema_validation(self) -> None:
         state = self.manager.status(self.engagement)

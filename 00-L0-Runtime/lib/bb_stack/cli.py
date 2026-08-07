@@ -22,7 +22,7 @@ from .mail_otp import add_mail_subcommands, run_mail_command
 from .paths import StackPaths
 from .portable import PortableManager
 from .profiles import ProfileRegistry
-from .recon import ReconManager
+from .recon import BASELINE_STAGE_IDS, ReconManager
 from .runtime import RuntimeManager
 from .self_update import SelfUpdateManager
 from .skills import SkillRegistry
@@ -322,6 +322,12 @@ def build_parser() -> argparse.ArgumentParser:
         recon_action = recon_sub.add_parser(action)
         recon_action.add_argument("engagement", nargs="?")
         recon_action.add_argument("--json", action="store_true")
+    recon_rerun = recon_sub.add_parser("rerun")
+    recon_rerun.add_argument("engagement", nargs="?")
+    recon_rerun.add_argument("--stage", required=True, choices=BASELINE_STAGE_IDS)
+    recon_rerun.add_argument("--cascade", action="store_true")
+    recon_rerun.add_argument("--force", action="store_true")
+    recon_rerun.add_argument("--json", action="store_true")
     recon_expand = recon_sub.add_parser("expand")
     recon_expand.add_argument("engagement", nargs="?")
     recon_expand.add_argument("--area", required=True, choices=RECON_AREAS)
@@ -336,6 +342,14 @@ def build_parser() -> argparse.ArgumentParser:
     recon_close.add_argument("--accept-signal", action="append", default=[])
     recon_close.add_argument("--accept-candidate", action="append", default=[])
     recon_close.add_argument("--json", action="store_true")
+
+    tool = commands.add_parser("tool", help="install managed tools by name")
+    tool_sub = tool.add_subparsers(dest="tool_command", required=True)
+    tool_install = tool_sub.add_parser("install")
+    tool_install.add_argument("names", nargs="+")
+    tool_install.add_argument("--dry-run", action="store_true")
+    tool_install.add_argument("--json", action="store_true")
+
     migrate = engagement_sub.add_parser("migrate")
     migrate.add_argument("source", type=Path)
     migrate.add_argument("slug")
@@ -720,6 +734,13 @@ def command(args: argparse.Namespace, paths: StackPaths) -> int:
             result = manager.resume(root)
         elif args.recon_command == "status":
             result = manager.status(root)
+        elif args.recon_command == "rerun":
+            result = manager.rerun(
+                root,
+                stage_id=args.stage,
+                cascade=args.cascade,
+                force=args.force,
+            )
         elif args.recon_command == "expand":
             result = manager.expand(
                 root,
@@ -736,6 +757,12 @@ def command(args: argparse.Namespace, paths: StackPaths) -> int:
                 accept_signals=args.accept_signal,
                 accept_candidates=args.accept_candidate,
             )
+        emit(result, args.json)
+        return 0
+    if args.command == "tool":
+        result = RuntimeManager(paths).install_named_tools(
+            args.names, dry_run=args.dry_run
+        )
         emit(result, args.json)
         return 0
     if args.command == "skills":

@@ -4,6 +4,7 @@ import fcntl
 import hashlib
 import ipaddress
 import json
+import os
 import re
 import shlex
 import shutil
@@ -109,6 +110,54 @@ class ReconManager:
             state = self._load_or_initialize(root, engagement_state, mode="adaptive")
             if state.get("closed_at"):
                 raise ValidationError("recon is closed and cannot be resumed")
+            state["state"] = "running"
+            state["updated_at"] = _now()
+            self._save(root, state)
+            self._run_unfinished(root, engagement_state, state)
+            return self._finalize(root, state)
+
+    def rerun(
+        self,
+        engagement: Path,
+        *,
+        stage_id: str,
+        cascade: bool = False,
+        force: bool = False,
+    ) -> dict[str, Any]:
+        root, engagement_state = self._execution_gate(engagement)
+        specs = {spec["id"]: spec for spec in self.config["stages"]}
+        if stage_id not in specs:
+            raise ValidationError(f"unknown recon stage: {stage_id}")
+        self._ensure_layout(root)
+        with self._lock(root):
+            state = self._load_or_initialize(root, engagement_state, mode="adaptive")
+            if state.get("closed_at"):
+                raise ValidationError("recon is closed and cannot be rerun")
+            current = state["stages"][stage_id]
+            if current["state"] == "completed" and not force:
+                raise ValidationError(
+                    f"recon stage is completed; use --force to rerun: {stage_id}"
+                )
+            selected = {stage_id}
+            if cascade:
+                changed = True
+                while changed:
+                    changed = False
+                    for spec in self.config["stages"]:
+                        if spec["id"] in selected:
+                            continue
+                        if selected.intersection(spec["depends_on"]):
+                            selected.add(spec["id"])
+                            changed = True
+            for selected_id in selected:
+                stage = state["stages"][selected_id]
+                stage["state"] = "pending"
+                stage["started_at"] = None
+                stage["completed_at"] = None
+                stage["providers"] = {}
+                stage["missing"] = []
+                stage["errors"] = []
+                stage["artifacts"] = []
             state["state"] = "running"
             state["updated_at"] = _now()
             self._save(root, state)
@@ -413,14 +462,23 @@ class ReconManager:
                 provider, spec["id"], target, root / "recon", output
             )
             result = self._execute_provider(provider, command, output, log)
-            succeeded = result["returncode"] == 0
-            if not succeeded:
+            provider_state = result.get(
+                "state",
+                "completed" if result["returncode"] == 0 else "failed",
+            )
+            succeeded = provider_state == "completed"
+            usable_partial = (
+                provider_state == "partial" and result.get("artifact_usable", False)
+            )
+            if not succeeded and not usable_partial:
                 stage["errors"].append(f"{provider}: {result['error']}")
                 if required:
                     required_failure = True
                 else:
                     optional_gap = True
-            provider_state = "completed" if succeeded else "failed"
+            elif usable_partial:
+                stage["errors"].append(f"{provider}: {result['error']}")
+                optional_gap = True
             stage["providers"][provider] = {
                 "state": provider_state,
                 "required": required,
@@ -429,7 +487,7 @@ class ReconManager:
                 "artifact": self._relative(root, output) if output.exists() else None,
                 "log": self._relative(root, log),
             }
-            if output.exists():
+            if result.get("artifact_usable", output.exists()) and output.exists():
                 stage["artifacts"].append(self._relative(root, output))
 
         if required_failure:
@@ -453,9 +511,17 @@ class ReconManager:
         env = self.paths.environment(output.parent)
         env["PATH"] = self.paths.runtime_path()
         recon_root = self._recon_root(output)
+        attempt = output.with_name(f".{output.name}.attempt.part")
+        uses_attempt = str(output) in command
+        execution_command = [
+            str(attempt) if uses_attempt and item == str(output) else item
+            for item in command
+        ]
+        if uses_attempt:
+            attempt.unlink(missing_ok=True)
         try:
             completed = subprocess.run(
-                command,
+                execution_command,
                 env=env,
                 text=True,
                 input=self._provider_stdin(provider, recon_root),
@@ -464,9 +530,38 @@ class ReconManager:
                 timeout=self._provider_timeout(provider),
                 check=False,
             )
-        except (OSError, subprocess.TimeoutExpired) as error:
+        except subprocess.TimeoutExpired as error:
             atomic_write(log, f"{error.__class__.__name__}: {error}\n")
-            return {"returncode": 1, "command": command, "error": str(error)}
+            if provider == "subfinder" and self._usable_line_output(attempt):
+                os.replace(attempt, output)
+                return {
+                    "state": "partial",
+                    "returncode": 1,
+                    "artifact_usable": True,
+                    "command": command,
+                    "error_kind": "timeout",
+                    "error": str(error),
+                }
+            attempt.unlink(missing_ok=True)
+            return {
+                "state": "failed",
+                "returncode": 1,
+                "artifact_usable": False,
+                "command": command,
+                "error_kind": "timeout",
+                "error": str(error),
+            }
+        except OSError as error:
+            attempt.unlink(missing_ok=True)
+            atomic_write(log, f"{error.__class__.__name__}: {error}\n")
+            return {
+                "state": "failed",
+                "returncode": 1,
+                "artifact_usable": False,
+                "command": command,
+                "error_kind": "execution",
+                "error": str(error),
+            }
         atomic_write(
             log,
             f"command: {shlex.join(command)}\n"
@@ -478,15 +573,44 @@ class ReconManager:
             if not self._archive_bbot_output(command, output):
                 error = "BBOT did not create output.json"
                 atomic_write(log, f"{log.read_text(encoding='utf-8')}error: {error}\n")
-                return {"returncode": 1, "command": command, "error": error}
-        if completed.returncode == 0 and not output.exists():
-            atomic_write(output, completed.stdout)
+                return {
+                    "state": "failed",
+                    "returncode": 1,
+                    "artifact_usable": False,
+                    "command": command,
+                    "error": error,
+                }
+        if completed.returncode == 0:
+            if uses_attempt and attempt.exists():
+                os.replace(attempt, output)
+            elif uses_attempt:
+                atomic_write(output, completed.stdout)
+            elif provider != "bbot":
+                atomic_write(output, completed.stdout)
+        else:
+            attempt.unlink(missing_ok=True)
         error = completed.stderr.strip() or None
         return {
+            "state": "completed" if completed.returncode == 0 else "failed",
             "returncode": completed.returncode,
+            "artifact_usable": completed.returncode == 0 and output.exists(),
             "command": command,
             "error": error,
         }
+
+    @staticmethod
+    def _usable_line_output(path: Path) -> bool:
+        if not path.is_file() or path.stat().st_size == 0:
+            return False
+        try:
+            content = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            return False
+        lines = [line.strip() for line in content.splitlines() if line.strip()]
+        if not lines:
+            return False
+        atomic_write(path, "\n".join(lines) + "\n")
+        return True
 
     @staticmethod
     def _archive_bbot_output(command: list[str], output: Path) -> bool:
@@ -1082,7 +1206,7 @@ class ReconManager:
                 if not isinstance(provider, str) or not isinstance(detail, dict):
                     continue
                 provider_state = detail.get("state")
-                if provider_state not in {"missing", "completed", "failed"}:
+                if provider_state not in {"missing", "completed", "partial", "failed"}:
                     provider_state = "failed"
                 item: dict[str, Any] = {
                     "state": provider_state,
@@ -1154,14 +1278,22 @@ class ReconManager:
         gaps: list[dict[str, Any]] = []
         for stage_id, stage in state["stages"].items():
             for provider, detail in stage["providers"].items():
-                if detail["state"] not in {"missing", "failed"} or detail.get("required"):
+                partial = detail["state"] == "partial"
+                if not partial and (
+                    detail["state"] not in {"missing", "failed"}
+                    or detail.get("required")
+                ):
                     continue
                 gaps.append(
                     {
                         "id": f"{stage_id}.{provider}",
                         "stage": stage_id,
                         "provider": provider,
-                        "impact": "optional enrichment was not completed",
+                        "impact": (
+                            "provider returned usable but incomplete output"
+                            if partial
+                            else "optional enrichment was not completed"
+                        ),
                         "accepted": False,
                     }
                 )
@@ -1172,15 +1304,73 @@ class ReconManager:
         for gap in gaps:
             gap["accepted"] = previous_acceptance.get(gap["id"], False)
         state["coverage_gaps"] = gaps
-        state["recommended_actions"] = [
-            {
+        install_actions: dict[str, dict[str, Any]] = {}
+        for gap in gaps:
+            if self._provider_available(gap["provider"]):
+                continue
+            install_actions[gap["provider"]] = {
                 "action": "install-provider",
                 "provider": gap["provider"],
                 "stage": gap["stage"],
+                "stages": [gap["stage"]],
+                "required": False,
+                "command": ["bb-stack", "tool", "install", gap["provider"]],
                 "reason": gap["impact"],
             }
-            for gap in gaps
+        for spec in self.config["stages"]:
+            stage_id = spec["id"]
+            if state["stages"][stage_id]["state"] in TERMINAL_STAGE_STATES:
+                continue
+            required_providers = set(spec["required_providers"])
+            for provider in spec["required_providers"] + spec["optional_providers"]:
+                if self._provider_available(provider):
+                    continue
+                required = provider in required_providers
+                action = install_actions.setdefault(
+                    provider,
+                    {
+                        "action": "install-provider",
+                        "provider": provider,
+                        "stage": stage_id,
+                        "stages": [],
+                        "required": required,
+                        "command": ["bb-stack", "tool", "install", provider],
+                        "reason": (
+                            "required provider is not installed"
+                            if required
+                            else "optional provider is not installed"
+                        ),
+                    },
+                )
+                if stage_id not in action["stages"]:
+                    action["stages"].append(stage_id)
+                if required:
+                    action["required"] = True
+                    action["reason"] = "required provider is not installed"
+        state["recommended_actions"] = [
+            install_actions[provider] for provider in sorted(install_actions)
         ]
+        state["recommended_actions"].extend(
+            {
+                "action": "rerun-stage",
+                "provider": provider,
+                "stage": stage_id,
+                "command": [
+                    "bb-stack",
+                    "recon",
+                    "rerun",
+                    state["engagement"],
+                    "--stage",
+                    stage_id,
+                    "--cascade",
+                ],
+                "reason": "provider execution did not complete",
+            }
+            for stage_id, stage in state["stages"].items()
+            for provider, detail in stage["providers"].items()
+            if detail["state"] in {"partial", "failed"}
+            and self._provider_available(provider)
+        )
         state["recommended_actions"].extend(
             {
                 "action": "expand",
@@ -1279,9 +1469,8 @@ class ReconManager:
             )
         return bool(shutil.which(provider, path=self.paths.runtime_path()))
 
-    @staticmethod
-    def _provider_timeout(provider: str) -> int:
-        return 900 if provider in {"bbot", "nmap", "nuclei", "ffuf", "puredns"} else 300
+    def _provider_timeout(self, provider: str) -> int:
+        return int(self.config["limits"]["stage_timeout_seconds"])
 
     def _stage_output(
         self, recon_root: Path, spec: dict[str, Any], provider: str

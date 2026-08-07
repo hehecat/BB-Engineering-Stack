@@ -56,6 +56,7 @@ class CliTests(unittest.TestCase):
             ["new", "fixture", "https://example.invalid"],
             ["engagement", "list"],
             ["recon", "status"],
+            ["tool", "install", "waybackurls", "--dry-run"],
             ["skills", "list"],
             ["mcp", "probe", "/tmp/mcp.json"],
             ["doctor"],
@@ -200,12 +201,14 @@ class CliTests(unittest.TestCase):
         manager.run.return_value = {"state": "baseline_completed"}
         manager.resume.return_value = {"state": "baseline_completed"}
         manager.status.return_value = {"state": "needs_agent_decision"}
+        manager.rerun.return_value = {"state": "baseline_completed"}
         manager.expand.return_value = {"id": "B-001-api"}
         manager.close.return_value = {"state": "closed_with_gaps"}
         cases = (
             ["recon", "run", "fixture", "--mode", "baseline"],
             ["recon", "resume", "fixture"],
             ["recon", "status", "fixture"],
+            ["recon", "rerun", "fixture", "--stage", "passive-assets", "--cascade", "--force"],
             [
                 "recon",
                 "expand",
@@ -243,6 +246,12 @@ class CliTests(unittest.TestCase):
         manager.run.assert_called_once_with(Path("/tmp/fixture"), mode="baseline")
         manager.resume.assert_called_once_with(Path("/tmp/fixture"))
         manager.status.assert_called_once_with(Path("/tmp/fixture"))
+        manager.rerun.assert_called_once_with(
+            Path("/tmp/fixture"),
+            stage_id="passive-assets",
+            cascade=True,
+            force=True,
+        )
         manager.expand.assert_called_once_with(
             Path("/tmp/fixture"),
             area="api",
@@ -256,6 +265,22 @@ class CliTests(unittest.TestCase):
             accept_gaps=["javascript-api.jsluice"],
             accept_signals=["S-002"],
             accept_candidates=["C-0123456789ab"],
+        )
+
+    def test_tool_install_dispatches_named_installer(self) -> None:
+        manager = MagicMock()
+        manager.install_named_tools.return_value = [
+            {"component": "tool:waybackurls", "state": "planned"}
+        ]
+        with patch("bb_stack.cli.RuntimeManager", return_value=manager):
+            self.assertEqual(
+                self.run_command(
+                    ["tool", "install", "waybackurls", "gau", "--dry-run"]
+                ),
+                0,
+            )
+        manager.install_named_tools.assert_called_once_with(
+            ["waybackurls", "gau"], dry_run=True
         )
 
     def test_main_converts_expected_errors_to_exit_two(self) -> None:

@@ -566,6 +566,40 @@ class RuntimeInstallerTests(unittest.TestCase):
         self.assertEqual(run.call_count, 2)
         self.assertEqual(run.call_args.args[0][-2:], ["one", "two"])
 
+    def test_install_named_tools_selects_only_requested_installers(self) -> None:
+        document = {
+            "profiles": {"fixture": {"required": ["first"], "optional": ["second"]}},
+            "installers": {
+                "first": {"kind": "go", "package": "example/first@v1", "checks": ["first"]},
+                "second": {"kind": "go", "package": "example/second@v1", "checks": ["second"]},
+            },
+        }
+        machine = {
+            "BB_PROXY_MODE": "direct",
+            "BB_HTTP_PROXY": "",
+            "BB_SOCKS_PROXY": "",
+        }
+        with (
+            patch("bb_stack.runtime.load_yaml", return_value=document),
+            patch("bb_stack.runtime.validate"),
+            patch(
+                "bb_stack.runtime.ConfigurationManager.effective", return_value=machine
+            ),
+            patch.object(self.manager, "_ensure_toolchain"),
+            patch.object(self.manager, "_tool_ready", return_value=False),
+        ):
+            result = self.manager.install_named_tools(
+                ["second", "second"], dry_run=True
+            )
+
+        self.assertEqual(result, [{"component": "tool:second", "state": "planned"}])
+        with (
+            patch("bb_stack.runtime.load_yaml", return_value=document),
+            patch("bb_stack.runtime.validate"),
+            self.assertRaisesRegex(ValidationError, "unknown tool installer"),
+        ):
+            self.manager.install_named_tools(["missing"], dry_run=True)
+
     def test_runtime_status_reports_paths_commands_and_registry(self) -> None:
         self.paths.runtime.mkdir(parents=True, exist_ok=True)
         (self.paths.runtime / "npm-registry.json").write_text(

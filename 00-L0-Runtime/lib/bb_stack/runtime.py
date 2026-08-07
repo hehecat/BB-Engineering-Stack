@@ -709,6 +709,28 @@ class RuntimeManager:
         if include_optional:
             selected.extend(document["profiles"][profile]["optional"])
         selected = list(dict.fromkeys(selected))
+        return self._install_selected_tools(document, selected, dry_run=dry_run)
+
+    def install_named_tools(
+        self, names: list[str], *, dry_run: bool = False
+    ) -> list[dict[str, Any]]:
+        document = load_yaml(self.config / "tools.yaml")
+        validate(document, self.config / "tools.schema.json", "tool installer manifest")
+        selected = list(dict.fromkeys(names))
+        unknown = sorted(set(selected) - set(document["installers"]))
+        if unknown:
+            raise ValidationError(
+                "unknown tool installer: " + ", ".join(unknown)
+            )
+        return self._install_selected_tools(document, selected, dry_run=dry_run)
+
+    def _install_selected_tools(
+        self,
+        document: dict[str, Any],
+        selected: list[str],
+        *,
+        dry_run: bool,
+    ) -> list[dict[str, Any]]:
         env = self.paths.environment()
         machine = ConfigurationManager(self.paths).effective()
         proxy_names = {
