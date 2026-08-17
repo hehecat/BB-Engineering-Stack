@@ -19,7 +19,7 @@ stages:
     artifact_dir: inventory
     depends_on: [scope]
     required_providers: []
-    optional_providers: [bbot, asnmap, amass]
+    optional_providers: [bbot, asnmap, amass, exa, tavily, brave]
     data: []
 
   - id: passive-assets
@@ -122,7 +122,7 @@ stages:
     data: []
 
 expansions:
-  organization: [bbot, asnmap, amass]
+  organization: [bbot, asnmap, amass, exa, tavily, brave]
   dns: [alterx, dnsx]
   network: [naabu, nmap]
   web: [httpx, katana, ffuf]

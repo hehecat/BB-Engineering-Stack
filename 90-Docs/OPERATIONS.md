@@ -34,6 +34,12 @@ bb-recon expand SLUG --area AREA --target TARGET --reason REASON --signal SIGNAL
 bb-recon close SLUG --reason REASON --accept-gap GAP_ID
 ```
 
+Optional public search enrichment is available through Exa, Tavily, and Brave
+Search. Set only the provider key needed for the local run (`EXA_API_KEY`,
+`TAVILY_API_KEY`, or `BRAVE_SEARCH_API_KEY`) and rerun `organization-assets`.
+The resulting URLs remain reviewable scope candidates and are not activated
+automatically.
+
 `close` also accepts repeated `--accept-signal` and `--accept-candidate` IDs.
 Read `recon/coverage.json` before acknowledging any limit.
 

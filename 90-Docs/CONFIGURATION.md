@@ -95,6 +95,30 @@ preserved but are not loaded or included in portable exports.
 | `BB_NPM_REGISTRY` | `auto`, `npmjs`, `npmmirror`, or a custom HTTPS origin | `auto` |
 | `BB_EXTRA_PATH` | uncommon global binary paths, colon-separated | empty |
 
+## Recon Search Sources
+
+Recon can optionally query Exa, Tavily, and Brave Search during the
+`organization-assets` stage. Results are stored as JSONL artifacts and are
+treated as scope candidates until explicitly reviewed; a search provider never
+expands written scope automatically.
+
+Provide keys through the process environment. They are intentionally not part
+of `config.env`, `env.sh`, portable exports, or recon state:
+
+```bash
+export EXA_API_KEY=TOKEN
+export TAVILY_API_KEY=TOKEN
+export BRAVE_SEARCH_API_KEY=TOKEN
+```
+
+The providers are independent and optional. Missing keys produce a
+`configure-provider` recommendation without blocking required Recon stages.
+After configuring a key, rerun the affected stage:
+
+```bash
+bb-stack recon rerun ENGAGEMENT --stage organization-assets --cascade
+```
+
 After each configuration command, reload the generated environment and run
 status:
 
