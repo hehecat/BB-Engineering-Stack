@@ -18,10 +18,13 @@ plain-Claude session resumes the same Profile. Legacy work units directly under
 readable but new data is never created there.
 
 Protected workflows use `pending`, `user-asserted`, `verified`, or `revoked`
-authorization. Permit active testing only while lifecycle is `active` and
-authorization is `verified`. CTF, lab, and standalone analysis use `exempt`.
-Keep the authorization source in `notes/SCOPE.md`; never infer it from access,
-credentials, asset ownership, or a discovered relationship.
+authorization. Permit active testing while lifecycle is `active` and
+authorization is `user-asserted` (the operator's recorded statement, the
+normal default) or `verified` (written document on file). `pending` or
+`revoked` blocks active testing. CTF, lab, and standalone analysis use
+`exempt`. Keep the authorization basis in
+`notes/SCOPE.md` exactly as the user states it; never invent a basis or infer
+one from access, credentials, asset ownership, or a discovered relationship.
 
 ## Lifecycle
 

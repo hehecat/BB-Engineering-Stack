@@ -15,7 +15,7 @@ from . import __version__
 from .capabilities import CapabilityRegistry
 from .configuration import MACHINE_CONFIG_KEYS, load_machine_config
 from .data import DataManager
-from .engagement import EngagementManager
+from .engagement import AUTHORIZED_STATUSES, EngagementManager
 from .errors import StackError, ValidationError
 from .evaluation import EvaluationManager
 from .io import load_yaml
@@ -633,14 +633,14 @@ class StackStatus:
                 )
             if (
                 state["workflow"] in {"bug-bounty", "assessment"}
-                and state["authorization"]["status"] != "verified"
+                and state["authorization"]["status"] not in AUTHORIZED_STATUSES
             ):
                 self._action(
                     actions,
                     "required",
                     "engagement.authorization",
-                    f"Verify authorization for engagement {state['slug']}",
-                    f"bb-stack engagement authorize {state['slug']} --status verified --source DESCRIPTION",
+                    f"Record the authorization basis for engagement {state['slug']}",
+                    f"bb-stack engagement authorize {state['slug']} --status user-asserted --source DESCRIPTION",
                 )
         invalid = [item["slug"] for item in inventory if "error" in item]
         lifecycle_counts: dict[str, int] = {}
@@ -650,7 +650,7 @@ class StackStatus:
         authorization_ready = bool(
             not selected
             or selected["workflow"] not in {"bug-bounty", "assessment"}
-            or selected["authorization"]["status"] == "verified"
+            or selected["authorization"]["status"] in AUTHORIZED_STATUSES
         )
         return {
             "ready": bool(

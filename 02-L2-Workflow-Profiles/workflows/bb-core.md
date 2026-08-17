@@ -5,10 +5,12 @@ side-effect limits. Resume from `engagement.yaml`, `notes/SCOPE.md`,
 `SESSION-HANDOFF.md`, and `STATUS.md` before selecting a new lead.
 
 Before active target traffic, require `lifecycle: active` and
-`authorization.status: verified` in `engagement.yaml`, with the written source
-recorded in `notes/SCOPE.md`. If authorization is pending, user-asserted, or
-revoked, stop active testing, preserve state, and complete the authorization
-repair first. Never infer verification from asset ownership or target access.
+`authorization.status` `verified` or `user-asserted` in `engagement.yaml`, with
+the basis recorded verbatim in `notes/SCOPE.md` from the user's statement, a
+named program, or a provided artifact. `user-asserted` is the normal default and
+permits active testing. If status is `pending` or `revoked`, stop active
+testing, preserve state, and record the basis first. Never invent a basis or
+infer one from asset ownership or target access.
 
 At engagement start, resume, or target switch, route first through
 `bb-orchestrator`, inspect Recon with `bb-recon status`, then run or resume the

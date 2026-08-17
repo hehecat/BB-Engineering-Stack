@@ -5,10 +5,12 @@ rates, side effects, credentials, and exclusions. Read `engagement.yaml`,
 `notes/SCOPE.md`, `SESSION-HANDOFF.md`, and `STATUS.md` before testing.
 
 Before active target traffic, require `lifecycle: active` and
-`authorization.status: verified` in `engagement.yaml`, with the written source
-recorded in `notes/SCOPE.md`. If authorization is pending, user-asserted, or
-revoked, stop active testing, preserve state, and complete the authorization
-repair first. Never infer verification from credentials or network access.
+`authorization.status` `verified` or `user-asserted` in `engagement.yaml`, with
+the basis recorded verbatim in `notes/SCOPE.md` (user statement, written
+authorization, or provided artifact). `user-asserted` is the normal default and
+permits active testing. If status is `pending` or `revoked`, stop active
+testing, preserve state, and record the basis first. Never invent a basis or
+infer one from credentials or network access.
 
 Start or resume through `security-orchestrator`, then load only the domain Skill
 needed by the active lead. Keep scope and lifecycle policy in this workflow;

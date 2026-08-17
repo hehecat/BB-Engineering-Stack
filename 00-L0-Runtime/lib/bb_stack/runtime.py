@@ -22,7 +22,7 @@ from urllib.request import Request, urlopen
 from .capabilities import CapabilityRegistry
 from .configuration import ConfigurationManager, load_machine_config
 from .data import DataManager
-from .engagement import EngagementManager
+from .engagement import AUTHORIZED_STATUSES, EngagementManager
 from .errors import CommandError, ValidationError
 from .io import atomic_write, dump_json, expand, load_yaml
 from .paths import StackPaths
@@ -556,6 +556,7 @@ class RuntimeManager:
         wrappers = [
             "bb-stack",
             "bb-recon",
+            "bb-search",
             "bb-claude",
             "bootstrap",
             "filecodebox-upload",
@@ -1197,11 +1198,12 @@ class RuntimeManager:
                     f"Engagement {engagement_state['slug']} is "
                     f"{engagement_state['lifecycle']}; resume or reopen it before launch"
                 )
-            if protected and engagement_state["authorization"]["status"] != "verified":
+            if protected and engagement_state["authorization"]["status"] not in AUTHORIZED_STATUSES:
                 raise CommandError(
-                    "active testing requires verified authorization; run "
+                    "active testing requires a recorded authorization basis "
+                    "(verified or user-asserted); run "
                     f"bb-stack engagement authorize {engagement_state['slug']} "
-                    "--status verified --source DESCRIPTION"
+                    "--status user-asserted --source DESCRIPTION"
                 )
             cwd = engagement
             artifact_root = engagement / "artifacts"
@@ -1209,7 +1211,7 @@ class RuntimeManager:
             if protected:
                 raise CommandError(
                     f"{profile_definition['workflow']} launch requires an Engagement "
-                    "with verified authorization"
+                    "with recorded authorization (verified or user-asserted)"
                 )
             cwd = Path.cwd().resolve()
             artifact_root = cwd / ".bb-stack" / "artifacts"

@@ -75,7 +75,7 @@ class ReconManagerTests(unittest.TestCase):
             "example.invalid",
             workflow="bug-bounty",
         )
-        with self.assertRaisesRegex(ValidationError, "verified authorization"):
+        with self.assertRaisesRegex(ValidationError, "recorded authorization"):
             self.manager.run(pending)
 
         EngagementManager(self.paths).transition(
@@ -179,6 +179,24 @@ class ReconManagerTests(unittest.TestCase):
         self.assertEqual(len(actions), 1)
         self.assertTrue(actions[0]["required"])
         self.assertIn("passive-assets", actions[0]["stages"])
+
+    def test_status_recommends_search_key_configuration_without_install_action(self) -> None:
+        with patch.object(self.manager, "_provider_available", return_value=False):
+            report = self.manager.status(self.engagement)
+
+        actions = {
+            item["provider"]: item
+            for item in report["recommended_actions"]
+            if item["action"] == "configure-provider"
+        }
+        self.assertEqual(actions["exa"]["environment_variable"], "EXA_API_KEY")
+        self.assertEqual(actions["tavily"]["environment_variable"], "TAVILY_API_KEY")
+        self.assertEqual(actions["brave"]["environment_variable"], "BRAVE_SEARCH_API_KEY")
+        self.assertNotIn("exa", {
+            item.get("provider")
+            for item in report["recommended_actions"]
+            if item["action"] == "install-provider"
+        })
 
     def test_resume_only_retries_unfinished_work(self) -> None:
         available = set(self.manager.required_providers()) - {"subfinder"}
@@ -324,6 +342,21 @@ class ReconManagerTests(unittest.TestCase):
             self.manager._provider_stdin("jsluice", recon),
             "https://example.invalid/app.js\n",
         )
+
+        for provider, environment_variable in (
+            ("exa", "EXA_API_KEY"),
+            ("tavily", "TAVILY_API_KEY"),
+            ("brave", "BRAVE_SEARCH_API_KEY"),
+        ):
+            command = self.manager._provider_command(
+                provider, "organization-assets", "example.invalid", recon, output
+            )
+            self.assertEqual(command[0], "bb-search")
+            self.assertIn(provider, command)
+            self.assertEqual(
+                self.manager._provider_available(provider),
+                bool(os.environ.get(environment_variable, "").strip()),
+            )
 
     def test_bbot_output_is_archived_to_the_declared_artifact(self) -> None:
         self.manager._ensure_layout(self.engagement)

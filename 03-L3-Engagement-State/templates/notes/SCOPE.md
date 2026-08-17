@@ -5,10 +5,14 @@ Revision: 1
 
 ## Authorization Source
 
-- Status: pending
-- Source: user instruction and the referenced program, competition, or lab rules
-- Reference: recorded program page, challenge statement, contract, or local fixture
+- Status: user-asserted
+- Source: user statement recorded at engagement creation (own asset, provided artifact, or named program)
+- Reference: recorded program page, user statement, contract, or local fixture
 - Engagement type: bug bounty
+
+`user-asserted` permits active testing and is the normal default; `verified`
+applies when a written authorization document is on file. `pending` or
+`revoked` blocks active testing until the basis is recorded.
 
 ## In-Scope Assets
 

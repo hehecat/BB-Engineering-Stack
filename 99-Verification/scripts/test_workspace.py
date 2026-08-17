@@ -59,7 +59,7 @@ class WorkspaceTests(unittest.TestCase):
         self.assertIn("returned repair commands yourself", router)
         self.assertIn("Ask one compact question only", router)
         self.assertIn("使用简体中文编写面向用户的回复", router)
-        self.assertIn("authorization.status=verified", router)
+        self.assertIn("`user-asserted`", router)
         self.assertIn("bb-stack data ensure", router)
         self.assertTrue(self.manager.status()["ready"])
 

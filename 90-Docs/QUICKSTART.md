@@ -88,8 +88,8 @@ Use normal conversation; the router distinguishes workflow and domain:
 ```text
 对 product.apk 做 Android 安全审计
 反编译 library.apk 并还原算法，不做漏洞测试
-对书面授权的 service.elf 做 native 组件安全评估
-对书面授权的 10.20.0.0/24 做内网和 AD 安全评估
+对 service.elf 做 native 组件安全评估
+对 10.20.0.0/24 做内网和 AD 安全评估
 审计授权 AWS 账户的 IAM 和存储配置
 测试 RAG Agent 的 Prompt Injection、MCP 和 Memory 边界
 审计 repository 的源码、IaC、容器和依赖安全
@@ -107,12 +107,15 @@ bb-stack bootstrap --profile assessment-llm
 bb-stack bootstrap --profile assessment-source
 ```
 
-For an explicitly scoped native artifact, preserve the authorization source and
-route it into the assessment workflow before any dynamic action:
+For an explicitly scoped native artifact, record the authorization basis and
+route it into the assessment workflow before any dynamic action. The default is
+`user-asserted`: record the user's own statement (own asset, provided artifact,
+or named program) in `notes/SCOPE.md`, no external letter needed. `verified`
+applies when a written authorization document is on file:
 
 ```bash
 bb-stack workspace route --kind reverse-assessment --target ./service.elf \
-  --authorization-status verified --authorization-source "SIGNED_SCOPE_REFERENCE"
+  --authorization-status user-asserted --authorization-source "user statement: own artifact"
 bb-stack launch --profile assessment-reverse --engagement service-native
 ```
 
@@ -187,8 +190,8 @@ bb-stack mail test
 
 ```bash
 bb-stack engagement validate example-bb
-bb-stack engagement authorize example-bb --status verified \
-  --source 'Signed rules of engagement dated YYYY-MM-DD'
+bb-stack engagement authorize example-bb --status user-asserted \
+  --source 'User statement: own application under test'
 bb-stack launch --profile bb-interactive --engagement example-bb
 bb-stack engagement checkpoint example-bb
 bb-stack engagement pause example-bb --reason 'switching machine'

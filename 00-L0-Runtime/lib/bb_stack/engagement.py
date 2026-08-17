@@ -36,6 +36,8 @@ TRANSITIONS = {
 }
 PROTECTED_WORKFLOWS = {"bug-bounty", "assessment"}
 AUTHORIZATION_STATUSES = {"pending", "user-asserted", "verified", "exempt", "revoked"}
+# Statuses that permit active target traffic for protected workflows.
+AUTHORIZED_STATUSES = {"verified", "user-asserted"}
 
 
 def now() -> str:
@@ -213,9 +215,10 @@ class EngagementManager:
         }
         if sensitive_target:
             state["scope"]["sensitive_target_ref"] = "notes/TARGET.local.json"
-        if workflow in PROTECTED_WORKFLOWS and authorization_status != "verified":
+        if workflow in PROTECTED_WORKFLOWS and authorization_status not in AUTHORIZED_STATUSES:
             state["current"]["next_action"] = (
-                "Record and verify the written authorization source before active testing"
+                "Record and verify the authorization basis (user statement or written "
+                "source) in notes/SCOPE.md before active testing"
             )
         if route_kind is not None:
             state["routing"] = {"kind": route_kind}
@@ -299,8 +302,11 @@ class EngagementManager:
         )
         authorization_rule = (
             "For this protected workflow, active target traffic requires the current "
-            "lifecycle to be `active` and `authorization.status` to be `verified`; "
-            "never infer verification from access or ownership. "
+            "lifecycle to be `active` and `authorization.status` to be `verified` or "
+            "`user-asserted`, with the basis recorded in `notes/SCOPE.md` exactly as "
+            "the user states it (own asset, provided artifact, or named program). "
+            "`pending` or `revoked` stops active testing; never invent a basis or infer "
+            "one from access, credentials, or ownership. "
             if workflow in PROTECTED_WORKFLOWS
             else "This workflow uses exempt authorization; do not request an authorization "
             "change unless the work is rerouted to a protected workflow. "
@@ -426,9 +432,9 @@ class EngagementManager:
 
     @staticmethod
     def _status_markdown(state: dict[str, Any], timestamp: str) -> str:
-        protected_unverified = bool(
+        protected_pending = bool(
             state["workflow"] in PROTECTED_WORKFLOWS
-            and state["authorization"]["status"] != "verified"
+            and state["authorization"]["status"] == "pending"
         )
         scope_section = (
             "## Scope Candidates\n\nNone recorded. Candidate assets are not active "
@@ -441,8 +447,9 @@ class EngagementManager:
             "Authorization is revoked; active testing is prohibited."
             if state["authorization"]["status"] == "revoked"
             else (
-                "Authorization verification is required before active testing."
-                if protected_unverified
+                "Authorization basis is pending; record the user statement or "
+                "written source before active testing."
+                if protected_pending
                 else "None."
             )
         )
@@ -479,16 +486,16 @@ class EngagementManager:
 
     @staticmethod
     def _handoff_markdown(state: dict[str, Any], timestamp: str) -> str:
-        protected_unverified = bool(
+        protected_pending = bool(
             state["workflow"] in PROTECTED_WORKFLOWS
-            and state["authorization"]["status"] != "verified"
+            and state["authorization"]["status"] == "pending"
         )
         external_dependency = (
             "Renewed written authorization and verification."
             if state["authorization"]["status"] == "revoked"
             else (
-                "Written authorization source and verification."
-                if protected_unverified
+                "Recorded authorization basis (user statement or written source)."
+                if protected_pending
                 else "None."
             )
         )
@@ -570,14 +577,15 @@ class EngagementManager:
             "Authorization is revoked; active testing is prohibited."
             if state["authorization"]["status"] == "revoked"
             else (
-                "Authorization verification is required before active testing."
+                "Authorization basis is pending; record the user statement or "
+                "written source before active testing."
                 if state["workflow"] in PROTECTED_WORKFLOWS
-                and state["authorization"]["status"] != "verified"
+                and state["authorization"]["status"] == "pending"
                 else "None."
             )
         )
         status = re.sub(
-            r"^## Blockers\n\n(?:None\.|Authorization verification is required before active testing\.|Authorization is revoked; active testing is prohibited\.)$",
+            r"^## Blockers\n\n(?:None\.|Authorization basis is pending; record the user statement or written source before active testing\.|Authorization verification is required before active testing\.|Authorization is revoked; active testing is prohibited\.)$",
             lambda _: f"## Blockers\n\n{status_blocker}",
             status,
             count=1,
@@ -627,14 +635,14 @@ class EngagementManager:
             "Renewed written authorization and verification."
             if state["authorization"]["status"] == "revoked"
             else (
-                "Written authorization source and verification."
+                "Recorded authorization basis (user statement or written source)."
                 if state["workflow"] in PROTECTED_WORKFLOWS
-                and state["authorization"]["status"] != "verified"
+                and state["authorization"]["status"] == "pending"
                 else "None."
             )
         )
         handoff = re.sub(
-            r"^## External Dependency\n\n(?:None\.|Written authorization source and verification\.|Renewed written authorization and verification\.)$",
+            r"^## External Dependency\n\n(?:None\.|Recorded authorization basis \(user statement or written source\)\.|Written authorization source and verification\.|Renewed written authorization and verification\.)$",
             lambda _: f"## External Dependency\n\n{external_dependency}",
             handoff,
             count=1,
@@ -700,7 +708,7 @@ class EngagementManager:
         state["scope"]["revision"] += 1
         state["scope"]["reviewed_at"] = timestamp
         state["timestamps"]["updated_at"] = timestamp
-        if status == "verified" and state["current"]["next_action"].startswith(
+        if status in AUTHORIZED_STATUSES and state["current"]["next_action"].startswith(
             "Record and verify"
         ):
             state["current"]["next_action"] = self._first_action(state["workflow"])

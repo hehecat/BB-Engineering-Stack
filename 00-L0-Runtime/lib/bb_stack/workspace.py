@@ -12,7 +12,7 @@ from urllib.parse import urlparse
 from . import __version__
 from .capabilities import CapabilityRegistry
 from .configuration import ConfigurationManager
-from .engagement import EngagementManager
+from .engagement import AUTHORIZED_STATUSES, EngagementManager
 from .errors import StackError, ValidationError
 from .io import atomic_write, dump_json, dump_yaml, load_json
 from .paths import StackPaths
@@ -465,12 +465,13 @@ class WorkspaceManager:
         repair_commands: list[str] = []
         authorization_ready = bool(
             state["workflow"] not in {"bug-bounty", "assessment"}
-            or state["authorization"]["status"] == "verified"
+            or state["authorization"]["status"] in AUTHORIZED_STATUSES
         )
         if not authorization_ready:
             repair_commands.append(
                 "bb-stack engagement authorize "
-                f"{shlex.quote(state['slug'])} --status verified --source DESCRIPTION"
+                f"{shlex.quote(state['slug'])} --status user-asserted "
+                "--source \"user statement recorded in SCOPE.md\""
             )
         if missing_skills or not capability_status["ready"]:
             repair_commands.append(

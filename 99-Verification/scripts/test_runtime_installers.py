@@ -742,7 +742,7 @@ class RuntimeInstallerTests(unittest.TestCase):
                 "bb_stack.runtime.EngagementManager",
                 return_value=engagement_manager,
             ),
-            self.assertRaisesRegex(CommandError, "verified authorization"),
+            self.assertRaisesRegex(CommandError, "recorded authorization basis"),
         ):
             self.manager.launch(
                 "ctf-web",

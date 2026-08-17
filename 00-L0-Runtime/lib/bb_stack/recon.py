@@ -16,7 +16,7 @@ from typing import Any, Iterator
 from urllib.parse import urljoin, urlparse
 
 from .data import DataManager
-from .engagement import EngagementManager, PROTECTED_WORKFLOWS
+from .engagement import AUTHORIZED_STATUSES, EngagementManager, PROTECTED_WORKFLOWS
 from .errors import CommandError, ValidationError
 from .io import atomic_write, dump_json, load_json, load_yaml
 from .paths import StackPaths
@@ -55,6 +55,11 @@ RECON_DIRS = (
 )
 CONTROL_BLOCK_START = "<!-- bb-recon:start -->"
 CONTROL_BLOCK_END = "<!-- bb-recon:end -->"
+SEARCH_PROVIDER_ENV = {
+    "exa": "EXA_API_KEY",
+    "tavily": "TAVILY_API_KEY",
+    "brave": "BRAVE_SEARCH_API_KEY",
+}
 
 
 def _now() -> str:
@@ -858,6 +863,16 @@ class ReconManager:
                 str(output),
             ],
         }
+        for search_provider in SEARCH_PROVIDER_ENV:
+            commands[search_provider] = [
+                "bb-search",
+                "--provider",
+                search_provider,
+                "--target",
+                target,
+                "--output",
+                str(output),
+            ]
         if provider not in commands:
             raise ValidationError(f"no recon command adapter for provider: {provider}")
         return commands[provider]
@@ -942,6 +957,19 @@ class ReconManager:
             self._write_lines(
                 recon_root / "inventory" / "subdomains.txt",
                 in_scope,
+            )
+        elif stage_id == "organization-assets":
+            discovered = {
+                item["url"]
+                for path in outputs
+                for item in self._read_json_lines(path)
+                if isinstance(item.get("url"), str)
+            }
+            self._partition_discoveries(
+                recon_root,
+                discovered,
+                scope,
+                source="organization-search",
             )
         elif stage_id == "dns-active":
             discovered = self._read_asset_values(outputs)
@@ -1308,15 +1336,31 @@ class ReconManager:
         for gap in gaps:
             if self._provider_available(gap["provider"]):
                 continue
-            install_actions[gap["provider"]] = {
-                "action": "install-provider",
-                "provider": gap["provider"],
-                "stage": gap["stage"],
-                "stages": [gap["stage"]],
-                "required": False,
-                "command": ["bb-stack", "tool", "install", gap["provider"]],
-                "reason": gap["impact"],
-            }
+            provider = gap["provider"]
+            if provider in SEARCH_PROVIDER_ENV:
+                install_actions[provider] = {
+                    "action": "configure-provider",
+                    "provider": provider,
+                    "environment_variable": SEARCH_PROVIDER_ENV[provider],
+                    "stage": gap["stage"],
+                    "stages": [gap["stage"]],
+                    "required": False,
+                    "command": [
+                        "export",
+                        f"{SEARCH_PROVIDER_ENV[provider]}=TOKEN",
+                    ],
+                    "reason": gap["impact"],
+                }
+            else:
+                install_actions[provider] = {
+                    "action": "install-provider",
+                    "provider": provider,
+                    "stage": gap["stage"],
+                    "stages": [gap["stage"]],
+                    "required": False,
+                    "command": ["bb-stack", "tool", "install", provider],
+                    "reason": gap["impact"],
+                }
         for spec in self.config["stages"]:
             stage_id = spec["id"]
             if state["stages"][stage_id]["state"] in TERMINAL_STAGE_STATES:
@@ -1328,19 +1372,39 @@ class ReconManager:
                 required = provider in required_providers
                 action = install_actions.setdefault(
                     provider,
-                    {
-                        "action": "install-provider",
-                        "provider": provider,
-                        "stage": stage_id,
-                        "stages": [],
-                        "required": required,
-                        "command": ["bb-stack", "tool", "install", provider],
-                        "reason": (
-                            "required provider is not installed"
-                            if required
-                            else "optional provider is not installed"
-                        ),
-                    },
+                    (
+                        {
+                            "action": "configure-provider",
+                            "provider": provider,
+                            "environment_variable": SEARCH_PROVIDER_ENV[provider],
+                            "stage": stage_id,
+                            "stages": [],
+                            "required": required,
+                            "command": [
+                                "export",
+                                f"{SEARCH_PROVIDER_ENV[provider]}=TOKEN",
+                            ],
+                            "reason": (
+                                "required search provider key is not configured"
+                                if required
+                                else "optional search provider key is not configured"
+                            ),
+                        }
+                        if provider in SEARCH_PROVIDER_ENV
+                        else {
+                            "action": "install-provider",
+                            "provider": provider,
+                            "stage": stage_id,
+                            "stages": [],
+                            "required": required,
+                            "command": ["bb-stack", "tool", "install", provider],
+                            "reason": (
+                                "required provider is not installed"
+                                if required
+                                else "optional provider is not installed"
+                            ),
+                        }
+                    ),
                 )
                 if stage_id not in action["stages"]:
                     action["stages"].append(stage_id)
@@ -1433,8 +1497,10 @@ class ReconManager:
             raise ValidationError(
                 f"recon execution requires active lifecycle; lifecycle is {state['lifecycle']}"
             )
-        if state["authorization"]["status"] != "verified":
-            raise ValidationError("recon execution requires verified authorization")
+        if state["authorization"]["status"] not in AUTHORIZED_STATUSES:
+            raise ValidationError(
+                "recon execution requires recorded authorization (verified or user-asserted)"
+            )
         return root, state
 
     def _validate_pipeline(self) -> None:
@@ -1462,6 +1528,8 @@ class ReconManager:
             seen.add(stage["id"])
 
     def _provider_available(self, provider: str) -> bool:
+        if provider in SEARCH_PROVIDER_ENV:
+            return bool(os.environ.get(SEARCH_PROVIDER_ENV[provider], "").strip())
         if provider == "puredns":
             return bool(
                 shutil.which("puredns", path=self.paths.runtime_path())
@@ -1485,12 +1553,15 @@ class ReconManager:
     def _output_suffix(provider: str) -> str:
         if provider in {
             "bbot",
+            "brave",
             "dnsx",
+            "exa",
             "httpx",
             "jsluice",
             "katana",
             "naabu",
             "nuclei",
+            "tavily",
             "trufflehog",
         }:
             return ".jsonl"

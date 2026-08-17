@@ -15,8 +15,9 @@ Engagement.
    `SESSION-HANDOFF.md`.
 2. Confirm that the artifact path is in Scope.
 3. Treat local, CTF, and standalone-analysis artifacts as passive inputs.
-4. Require verified authorization before interacting with a protected device,
-   service, account, or remote target.
+4. Require recorded authorization (`user-asserted` or `verified`, per
+   `notes/SCOPE.md`) before interacting with a protected device, service,
+   account, or remote target.
 5. Never execute an untrusted artifact on the host during triage.
 6. Preserve the original byte-for-byte; write copies, patches, databases, and
    traces under the Engagement only.

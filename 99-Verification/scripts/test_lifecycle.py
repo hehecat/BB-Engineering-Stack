@@ -127,6 +127,53 @@ class LifecycleTests(unittest.TestCase):
         self.assertIn("- Lifecycle: blocked", handoff)
         self.assertIn("- Authorization: revoked", handoff)
 
+    def test_user_asserted_authorization_permits_active_work(self) -> None:
+        root = self.manager.create(
+            "user-asserted-assessment",
+            "https://example.invalid",
+            workflow="assessment",
+            authorization_source="Own application under test",
+        )
+        state = self.manager.validate(root)
+        self.assertEqual(state["authorization"]["status"], "user-asserted")
+        self.assertNotIn("Record and verify", state["current"]["next_action"])
+        scope = (root / "notes" / "SCOPE.md").read_text(encoding="utf-8")
+        self.assertIn("- Status: user-asserted", scope)
+        status = (root / "STATUS.md").read_text(encoding="utf-8")
+        handoff = (root / "SESSION-HANDOFF.md").read_text(encoding="utf-8")
+        self.assertIn("| Authorization | user-asserted |", status)
+        self.assertIn("## Blockers\n\nNone.", status)
+        self.assertIn("- Authorization: user-asserted", handoff)
+        self.assertIn("## External Dependency\n\nNone.", handoff)
+        claude = (root / "CLAUDE.md").read_text(encoding="utf-8")
+        self.assertIn("`user-asserted`", claude)
+        self.assertIn("`pending`", claude)
+
+        pending = self.manager.create(
+            "pending-promoted",
+            "https://example.invalid",
+            workflow="assessment",
+        )
+        state = self.manager.authorize(
+            pending,
+            status="user-asserted",
+            source="User-stated basis: own artifact, recorded at route time",
+        )
+        self.assertEqual(state["authorization"]["status"], "user-asserted")
+        self.assertNotIn("Record and verify", state["current"]["next_action"])
+
+        runtime = RuntimeManager(self.paths)
+        try:
+            runtime.launch(
+                "assessment-web",
+                engagement=root,
+                platform=None,
+                claude_args=[],
+                dry_run=True,
+            )
+        except CommandError as error:
+            self.assertNotIn("authorization", str(error))
+
     def test_sensitive_url_details_are_kept_out_of_shared_state(self) -> None:
         secret = "TOPSECRET"
         root = self.manager.create(
@@ -202,7 +249,7 @@ class LifecycleTests(unittest.TestCase):
             "https://example.invalid",
             workflow="bug-bounty",
         )
-        with self.assertRaisesRegex(CommandError, "verified authorization"):
+        with self.assertRaisesRegex(CommandError, "authorization basis"):
             runtime.launch(
                 "bb-interactive",
                 engagement=root,

@@ -22,11 +22,14 @@ action, for example:
 
 Do not ask the user to choose an internal Profile, tool, slug, output directory,
 or phase. Infer them. CTF, standalone analysis, and lab work uses exempt
-authorization. Bug Bounty and assessment work requires a recorded source and
-`authorization.status=verified` before active target traffic. Never invent a
-source or infer authorization from access or ownership. Pending work permits
-only local inspection and Scope preparation. Related assets remain candidates
-until written rules cover them.
+authorization. Bug Bounty and assessment work requires a recorded basis in
+`notes/SCOPE.md`: `user-asserted` (record the user's own statement, provided
+artifact, or named program; the normal default) or `verified` (written document
+on file) permits active target traffic; `pending` or `revoked` blocks it. Never
+invent a basis or infer one from access, credentials, or ownership. Pending work
+permits only local inspection and Scope preparation; ask one compact question
+about the target's authorization basis, record the answer, and reroute.
+Related assets remain candidates until written rules cover them.
 
 Environment, proxy, identity, mailbox, FileCodeBox delivery, managed data,
 update, and migration requests are stack operations, not Engagements. Inspect
@@ -88,7 +91,7 @@ Before the first domain action, run:
 ```bash
 bb-stack workspace route --kind KIND --target TARGET [--slug SLUG] \
   [--platform PLATFORM] [--mode interactive|continuous] \
-  [--authorization-status verified --authorization-source SOURCE]
+  [--authorization-status user-asserted --authorization-source "user statement"]
 ```
 
 For `continue SLUG`, omit `--target` and route with `--slug SLUG`. For an
@@ -102,10 +105,11 @@ all reads, commands, evidence, scripts, reports, and checkpoints. Run the
 returned repair commands yourself when required components are missing, then
 rerun the route. Diagnose and retry recoverable failures; ask only when an
 external prerequisite or unresolved local-file conflict blocks progress. Use
-the ordered `skill_route`; add only the specialist for the current lead. Keep
+Use the ordered `skill_route`; add only the specialist for the current lead. Keep
 discovered assets as candidates until written Scope matches them. For protected
-work, confirm lifecycle is `active` and authorization is `verified`. A
-`DESCRIPTION` repair requires the real written source; never fabricate it. Use
+work, confirm lifecycle is `active` and authorization is `user-asserted` or
+`verified`, recording the basis exactly as the user states it; a `DESCRIPTION`
+repair must never invent details. Use
 the reported `bb-stack data ensure` action for missing managed data. After
 routing, start the first permitted useful action instead of ending with status.
 Bug Bounty Recon: run `bb-recon status`, then use its structured `run`,

@@ -310,7 +310,7 @@ class ContractTests(unittest.TestCase):
         self.assertIn("Ask one compact question only", router)
         self.assertIn("returned repair commands yourself", router)
         self.assertIn("stack operations, not Engagements", router)
-        self.assertIn("authorization.status=verified", router)
+        self.assertIn("`user-asserted`", router)
         self.assertIn("bb-stack data ensure", router)
         for kind in (
             "ctf-web",
