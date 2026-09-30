@@ -88,15 +88,13 @@
     "provider": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["kind", "locator", "placement", "stateful", "context_cost", "side_effects"],
+      "required": ["kind", "locator", "placement", "side_effects"],
       "properties": {
         "kind": {"enum": ["cli", "runtime", "mcp", "service", "data"]},
         "locator": {"$ref": "#/$defs/locator"},
         "placement": {
           "enum": ["main", "bounded-worker", "shared-main", "subagent-inline", "mcp-runtime", "runtime"]
         },
-        "stateful": {"type": "boolean"},
-        "context_cost": {"enum": ["none", "low", "medium", "high"]},
         "side_effects": {
           "type": "array",
           "uniqueItems": true,

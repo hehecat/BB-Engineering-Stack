@@ -78,8 +78,10 @@ The generated workspace `CLAUDE.md` makes Claude:
 3. Read the routed Prompt, Scope, STATUS, and HANDOFF before domain work.
 4. Install or repair missing capabilities itself and verify them.
 5. Load only the orchestrator and specialist needed for the active lead.
-6. Keep target artifacts and state outside the source repository.
-7. Treat setup, proxy, identity, mailbox, delivery, and updates as stack
+6. Update state and handoff after material progress; in continuous mode it does
+   not stop after reporting status.
+7. Keep target artifacts and state outside the source repository.
+8. Treat setup, proxy, identity, mailbox, delivery, and updates as stack
    operations rather than target Engagements.
 
 Claude inspects local state before asking. It asks one compact question only
@@ -99,15 +101,32 @@ needed:
 Use local mihomo on HTTP 7890 and SOCKS 7891
 Set my HackerOne username
 Use my FileCodeBox instance for delivery
-
-Upload a delivery artifact with `bb-stack filecodebox upload ./artifact.zip --json`.
-The command uses FileCodeBox's `POST /share/file/` API and returns the retrieval code.
 Configure the lab mailbox for OTP retrieval
 Check pinned Skill, MCP, and tool updates without upgrading
 ```
 
+Upload a delivery artifact with:
+
+```bash
+bb-stack filecodebox upload ./artifact.zip --json
+```
+
+The command calls FileCodeBox's `POST /share/file/` API and returns the retrieval
+code. If guest uploads are disabled, pass the Bearer token on stdin with
+`--token-stdin`.
+
 Secrets remain in machine-local restricted files, not Prompts, Git, reports, or
 normal chat. Keysmith remains opt-in and is not modified during ordinary work.
+
+## What You Need To Provide
+
+The minimum input is "a target or file plus the outcome". For a real target, also
+provide:
+
+- the program platform, for example HackerOne, Butian, a generic VDP, or a
+  contracted assessment;
+- the written Scope, out-of-scope assets, and rate or side-effect limits;
+- the test account or lab device to use.
 
 ## Update The Local Installation
 
@@ -184,3 +203,6 @@ Maintainers run:
 ./99-Verification/scripts/audit-dependencies.sh
 ./99-Verification/scripts/fresh-machine.sh
 ```
+
+Full-profile network-heavy acceptance uses `full-fresh-machine.sh`; it is not
+part of the normal user flow.

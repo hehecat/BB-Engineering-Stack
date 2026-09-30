@@ -5,40 +5,30 @@ providers:
     kind: cli
     locator: {type: command, value: curl}
     placement: main
-    stateful: false
-    context_cost: none
     side_effects: [network-request]
 
   jq:
     kind: cli
     locator: {type: command, value: jq}
     placement: main
-    stateful: false
-    context_cost: none
     side_effects: [local-read]
 
   openssl:
     kind: cli
     locator: {type: command, value: openssl}
     placement: main
-    stateful: false
-    context_cost: low
     side_effects: [network-request, local-read]
 
   project-python:
     kind: runtime
     locator: {type: path, value: "${BB_STACK_ROOT}/.runtime/venv/bin/python"}
     placement: main
-    stateful: false
-    context_cost: none
     side_effects: [local-read, local-write]
 
   pentest-python:
     kind: cli
     locator: {type: path, value: "${BB_STACK_ROOT}/.runtime/bin/pentest-python"}
     placement: main
-    stateful: false
-    context_cost: none
     side_effects: [local-read, local-write, network-request]
     configuration:
       required: true
@@ -49,24 +39,18 @@ providers:
     kind: cli
     locator: {type: command, value: bb-recon}
     placement: main
-    stateful: true
-    context_cost: low
     side_effects: [network-request, local-read, local-write]
 
   bbot:
     kind: cli
     locator: {type: command, value: bbot}
     placement: bounded-worker
-    stateful: false
-    context_cost: none
     side_effects: [passive-network, network-request, local-write]
 
   subfinder:
     kind: cli
     locator: {type: command, value: subfinder}
     placement: bounded-worker
-    stateful: false
-    context_cost: none
     side_effects: [passive-network]
     configuration:
       required: false
@@ -76,136 +60,96 @@ providers:
     kind: cli
     locator: {type: command, value: assetfinder}
     placement: bounded-worker
-    stateful: false
-    context_cost: none
     side_effects: [passive-network]
 
   amass:
     kind: cli
     locator: {type: command, value: amass}
     placement: bounded-worker
-    stateful: false
-    context_cost: none
     side_effects: [passive-network]
 
   asnmap:
     kind: cli
     locator: {type: command, value: asnmap}
     placement: bounded-worker
-    stateful: false
-    context_cost: none
     side_effects: [passive-network]
-
-  mapcidr:
-    kind: cli
-    locator: {type: command, value: mapcidr}
-    placement: bounded-worker
-    stateful: false
-    context_cost: none
-    side_effects: [local-read]
 
   alterx:
     kind: cli
     locator: {type: command, value: alterx}
     placement: bounded-worker
-    stateful: false
-    context_cost: none
     side_effects: [local-read, local-write]
 
   puredns:
     kind: cli
     locator: {type: command, value: puredns}
     placement: bounded-worker
-    stateful: false
-    context_cost: none
     side_effects: [high-volume-network, local-read, local-write]
 
   dnsx:
     kind: cli
     locator: {type: command, value: dnsx}
     placement: bounded-worker
-    stateful: false
-    context_cost: none
     side_effects: [network-request]
 
   httpx:
     kind: cli
     locator: {type: command, value: httpx}
     placement: bounded-worker
-    stateful: false
-    context_cost: none
     side_effects: [network-request]
 
   katana:
     kind: cli
     locator: {type: command, value: katana}
     placement: bounded-worker
-    stateful: false
-    context_cost: none
     side_effects: [network-request]
 
   gau:
     kind: cli
     locator: {type: command, value: gau}
     placement: bounded-worker
-    stateful: false
-    context_cost: none
     side_effects: [passive-network]
 
   waybackurls:
     kind: cli
     locator: {type: command, value: waybackurls}
     placement: bounded-worker
-    stateful: false
-    context_cost: none
     side_effects: [passive-network]
 
   jsluice:
     kind: cli
     locator: {type: command, value: jsluice}
     placement: bounded-worker
-    stateful: false
-    context_cost: none
     side_effects: [network-request, local-read]
 
   arjun:
     kind: cli
     locator: {type: command, value: arjun}
     placement: bounded-worker
-    stateful: false
-    context_cost: none
     side_effects: [high-volume-network, local-write]
 
   ffuf:
     kind: cli
     locator: {type: command, value: ffuf}
     placement: bounded-worker
-    stateful: false
-    context_cost: none
     side_effects: [high-volume-network]
 
   feroxbuster:
     kind: cli
     locator: {type: command, value: feroxbuster}
     placement: bounded-worker
-    stateful: false
-    context_cost: none
     side_effects: [high-volume-network]
 
   dirsearch:
     kind: cli
     locator: {type: command, value: dirsearch}
     placement: bounded-worker
-    stateful: false
-    context_cost: none
     side_effects: [high-volume-network]
 
   nuclei:
     kind: cli
     locator: {type: command, value: nuclei}
     placement: bounded-worker
-    stateful: false
-    context_cost: none
     side_effects: [high-volume-network]
     configuration:
       required: true
@@ -215,65 +159,43 @@ providers:
     kind: cli
     locator: {type: command, value: interactsh-client}
     placement: main
-    stateful: true
-    context_cost: low
     side_effects: [external-callback, local-write]
 
   sqlmap:
     kind: cli
     locator: {type: command, value: sqlmap}
     placement: bounded-worker
-    stateful: true
-    context_cost: none
     side_effects: [high-volume-network, local-write]
 
   dalfox:
     kind: cli
     locator: {type: command, value: dalfox}
     placement: bounded-worker
-    stateful: false
-    context_cost: none
     side_effects: [high-volume-network]
 
   naabu:
     kind: cli
     locator: {type: command, value: naabu}
     placement: bounded-worker
-    stateful: false
-    context_cost: none
     side_effects: [high-volume-network]
 
   nmap:
     kind: cli
     locator: {type: command, value: nmap}
     placement: bounded-worker
-    stateful: false
-    context_cost: none
     side_effects: [high-volume-network]
 
   semgrep:
     kind: cli
     locator: {type: command, value: semgrep}
     placement: bounded-worker
-    stateful: false
-    context_cost: none
     side_effects: [local-read, local-write]
 
   trufflehog:
     kind: cli
     locator: {type: command, value: trufflehog}
     placement: bounded-worker
-    stateful: false
-    context_cost: none
     side_effects: [local-read, local-write]
-
-  chromium:
-    kind: cli
-    locator: {type: command, value: chromium}
-    placement: mcp-runtime
-    stateful: true
-    context_cost: none
-    side_effects: [network-request, local-write]
 
   playwright-mcp:
     kind: mcp
@@ -282,8 +204,6 @@ providers:
       value: "${BB_STACK_ROOT}/.runtime/node_modules/@playwright/mcp/cli.js"
       interpreter: node
     placement: shared-main
-    stateful: true
-    context_cost: medium
     side_effects: [network-request, browser-action, local-write]
     configuration:
       required: true
@@ -298,8 +218,6 @@ providers:
         - --no-sandbox
         - --executable-path
         - "${BB_CHROMIUM_BIN}"
-        - --output-mode
-        - file
         - --output-dir
         - "${BB_ARTIFACT_ROOT}/browser"
         - --save-session
@@ -310,8 +228,6 @@ providers:
       type: path
       value: "${BB_STACK_ROOT}/.runtime/node_modules/.bin/chrome-devtools"
     placement: main
-    stateful: true
-    context_cost: none
     side_effects: [network-request, browser-action, local-write]
 
   chrome-devtools-mcp:
@@ -321,8 +237,6 @@ providers:
       value: "${BB_STACK_ROOT}/.runtime/node_modules/chrome-devtools-mcp/build/src/bin/chrome-devtools-mcp.js"
       interpreter: node
     placement: shared-main
-    stateful: true
-    context_cost: medium
     side_effects: [network-request, browser-action, local-write]
     configuration:
       required: true
@@ -346,8 +260,6 @@ providers:
       type: path
       value: "${BB_STACK_ROOT}/.runtime/node_modules/.bin/webcrack"
     placement: bounded-worker
-    stateful: false
-    context_cost: none
     side_effects: [local-read, local-write, process-execution]
 
   anastasis-mcp:
@@ -357,8 +269,6 @@ providers:
       value: "${BB_STACK_ROOT}/.runtime/node_modules/anastasis-mcp-server/dist/index.js"
       interpreter: node
     placement: subagent-inline
-    stateful: false
-    context_cost: high
     side_effects: [network-request, local-read, local-write]
     mcp:
       name: anastasis
@@ -373,8 +283,6 @@ providers:
       value: "${BB_STACK_ROOT}/.runtime/node_modules/osint-mcp-server/dist/index.js"
       interpreter: node
     placement: subagent-inline
-    stateful: false
-    context_cost: high
     side_effects: [passive-network, local-write]
     mcp:
       name: osint
@@ -386,16 +294,12 @@ providers:
     kind: service
     locator: {type: tcp, host: 127.0.0.1, port: 7890}
     placement: runtime
-    stateful: true
-    context_cost: none
     side_effects: [network-routing]
 
   mail-otp:
     kind: cli
     locator: {type: command, value: mail-otp}
     placement: main
-    stateful: true
-    context_cost: low
     side_effects: [mailbox-read, local-read]
     configuration:
       required: true
@@ -405,8 +309,6 @@ providers:
     kind: cli
     locator: {type: command, value: filecodebox-upload}
     placement: main
-    stateful: false
-    context_cost: none
     side_effects: [external-upload]
     configuration:
       required: true
@@ -416,24 +318,18 @@ providers:
     kind: data
     locator: {type: path, value: "${BB_DATA_ROOT}/seclists/Discovery/Web-Content/common.txt"}
     placement: runtime
-    stateful: false
-    context_cost: none
     side_effects: [local-read]
 
   seclists-dns:
     kind: data
     locator: {type: path, value: "${BB_DATA_ROOT}/seclists/Discovery/DNS/README.md"}
     placement: runtime
-    stateful: false
-    context_cost: none
     side_effects: [local-read]
 
   seclists-fuzzing:
     kind: data
     locator: {type: path, value: "${BB_DATA_ROOT}/seclists/Fuzzing/LFI/LFI-Jhaddix.txt"}
     placement: runtime
-    stateful: false
-    context_cost: none
     side_effects: [local-read]
     configuration:
       required: true
@@ -443,32 +339,24 @@ providers:
     kind: data
     locator: {type: path, value: "${BB_DATA_ROOT}/seclists/Passwords/Common-Credentials/10k-most-common.txt"}
     placement: runtime
-    stateful: false
-    context_cost: none
     side_effects: [local-read]
 
   seclists-usernames:
     kind: data
     locator: {type: path, value: "${BB_DATA_ROOT}/seclists/Usernames/top-usernames-shortlist.txt"}
     placement: runtime
-    stateful: false
-    context_cost: none
     side_effects: [local-read]
 
   seclists-llm:
     kind: data
     locator: {type: path, value: "${BB_DATA_ROOT}/seclists/Ai/LLM_Testing/README.md"}
     placement: runtime
-    stateful: false
-    context_cost: none
     side_effects: [local-read]
 
   payloads-web:
     kind: data
     locator: {type: path, value: "${BB_DATA_ROOT}/payloads-all-the-things/Server Side Request Forgery/README.md"}
     placement: runtime
-    stateful: false
-    context_cost: none
     side_effects: [local-read]
     configuration:
       required: true
@@ -480,8 +368,6 @@ providers:
     kind: data
     locator: {type: path, value: "${BB_DATA_ROOT}/trickest-wordlists/technologies/tomcat.txt"}
     placement: runtime
-    stateful: false
-    context_cost: none
     side_effects: [local-read]
     configuration:
       required: true
@@ -490,228 +376,166 @@ providers:
         - "${BB_DATA_ROOT}/trickest-wordlists/inventory/subdomains.txt"
         - "${BB_DATA_ROOT}/trickest-wordlists/robots/top-100.txt"
 
-  gf-patterns:
-    kind: data
-    locator: {type: path, value: "${HOME}/.gf"}
-    placement: runtime
-    stateful: false
-    context_cost: none
-    side_effects: [local-read]
-
   adb:
     kind: cli
     locator: {type: command, value: adb}
     placement: main
-    stateful: true
-    context_cost: none
     side_effects: [device-read, device-write]
 
   apktool:
     kind: cli
     locator: {type: command, value: apktool}
     placement: bounded-worker
-    stateful: false
-    context_cost: none
     side_effects: [local-read, local-write]
 
   jadx:
     kind: cli
     locator: {type: command, value: jadx}
     placement: bounded-worker
-    stateful: false
-    context_cost: none
     side_effects: [local-read, local-write]
 
   frida:
     kind: cli
     locator: {type: command, value: frida}
     placement: main
-    stateful: true
-    context_cost: low
     side_effects: [device-read, device-write]
 
   objection:
     kind: cli
     locator: {type: command, value: objection}
     placement: main
-    stateful: true
-    context_cost: low
     side_effects: [device-read, device-write]
 
   radare2:
     kind: cli
     locator: {type: command, value: r2}
     placement: bounded-worker
-    stateful: true
-    context_cost: low
     side_effects: [local-read, local-write, process-execution]
 
   file-identify:
     kind: cli
     locator: {type: command, value: file}
     placement: bounded-worker
-    stateful: false
-    context_cost: none
     side_effects: [local-read]
 
   readelf:
     kind: cli
     locator: {type: command, value: readelf}
     placement: bounded-worker
-    stateful: false
-    context_cost: low
     side_effects: [local-read]
 
   objdump:
     kind: cli
     locator: {type: command, value: objdump}
     placement: bounded-worker
-    stateful: false
-    context_cost: low
     side_effects: [local-read]
 
   nm:
     kind: cli
     locator: {type: command, value: nm}
     placement: bounded-worker
-    stateful: false
-    context_cost: low
     side_effects: [local-read]
 
   strings:
     kind: cli
     locator: {type: command, value: strings}
     placement: bounded-worker
-    stateful: false
-    context_cost: low
     side_effects: [local-read]
 
   checksec:
     kind: cli
     locator: {type: command, value: checksec}
     placement: bounded-worker
-    stateful: false
-    context_cost: low
     side_effects: [local-read]
 
   gdb:
     kind: cli
     locator: {type: command, value: gdb}
     placement: bounded-worker
-    stateful: true
-    context_cost: medium
     side_effects: [local-read, local-write, process-execution]
 
   qemu-user:
     kind: cli
     locator: {type: command, value: qemu-aarch64}
     placement: bounded-worker
-    stateful: true
-    context_cost: medium
     side_effects: [local-read, local-write, process-execution]
 
   ghidra-headless:
     kind: cli
     locator: {type: command, value: analyzeHeadless}
     placement: bounded-worker
-    stateful: true
-    context_cost: high
     side_effects: [local-read, local-write, process-execution]
 
   unzip:
     kind: cli
     locator: {type: command, value: unzip}
     placement: main
-    stateful: false
-    context_cost: none
     side_effects: [local-read, local-write]
 
   ideviceinstaller:
     kind: cli
     locator: {type: command, value: ideviceinstaller}
     placement: main
-    stateful: true
-    context_cost: none
     side_effects: [device-action, local-write]
 
   iproxy:
     kind: cli
     locator: {type: command, value: iproxy}
     placement: main
-    stateful: true
-    context_cost: none
     side_effects: [device-action, network-request]
 
   aws-cli:
     kind: cli
     locator: {type: command, value: aws}
     placement: bounded-worker
-    stateful: false
-    context_cost: none
     side_effects: [network-request, cloud-read, cloud-write]
 
   azure-cli:
     kind: cli
     locator: {type: command, value: az}
     placement: bounded-worker
-    stateful: false
-    context_cost: none
     side_effects: [network-request, cloud-read, cloud-write]
 
   gcloud-cli:
     kind: cli
     locator: {type: command, value: gcloud}
     placement: bounded-worker
-    stateful: false
-    context_cost: none
     side_effects: [network-request, cloud-read, cloud-write]
 
   prowler:
     kind: cli
     locator: {type: command, value: prowler}
     placement: bounded-worker
-    stateful: false
-    context_cost: none
     side_effects: [network-request, cloud-read, local-write]
 
   steampipe:
     kind: cli
     locator: {type: command, value: steampipe}
     placement: bounded-worker
-    stateful: true
-    context_cost: none
     side_effects: [network-request, cloud-read, local-write]
 
   checkov:
     kind: cli
     locator: {type: command, value: checkov}
     placement: bounded-worker
-    stateful: false
-    context_cost: none
     side_effects: [local-read, local-write]
 
   trivy:
     kind: cli
     locator: {type: command, value: trivy}
     placement: bounded-worker
-    stateful: false
-    context_cost: none
     side_effects: [local-read, local-write, network-request]
 
   syft:
     kind: cli
     locator: {type: command, value: syft}
     placement: bounded-worker
-    stateful: false
-    context_cost: none
     side_effects: [local-read, local-write]
 
   grype:
     kind: cli
     locator: {type: command, value: grype}
     placement: bounded-worker
-    stateful: false
-    context_cost: none
     side_effects: [local-read, local-write, network-request]
 
 capabilities:
@@ -751,14 +575,12 @@ capabilities:
   data.wordlists.llm: {strategy: all, providers: [seclists-llm]}
   data.wordlists.recon: {strategy: all, providers: [trickest-recon]}
   data.payloads.web: {strategy: all, providers: [payloads-web]}
-  data.patterns.gf: {strategy: all, providers: [gf-patterns]}
   android.device: {strategy: any, providers: [adb]}
   android.static: {strategy: all, providers: [apktool, jadx]}
   android.dynamic: {strategy: any, providers: [frida, objection]}
   mobile.dynamic: {strategy: any, providers: [frida, objection]}
   ios.static: {strategy: all, providers: [unzip, radare2]}
   ios.device: {strategy: any, providers: [ideviceinstaller, iproxy]}
-  reverse.static: {strategy: any, providers: [radare2, jadx]}
   native.static: {strategy: any, providers: [radare2, ghidra-headless]}
   native.triage: {strategy: all, providers: [file-identify, readelf, objdump, nm, strings]}
   native.protections: {strategy: any, providers: [checksec, readelf]}

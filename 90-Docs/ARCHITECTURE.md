@@ -4,12 +4,19 @@
 
 | Layer | Owns | Must not own |
 | --- | --- | --- |
-| L0 Runtime | bootstrap, PATH, proxy, launch, deployment | targets, attack knowledge |
+| L0 Runtime | bootstrap, PATH, proxy, launch, deployment, recon pipeline execution (`bb-stack recon`, `bb-recon`, `recon.py`, `config/recon.yaml`) | targets, attack knowledge |
 | L1 Global Prompt | short personal execution behavior | platform policy, payloads |
 | L2 Workflow Profiles | workflow, platform, mode, Prompt composition | live state, secrets |
-| L3 Engagement State | scope, lifecycle, evidence references, handoff | shared tooling source |
+| L3 Engagement State | scope, lifecycle, evidence references, recon state (`recon-state.schema.json`), handoff | shared tooling source |
 | L4 Skills | routing and specialist knowledge | session lifecycle authority |
 | L5 MCP/CLI | capabilities, providers, health checks | workflow policy |
+
+The recon pipeline is driven from L0 through
+`bb-stack recon run|resume|status|rerun|expand|close` (also exposed as
+`bb-recon`). Stage definitions, provider requirements, rate limits, and
+expansion providers live in `00-L0-Runtime/config/recon.yaml`. Scope, coverage,
+leads, and accepted gaps are stored per Engagement in `recon/state.json` and
+validated by `03-L3-Engagement-State/schema/recon-state.schema.json`.
 
 Keysmith crosses L0-L2 only as an optional persistent deployment backend. It
 does not own Prompt text and does not manage Engagements, Skills, or MCP.
@@ -20,16 +27,24 @@ contracts pass. It does not add attack knowledge or change workflow policy.
 
 ## Sources Of Truth
 
-- `stack.yaml`: roots, defaults, registry locations, pinned Keysmith source.
+- `stack.yaml`: authoritative source root layout and defaults. The runtime
+  directory, Prompt layer, registry locations, default runtime Profile, CLI
+  Profile defaults, version file, and minimum runtime versions are read from it.
+  `BB_WORK_ROOT`, `BB_CONFIG_HOME`, and `CLAUDE_CONFIG_DIR` override the
+  declared path defaults, which in turn override the built-in defaults.
 - Source-root `CLAUDE.md`: conversational first-run setup, maintenance, and
   handoff into the configured workspace.
 - Workspace `CLAUDE.md`: natural-language task classification, stack operations,
   route invocation, and agent-owned repair.
 - L2 profile YAML: Prompt composition and L4/L5 profile selection.
 - `engagement.yaml`: canonical current work-unit control state.
+- `03-L3-Engagement-State/schema/recon-state.schema.json`: canonical recon
+  state, coverage, leads, and accepted gaps of a work unit.
 - `04-L4-Skills/skills.yaml`: Skill inventory and source directory.
 - `05-L5-MCP-CLI/capabilities.yaml`: provider/capability mapping.
 - `00-L0-Runtime/config/upstreams.yaml`: verified update channels and pins.
+- `00-L0-Runtime/config/recon.yaml`: recon stages, provider requirements, rate
+  limits, and expansion providers.
 - `00-L0-Runtime/config/data-catalog.yaml`: data repositories, revisions,
   bundles, sentinels, and Profile requirements.
 

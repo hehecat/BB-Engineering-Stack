@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import fcntl
 import ipaddress
+import os
 import re
 import shutil
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -224,16 +228,28 @@ class EngagementManager:
             state["routing"] = {"kind": route_kind}
         validate(state, self.schema, "new engagement")
 
-        self._make_directories(root, workflow)
-        dump_yaml(root / "engagement.yaml", state)
-        self._write_control_files(
-            root,
-            state,
-            asset["pattern"],
-            timestamp,
-            sensitive_target=sensitive_target,
-        )
-        self.validate(root)
+        staging = self.paths.engagements_root / f".{slug}.tmp-{os.getpid()}"
+        with self._state_lock(slug):
+            if root.exists():
+                raise StackError(f"engagement already exists: {root}")
+            shutil.rmtree(staging, ignore_errors=True)
+            try:
+                self._make_directories(staging, workflow)
+                dump_yaml(staging / "engagement.yaml", state)
+                self._write_control_files(
+                    staging,
+                    state,
+                    asset["pattern"],
+                    timestamp,
+                    sensitive_target=sensitive_target,
+                )
+                # The staging tree carries a temporary name, so the slug/path
+                # check only applies once it has been renamed into place.
+                self._load_engagement(staging, check_slug=False)
+                os.replace(staging, root)
+            except BaseException:
+                shutil.rmtree(staging, ignore_errors=True)
+                raise
         return root
 
     @staticmethod
@@ -650,14 +666,38 @@ class EngagementManager:
         )
         atomic_write(handoff_path, handoff)
 
+    @contextmanager
+    def _state_lock(self, slug: str) -> Iterator[None]:
+        """Serialize state writes for one engagement across processes."""
+        lock_root = self.paths.engagements_root / ".locks"
+        lock_root.mkdir(parents=True, exist_ok=True)
+        with (lock_root / f"{slug}.lock").open("a+", encoding="utf-8") as lock:
+            fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+            yield
+
     def validate(self, root: Path) -> dict[str, Any]:
+        return self._load_engagement(root, check_slug=True)
+
+    def _load_engagement(
+        self, root: Path, *, check_slug: bool
+    ) -> dict[str, Any]:
         root = root.expanduser().resolve()
         state_path = root / "engagement.yaml"
         if not state_path.is_file():
             raise ValidationError(f"missing engagement.yaml: {root}")
         state = load_yaml(state_path)
+        authorization = state.get("authorization") or {}
+        if (
+            authorization.get("status") in AUTHORIZED_STATUSES
+            and not authorization.get("source")
+        ):
+            raise ValidationError(
+                f"engagement {state.get('slug', root.name)} requires an "
+                "authorization source for authorization status "
+                f"{authorization.get('status')}"
+            )
         validate(state, self.schema, f"engagement {root.name}")
-        if state["slug"] != root.name:
+        if check_slug and state["slug"] != root.name:
             raise ValidationError(
                 f"engagement slug/path mismatch: {state['slug']} != {root.name}"
             )
@@ -690,65 +730,79 @@ class EngagementManager:
         status: str,
         source: str | None,
     ) -> dict[str, Any]:
-        state = self.validate(root)
-        if state["workflow"] not in PROTECTED_WORKFLOWS:
-            raise ValidationError(
-                f"workflow {state['workflow']} does not require authorization changes"
+        with self._state_lock(root.expanduser().resolve().name):
+            state = self.validate(root)
+            if state["workflow"] not in PROTECTED_WORKFLOWS:
+                raise ValidationError(
+                    f"workflow {state['workflow']} does not require authorization changes"
+                )
+            if status not in {"pending", "user-asserted", "verified", "revoked"}:
+                raise ValidationError(f"unsupported authorization status: {status}")
+            source = (
+                _validated_text(source, "authorization source") if source else None
             )
-        if status not in {"pending", "user-asserted", "verified", "revoked"}:
-            raise ValidationError(f"unsupported authorization status: {status}")
-        source = _validated_text(source, "authorization source") if source else None
-        if status in {"user-asserted", "verified", "revoked"} and not source:
-            raise ValidationError(
-                f"authorization source is required for status {status}"
-            )
+            if status in {"user-asserted", "verified", "revoked"} and not source:
+                raise ValidationError(
+                    f"authorization source is required for status {status}"
+                )
 
-        timestamp = now()
-        state["authorization"] = {"status": status, "source": source}
-        state["scope"]["revision"] += 1
-        state["scope"]["reviewed_at"] = timestamp
-        state["timestamps"]["updated_at"] = timestamp
-        if status in AUTHORIZED_STATUSES and state["current"]["next_action"].startswith(
-            "Record and verify"
-        ):
-            state["current"]["next_action"] = self._first_action(state["workflow"])
-        elif status == "revoked":
-            state["lifecycle"] = "blocked"
-            state["current"]["stop_reason"] = "Authorization revoked"
-            state["current"]["next_action"] = (
-                "Stop active testing and preserve evidence"
-            )
-        dump_yaml(root / "engagement.yaml", state)
+            timestamp = now()
+            state["authorization"] = {"status": status, "source": source}
+            state["scope"]["revision"] += 1
+            state["scope"]["reviewed_at"] = timestamp
+            state["timestamps"]["updated_at"] = timestamp
+            if status in AUTHORIZED_STATUSES and state["current"][
+                "next_action"
+            ].startswith("Record and verify"):
+                state["current"]["next_action"] = self._first_action(state["workflow"])
+            elif status == "revoked":
+                state["lifecycle"] = "blocked"
+                state["current"]["stop_reason"] = "Authorization revoked"
+                state["current"]["next_action"] = (
+                    "Stop active testing and preserve evidence"
+                )
+            dump_yaml(root / "engagement.yaml", state)
 
-        scope_path = root / "notes" / "SCOPE.md"
-        scope = scope_path.read_text(encoding="utf-8")
-        scope = re.sub(
-            r"^Reviewed: .+$",
-            f"Reviewed: {timestamp}",
-            scope,
-            count=1,
-            flags=re.MULTILINE,
-        )
-        scope = re.sub(
-            r"^Revision: [0-9]+$",
-            f"Revision: {state['scope']['revision']}",
-            scope,
-            count=1,
-            flags=re.MULTILINE,
-        )
-        scope = re.sub(
-            r"^- Status: .+$", f"- Status: {status}", scope, count=1, flags=re.MULTILINE
-        )
-        scope = re.sub(
-            r"^- Source: .+$",
-            f"- Source: {_markdown_text(source or 'Not supplied')}",
-            scope,
-            count=1,
-            flags=re.MULTILINE,
-        )
-        atomic_write(scope_path, scope)
-        self._sync_control_snapshots(root, state)
-        return self.validate(root)
+            scope_path = root / "notes" / "SCOPE.md"
+            scope = scope_path.read_text(encoding="utf-8")
+            scope = re.sub(
+                r"^Reviewed: .+$",
+                f"Reviewed: {timestamp}",
+                scope,
+                count=1,
+                flags=re.MULTILINE,
+            )
+            scope = re.sub(
+                r"^Revision: [0-9]+$",
+                f"Revision: {state['scope']['revision']}",
+                scope,
+                count=1,
+                flags=re.MULTILINE,
+            )
+            scope = re.sub(
+                r"^- Status: .+$",
+                f"- Status: {status}",
+                scope,
+                count=1,
+                flags=re.MULTILINE,
+            )
+            scope = re.sub(
+                r"^- Source: .+$",
+                f"- Source: {_markdown_text(source or 'Not supplied')}",
+                scope,
+                count=1,
+                flags=re.MULTILINE,
+            )
+            atomic_write(scope_path, scope)
+            self._sync_control_snapshots(root, state)
+            return self.validate(root)
+
+    def set_route_kind(self, root: Path, kind: str) -> dict[str, Any]:
+        with self._state_lock(root.expanduser().resolve().name):
+            state = self.validate(root)
+            state["routing"] = {"kind": kind}
+            dump_yaml(root / "engagement.yaml", state)
+            return self.validate(root)
 
     def list(self) -> list[dict[str, str]]:
         result = []
@@ -778,7 +832,7 @@ class EngagementManager:
             roots.extend(
                 path
                 for path in sorted(self.paths.engagements_root.iterdir())
-                if path.is_dir()
+                if path.is_dir() and not path.name.startswith(".")
             )
         # Read-only compatibility for work units created before the workspace
         # gained an explicit engagements/ boundary.
@@ -795,32 +849,44 @@ class EngagementManager:
     def transition(
         self, root: Path, lifecycle: str, reason: str | None = None
     ) -> dict[str, Any]:
-        state = self.validate(root)
-        current = state["lifecycle"]
-        if lifecycle == current:
-            return state
-        if lifecycle not in TRANSITIONS.get(current, set()):
-            raise ValidationError(
-                f"invalid lifecycle transition: {current} -> {lifecycle}"
+        with self._state_lock(root.expanduser().resolve().name):
+            state = self.validate(root)
+            current = state["lifecycle"]
+            if lifecycle == current:
+                return state
+            if lifecycle not in TRANSITIONS.get(current, set()):
+                raise ValidationError(
+                    f"invalid lifecycle transition: {current} -> {lifecycle}"
+                )
+            if (
+                lifecycle == "active"
+                and state["workflow"] in PROTECTED_WORKFLOWS
+                and state["authorization"]["status"] not in AUTHORIZED_STATUSES
+            ):
+                raise ValidationError(
+                    f"engagement {state['slug']} authorization is "
+                    f"{state['authorization']['status']}; record an authorization "
+                    "basis before resuming active work"
+                )
+            timestamp = now()
+            state["lifecycle"] = lifecycle
+            state["timestamps"]["updated_at"] = timestamp
+            state["checkpoint"]["updated_at"] = timestamp
+            state["current"]["stop_reason"] = (
+                reason if lifecycle in {"paused", "blocked", "closed"} else None
             )
-        timestamp = now()
-        state["lifecycle"] = lifecycle
-        state["timestamps"]["updated_at"] = timestamp
-        state["checkpoint"]["updated_at"] = timestamp
-        state["current"]["stop_reason"] = (
-            reason if lifecycle in {"paused", "blocked", "closed"} else None
-        )
-        dump_yaml(root / "engagement.yaml", state)
-        self._sync_control_snapshots(root, state)
-        return state
+            dump_yaml(root / "engagement.yaml", state)
+            self._sync_control_snapshots(root, state)
+            return state
 
     def checkpoint(self, root: Path) -> dict[str, Any]:
-        state = self.validate(root)
-        timestamp = now()
-        state["timestamps"]["updated_at"] = timestamp
-        state["checkpoint"]["updated_at"] = timestamp
-        dump_yaml(root / "engagement.yaml", state)
-        return state
+        with self._state_lock(root.expanduser().resolve().name):
+            state = self.validate(root)
+            timestamp = now()
+            state["timestamps"]["updated_at"] = timestamp
+            state["checkpoint"]["updated_at"] = timestamp
+            dump_yaml(root / "engagement.yaml", state)
+            return state
 
     def migrate_legacy(
         self,

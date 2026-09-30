@@ -15,32 +15,39 @@ You're a skilled CTF player. Your goal is to solve the challenge and find the fl
 
 ## Environment Setup
 
-Two setup strategies depending on your workflow:
+Two setup strategies, both driven by the stack's own runtime manager. This
+Skill ships no installer script of its own.
 
 ### Pre-install (recommended before competitions)
 
-Use the central installer entrypoint:
+Bring up a runtime for the profile you expect to need:
 
 ```bash
-bash scripts/install_ctf_tools.sh all
+bb-stack bootstrap --profile ctf-web      # HTTP / web challenge bundles
+bb-stack bootstrap --profile reverse      # native binaries, custom VMs
+bb-stack bootstrap --profile android      # APK/DEX and mobile bundles
 ```
 
-Run a narrower mode when you only want one tool group:
+`bb-stack bootstrap` creates the local runtime and links the Skills for the
+selected profile. When the runtime already exists, link Skills directly:
 
 ```bash
-bash scripts/install_ctf_tools.sh python
-bash scripts/install_ctf_tools.sh apt
-bash scripts/install_ctf_tools.sh brew
-bash scripts/install_ctf_tools.sh gems
-bash scripts/install_ctf_tools.sh go
-bash scripts/install_ctf_tools.sh manual
+bb-stack skills install --profile ctf-web --agent claude --required-only
 ```
-
-The full package lists now live in [scripts/install_ctf_tools.sh](../scripts/install_ctf_tools.sh).
 
 ### On-demand (during challenges)
 
-Each category skill's `SKILL.md` has a **Prerequisites** section listing only the tools needed for that category. Install as you go.
+Install individual tools by installer name as the challenge demands:
+
+```bash
+bb-stack tool install ffuf sqlmap
+bb-stack tool install radare2 native-debug checksec
+bb-stack tool install jadx apktool frida
+```
+
+Installer names, their readiness checks, and their package lists live in
+`00-L0-Runtime/config/tools.yaml`; `bb-stack tool install <name> --dry-run`
+previews an install without touching the system.
 
 ## Workflow
 
@@ -61,7 +68,12 @@ export CTF_URL="https://ctf.example.com"
 export CTF_TOKEN="ctfd_..."  # Ask user for this
 ```
 
-Invoke `/ctf-misc` and load its `ctfd-navigation.md` for the full API reference and Python client class.
+Drive the platform from its REST API once the token is set: list challenges
+from `/api/v1/challenges`, fetch one with `/api/v1/challenges/<id>`, and submit
+with `/api/v1/challenges/attempt` (send `challenge_id` and `submission`). Send
+the token in the `Authorization` header. The upstream per-endpoint CTFd helper
+was not vendored into this stack, so query the API directly against the
+running instance.
 
 ### Step 1: Recon
 
@@ -98,22 +110,37 @@ Determine the primary category, then invoke the matching skill.
 - netcat with math/crypto puzzles -> crypto
 - netcat with restricted shell or eval -> misc (jail)
 
-### Step 3: Invoke the Category Skill
+### Step 3: Route the Category
 
-Once you identify the category, **invoke the matching skill** to get specialized techniques:
+Once you identify the category, route it. Only `ctf-web` and `ctf-writeup` are
+shipped as category Skills; every other category is covered by the L2 CTF
+profiles and their orchestrators, or by this Skill's own workflow when the
+stack has no specialist for it.
 
-| Category | Invoke | When to Use |
-|----------|--------|-------------|
-| Web | `/ctf-web` | XSS, SQLi, SSTI, SSRF, JWT, file uploads, prototype pollution |
-| Pwn | `/ctf-pwn` | Buffer overflow, format string, heap, ROP, sandbox escape |
-| Crypto | `/ctf-crypto` | RSA, AES, ECC, PRNG, ZKP, classical ciphers |
-| Reverse | `/ctf-reverse` | Binary analysis, game clients, VMs, obfuscated code |
-| Forensics | `/ctf-forensics` | Disk images, memory dumps, event logs, stego, network captures |
-| OSINT | `/ctf-osint` | Social media, geolocation, DNS, public records |
-| Malware | `/ctf-malware` | Obfuscated scripts, C2 traffic, PE/.NET analysis |
-| Misc | `/ctf-misc` | Jails, encodings, RF/SDR, esoteric languages, constraint solving |
+| Category | Route | When to Use |
+|----------|-------|-------------|
+| Web | `ctf-web` Skill | XSS, SQLi, SSTI, SSRF, JWT, file uploads, prototype pollution |
+| Reverse | L2 route `ctf-reverse` (`reverse-orchestrator` + `native-reverse-engineering`) | Binary analysis, game clients, VMs, obfuscated code |
+| Android | L2 route `ctf-android` (`reverse-orchestrator` + `android-reverse-engineering`) | APK/DEX, native `.so` inside apps, mobile bundles |
+| Pwn | No shipped Skill — stay in this Skill | Buffer overflow, format string, heap, ROP, sandbox escape |
+| Crypto | No shipped Skill — stay in this Skill | RSA, AES, ECC, PRNG, ZKP, classical ciphers |
+| Forensics | No shipped Skill — stay in this Skill | Disk images, memory dumps, event logs, stego, network captures |
+| OSINT | No shipped Skill — stay in this Skill | Social media, geolocation, DNS, public records |
+| Malware | No shipped Skill — stay in this Skill | Obfuscated scripts, C2 traffic, PE/.NET analysis |
+| Misc | No shipped Skill — stay in this Skill | Jails, encodings, RF/SDR, esoteric languages, constraint solving |
 
-You can also invoke `/ctf-<category>` to load the full skill instructions with detailed techniques.
+Start a routed work unit with the stack CLI rather than by naming a Skill that
+does not exist:
+
+```bash
+bb-stack new <slug> <target> --workflow ctf --platform standalone-ctf
+bb-stack workspace route --kind ctf-web --target <host>   # or ctf-reverse / ctf-android
+```
+
+Pwn, crypto, forensics, OSINT, malware, and misc challenges have **no**
+specialist Skill in this stack. Keep this Skill loaded, install the tools you
+need with `bb-stack tool install <name>`, and let the L2 `ctf-core` workflow own
+scope, evidence, and closure.
 
 ### Step 4: Pivot When Stuck
 

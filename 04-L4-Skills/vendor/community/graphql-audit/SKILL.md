@@ -12,7 +12,7 @@ description: GraphQL security hunting — introspection abuse, field suggestion 
 ## 0. QUICK KILL CHECKLIST
 
 ```
-[ ] Run graphql_audit.sh <endpoint> — full automated sweep
+[ ] Sweep the endpoint phase by phase (introspection → fingerprint → field discovery → attack checks)
 [ ] Check if introspection is enabled (__schema query)
 [ ] If introspection off — run clairvoyance for field discovery
 [ ] Fingerprint engine (graphw00f) — different engines, different CVEs
@@ -29,24 +29,17 @@ description: GraphQL security hunting — introspection abuse, field suggestion 
 
 ---
 
-## 1. TOOL — graphql_audit.sh
+## 1. TOOL — manual sweep
 
-```bash
-# Basic audit
-bash tools/graphql_audit.sh https://target.com/graphql
+The upstream `graphql_audit.sh` wrapper was **not** vendored into this stack;
+only this reference text is. Drive the sweep with the individual tools listed
+under **TOOLS REFERENCE** below, using each tool's own documented flags, and
+write the artifacts into the same layout the rest of this Skill expects:
 
-# With auth cookie
-bash tools/graphql_audit.sh https://target.com/api/graphql --cookie "session=abc123"
-
-# With Authorization header
-bash tools/graphql_audit.sh https://target.com/graphql --header "Authorization: Bearer TOKEN"
-
-# Through Burp proxy
-bash tools/graphql_audit.sh https://target.com/graphql --proxy http://127.0.0.1:8080
-
-# Custom output directory
-bash tools/graphql_audit.sh https://target.com/graphql --output-dir ./findings/target/graphql
-```
+- send the request through Burp (`--proxy`) when you need to replay or mutate it
+- pass the session cookie or `Authorization` header with the tool's own header
+  option so every phase runs as the same identity
+- write artifacts under `findings/<target>/graphql/<timestamp>/`
 
 **Output:** `findings/<target>/graphql/<timestamp>/`
 - `introspection.json` — full schema dump (if enabled)
@@ -513,7 +506,6 @@ Remediation:
 
 | Tool | Purpose | Install |
 |---|---|---|
-| `graphql_audit.sh` | Automated multi-phase sweep | this repo |
 | `graphw00f` | Engine fingerprinting | `pip install graphw00f` |
 | `clairvoyance` | Field discovery (no introspection) | `pip install clairvoyance` |
 | `graphql-cop` | Attack checklist runner | `pip install graphql-cop` |

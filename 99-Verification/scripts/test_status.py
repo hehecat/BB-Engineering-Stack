@@ -16,9 +16,11 @@ os.environ["BB_STACK_ROOT"] = str(ROOT)
 from bb_stack import __version__
 from bb_stack.capabilities import CapabilityRegistry
 from bb_stack.engagement import EngagementManager
+from bb_stack.errors import ValidationError
 from bb_stack.evaluation import EvaluationManager
 from bb_stack.paths import StackPaths
 from bb_stack.status import StackStatus, load_machine_config
+from bb_stack.validation import validate
 
 
 class StatusTests(unittest.TestCase):
@@ -324,6 +326,51 @@ class StatusTests(unittest.TestCase):
         self.assertFalse(report["contract_matches"])
         self.assertEqual(actions[0]["id"], "evaluation.agent")
         self.assertEqual(actions[0]["level"], "optional")
+
+    def test_missing_provider_entries_report_not_configured(self) -> None:
+        self.write_config('BB_PROXY_MODE="direct"\nBB_H1_USERNAME=""\n')
+        document = json.loads(json.dumps(CapabilityRegistry(self.paths).registry()))
+        for name in ("mail-otp", "filecodebox"):
+            document["providers"].pop(name)
+        for contract in document["capabilities"].values():
+            contract["providers"] = [
+                name for name in contract["providers"] if name in document["providers"]
+            ]
+        with patch.object(CapabilityRegistry, "registry", return_value=document):
+            report = self.manager.collect("web")
+
+        personal = report["personal"]
+        self.assertFalse(personal["mail_otp"]["usable"])
+        self.assertIsNone(personal["mail_otp"]["command"])
+        self.assertFalse(personal["file_delivery"]["configured"])
+        self.assertFalse(personal["file_delivery"]["usable"])
+        actions = {item["id"]: item for item in report["actions"]}
+        self.assertEqual(actions["mail.otp"]["level"], "optional")
+        self.assertEqual(actions["delivery.filecodebox"]["level"], "optional")
+
+    def test_registry_declares_no_orphan_entries(self) -> None:
+        registry = CapabilityRegistry(self.paths)
+        document = registry.registry()
+        providers = set(document["providers"])
+        referenced = {
+            provider
+            for capability in document["capabilities"].values()
+            for provider in capability["providers"]
+        }
+        self.assertEqual(sorted(referenced - providers), [])
+        self.assertEqual(sorted(providers - referenced), [])
+        selected: set[str] = set()
+        for profile in registry.profile_names():
+            definition = registry.profile(profile)
+            selected.update(definition["required"] + definition["optional"])
+        self.assertEqual(sorted(set(document["capabilities"]) - selected), [])
+
+    def test_registry_schema_rejects_removed_provider_fields(self) -> None:
+        registry = CapabilityRegistry(self.paths)
+        document = json.loads(json.dumps(registry.registry()))
+        document["providers"]["curl"]["context_cost"] = "high"
+        with self.assertRaises(ValidationError):
+            validate(document, registry.registry_schema, "capability registry")
 
     def test_status_helper_probes_cover_url_and_process_edges(self) -> None:
         self.assertEqual(StackStatus._state_counts([]), {})

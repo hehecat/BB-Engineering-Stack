@@ -80,9 +80,11 @@ is supplied.
 ## Machine Options
 
 `bb-stack configure` owns `$BB_CONFIG_HOME/config.env` and regenerates
-`env.sh`. The config is parsed as literal assignments; generated shell code
-does not source the editable file. Existing unknown extension assignments are
-preserved but are not loaded or included in portable exports.
+`env.sh`. Values are read as literal shell-style `NAME=value` assignments and
+unquoted with shell lexing rules; command substitution, variable expansion, and
+sourcing are never executed, and the file itself is not sourced. Existing
+unknown extension assignments are preserved in the file but are not loaded into
+the environment or included in portable exports.
 
 | Variable | Purpose | Default |
 | --- | --- | --- |
@@ -212,10 +214,12 @@ $HOME/.local/share/pentest-mail/config.env
 ```
 
 The file is atomically written with mode `600`; its parser treats values as
-literals and never executes shell substitutions. `mail-otp-set-pass` reads from
-a hidden prompt by default. For headless secret injection, use
-`--password-stdin` or `--token-stdin` and avoid placing secrets in command-line
-arguments.
+literals and never executes shell substitutions. `mail-otp-set-pass` (the
+compatibility alias for `bb-stack mail set-pass`) reads from a hidden prompt by
+default and accepts only `--password-stdin`, `--config`, and `--json` for
+non-interactive use. `--token-stdin` belongs to `bb-stack mail configure`, which
+reads an OAuth2 access token when `--auth oauth2` is selected. Avoid placing
+secrets in command-line arguments.
 
 `bb-stack status --profile web` checks command presence, file mode, required
 fields, and the selected authentication secret locally without displaying

@@ -38,6 +38,18 @@ NPM_REGISTRY_ALIASES = {
     "npmmirror": NPM_MIRROR_REGISTRY,
 }
 
+# Explicit wall-clock budgets (seconds) for installer steps that reach the
+# network or run package managers. They exist so a stalled download or a hung
+# package manager cannot wedge bootstrap/update forever. Local read-only probes
+# deliberately run without a timeout.
+PIP_INSTALL_TIMEOUT_SECONDS = 900
+GO_INSTALL_TIMEOUT_SECONDS = 900
+PIPX_INSTALL_TIMEOUT_SECONDS = 900
+UV_TOOL_INSTALL_TIMEOUT_SECONDS = 900
+APT_TIMEOUT_SECONDS = 900
+BUILD_TIMEOUT_SECONDS = 1800
+POST_INSTALL_TIMEOUT_SECONDS = 1200
+
 
 class RuntimeManager:
     def __init__(self, paths: StackPaths):
@@ -162,11 +174,11 @@ class RuntimeManager:
                 check=True,
                 stdout=sys.stderr,
             )
-        except (
-            OSError,
-            subprocess.CalledProcessError,
-            subprocess.TimeoutExpired,
-        ) as error:
+        except subprocess.TimeoutExpired as error:
+            raise CommandError(
+                f"command failed: {shlex.join(command)}: timed out after {timeout}s"
+            ) from error
+        except (OSError, subprocess.CalledProcessError) as error:
             raise CommandError(
                 f"command failed: {shlex.join(command)}: {error}"
             ) from error
@@ -204,7 +216,8 @@ class RuntimeManager:
                 "--require-hashes",
                 "-r",
                 str(requirements),
-            ]
+            ],
+            timeout=PIP_INSTALL_TIMEOUT_SECONDS,
         )
         self._run(
             [
@@ -215,7 +228,8 @@ class RuntimeManager:
                 "--no-deps",
                 "-e",
                 str(self.paths.root),
-            ]
+            ],
+            timeout=PIP_INSTALL_TIMEOUT_SECONDS,
         )
         atomic_write(stamp, digest + "\n")
         return {"component": "python-runtime", "state": "ready", "path": str(python)}
@@ -706,11 +720,19 @@ class RuntimeManager:
         validate(document, self.config / "tools.schema.json", "tool installer manifest")
         if profile not in document["profiles"]:
             raise ValidationError(f"unknown tool profile: {profile}")
-        selected = list(document["profiles"][profile]["required"])
-        if include_optional:
-            selected.extend(document["profiles"][profile]["optional"])
-        selected = list(dict.fromkeys(selected))
-        return self._install_selected_tools(document, selected, dry_run=dry_run)
+        profile_spec = document["profiles"][profile]
+        required = list(profile_spec["required"])
+        optional = list(profile_spec["optional"]) if include_optional else []
+        selected = list(dict.fromkeys([*required, *optional]))
+        # A name listed as both required and optional is treated as required, so
+        # its failure still aborts the run.
+        optional_names = set(optional) - set(required)
+        return self._install_selected_tools(
+            document,
+            selected,
+            dry_run=dry_run,
+            optional=optional_names,
+        )
 
     def install_named_tools(
         self, names: list[str], *, dry_run: bool = False
@@ -731,7 +753,14 @@ class RuntimeManager:
         selected: list[str],
         *,
         dry_run: bool,
+        optional: set[str] | frozenset[str] = frozenset(),
     ) -> list[dict[str, Any]]:
+        """Install the selected tools.
+
+        Installers named in ``optional`` are best-effort: a failure (or a still
+        failing readiness check) degrades that component to ``unavailable`` and
+        the run continues. Required installers keep failing hard.
+        """
         env = self.paths.environment()
         machine = ConfigurationManager(self.paths).effective()
         proxy_names = {
@@ -759,6 +788,8 @@ class RuntimeManager:
         results: list[dict[str, Any]] = []
         apt_pending: list[str] = []
         apt_names: list[str] = []
+        apt_optional_pending: list[str] = []
+        apt_optional_names: list[str] = []
 
         for name in selected:
             spec = document["installers"][name]
@@ -766,26 +797,39 @@ class RuntimeManager:
             if self._tool_ready(expanded, env):
                 results.append({"component": f"tool:{name}", "state": "ready"})
                 continue
+            is_optional = name in optional
             kind = expanded["kind"]
             if kind == "apt":
-                apt_pending.extend(expanded["packages"])
-                apt_names.append(name)
+                if is_optional:
+                    apt_optional_pending.extend(expanded["packages"])
+                    apt_optional_names.append(name)
+                else:
+                    apt_pending.extend(expanded["packages"])
+                    apt_names.append(name)
                 continue
             if dry_run:
                 results.append({"component": f"tool:{name}", "state": "planned"})
                 continue
-            self._install_tool(name, expanded, env)
-            if not self._tool_ready(expanded, env):
-                raise CommandError(
-                    f"tool installer completed but check still fails: {name}"
+            try:
+                self._install_tool(name, expanded, env)
+                if not self._tool_ready(expanded, env):
+                    raise CommandError(
+                        f"tool installer completed but check still fails: {name}"
+                    )
+            except CommandError:
+                if not is_optional:
+                    raise
+                results.append(
+                    {"component": f"tool:{name}", "state": "unavailable"}
                 )
+                continue
             results.append({"component": f"tool:{name}", "state": "installed"})
 
-        if apt_pending:
+        if apt_pending or apt_optional_pending:
             if dry_run:
                 results.extend(
                     {"component": f"tool:{name}", "state": "planned"}
-                    for name in apt_names
+                    for name in (*apt_names, *apt_optional_names)
                 )
             else:
                 apt = shutil.which("apt-get", path=env["PATH"])
@@ -794,17 +838,70 @@ class RuntimeManager:
                         "apt-get is unavailable; install system packages manually"
                     )
                 prefix = [] if os.geteuid() == 0 else ["sudo"]
-                self._run([*prefix, apt, "update"], env=env)
-                self._run(
-                    [*prefix, apt, "install", "-y", *sorted(set(apt_pending))], env=env
-                )
-                for name in apt_names:
-                    spec = expand(document["installers"][name], env, strict=False)
-                    if not self._tool_ready(spec, env):
-                        raise CommandError(
-                            f"apt completed but tool check still fails: {name}"
+
+                def install_apt_batch(
+                    names: list[str], packages: list[str], *, degrade: bool
+                ) -> None:
+                    if not names:
+                        return
+                    try:
+                        self._run(
+                            [
+                                *prefix,
+                                apt,
+                                "install",
+                                "-y",
+                                *sorted(set(packages)),
+                            ],
+                            env=env,
+                            timeout=APT_TIMEOUT_SECONDS,
                         )
-                    results.append({"component": f"tool:{name}", "state": "installed"})
+                    except CommandError:
+                        if not degrade:
+                            raise
+                        results.extend(
+                            {"component": f"tool:{name}", "state": "unavailable"}
+                            for name in names
+                        )
+                        return
+                    for name in names:
+                        spec = expand(
+                            document["installers"][name], env, strict=False
+                        )
+                        if not self._tool_ready(spec, env):
+                            if degrade:
+                                results.append(
+                                    {
+                                        "component": f"tool:{name}",
+                                        "state": "unavailable",
+                                    }
+                                )
+                                continue
+                            raise CommandError(
+                                f"apt completed but tool check still fails: {name}"
+                            )
+                        results.append(
+                            {"component": f"tool:{name}", "state": "installed"}
+                        )
+
+                try:
+                    self._run(
+                        [*prefix, apt, "update"],
+                        env=env,
+                        timeout=APT_TIMEOUT_SECONDS,
+                    )
+                except CommandError:
+                    if apt_pending:
+                        raise
+                    results.extend(
+                        {"component": f"tool:{name}", "state": "unavailable"}
+                        for name in apt_optional_names
+                    )
+                    return results
+                install_apt_batch(apt_names, apt_pending, degrade=False)
+                install_apt_batch(
+                    apt_optional_names, apt_optional_pending, degrade=True
+                )
         return results
 
     def _tool_ready(self, spec: dict[str, Any], env: dict[str, str]) -> bool:
@@ -889,7 +986,11 @@ class RuntimeManager:
             go = shutil.which("go", path=env["PATH"])
             if not go:
                 raise CommandError(f"Go is required to install {name}")
-            self._run([go, "install", spec["package"]], env=env)
+            self._run(
+                [go, "install", spec["package"]],
+                env=env,
+                timeout=GO_INSTALL_TIMEOUT_SECONDS,
+            )
         elif kind == "pipx":
             pipx = shutil.which("pipx", path=env["PATH"])
             if not pipx:
@@ -897,14 +998,26 @@ class RuntimeManager:
                 if not apt:
                     raise CommandError(f"pipx is required to install {name}")
                 prefix = [] if os.geteuid() == 0 else ["sudo"]
-                self._run([*prefix, apt, "update"], env=env)
-                self._run([*prefix, apt, "install", "-y", "pipx"], env=env)
+                self._run(
+                    [*prefix, apt, "update"],
+                    env=env,
+                    timeout=APT_TIMEOUT_SECONDS,
+                )
+                self._run(
+                    [*prefix, apt, "install", "-y", "pipx"],
+                    env=env,
+                    timeout=APT_TIMEOUT_SECONDS,
+                )
                 pipx = shutil.which("pipx", path=env["PATH"])
                 if not pipx:
                     raise CommandError(
                         f"pipx installation did not expose its command for {name}"
                     )
-            self._run([pipx, "install", spec["package"]], env=env)
+            self._run(
+                [pipx, "install", spec["package"]],
+                env=env,
+                timeout=PIPX_INSTALL_TIMEOUT_SECONDS,
+            )
         elif kind == "uv-tool":
             uv = shutil.which("uv", path=env["PATH"])
             if not uv:
@@ -925,13 +1038,19 @@ class RuntimeManager:
                     spec["package"],
                 ],
                 env=tool_env,
+                timeout=UV_TOOL_INSTALL_TIMEOUT_SECONDS,
             )
         elif kind == "git-data":
             self._install_git_data(name, spec, env)
         elif kind == "git-build":
             self._install_git_data(name, spec, env)
             destination = Path(spec["destination"])
-            self._run(list(spec["build"]), cwd=destination, env=env)
+            self._run(
+                list(spec["build"]),
+                cwd=destination,
+                env=env,
+                timeout=BUILD_TIMEOUT_SECONDS,
+            )
             for command, relative in spec["executables"].items():
                 target = destination / relative
                 if not target.is_file():
@@ -1033,7 +1152,11 @@ class RuntimeManager:
             if not apt:
                 raise CommandError(f"apt-get is required to install {name}")
             prefix = [] if os.geteuid() == 0 else ["sudo"]
-            self._run([*prefix, apt, "install", "-y", str(archive)], env=env)
+            self._run(
+                [*prefix, apt, "install", "-y", str(archive)],
+                env=env,
+                timeout=APT_TIMEOUT_SECONDS,
+            )
         elif kind == "service":
             raise CommandError(
                 f"service {name} is not running; configure it outside bootstrap"
@@ -1044,7 +1167,11 @@ class RuntimeManager:
             spec.get("post_install")
             and not Path(str(spec.get("post_check", ""))).exists()
         ):
-            self._run(list(spec["post_install"]), env=env)
+            self._run(
+                list(spec["post_install"]),
+                env=env,
+                timeout=POST_INSTALL_TIMEOUT_SECONDS,
+            )
 
     def _install_git_data(
         self, name: str, spec: dict[str, Any], env: dict[str, str]

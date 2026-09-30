@@ -3,7 +3,12 @@ schema_version: 1
 profiles:
   minimal:
     required: [system-base]
-    optional: [mihomo]
+    # `mihomo` is intentionally not listed here: it is an externally provided
+    # local service (see the installer below) that is only relevant when
+    # BB_PROXY_MODE=mihomo. Bootstrap cannot install or start it, so a
+    # service-kind entry in `optional` would guarantee a failed
+    # `--with-optional` run under the default BB_PROXY_MODE=direct.
+    optional: []
   ctf-web:
     required: [system-base, ffuf, chromium]
     optional: [httpx, katana, gau, sqlmap, interactsh-client]
@@ -62,12 +67,12 @@ installers:
     files:
       x86_64:
         archive: uv-x86_64-unknown-linux-gnu.tar.gz
-        url: https://github.com/astral-sh/uv/releases/download/0.11.14/uv-x86_64-unknown-linux-gnu.tar.gz
-        sha256: f3b623eb0e6141a7053d571d59a0bdc341e0f238ea8f5f0b4815ddbec9a2a296
+        url: https://github.com/astral-sh/uv/releases/download/0.12.21/uv-x86_64-unknown-linux-gnu.tar.gz
+        sha256: 23f02075b652bb1df64178cfae41b5caf160822e720e2663568f3f5d63bc52c0
       aarch64:
         archive: uv-aarch64-unknown-linux-gnu.tar.gz
-        url: https://github.com/astral-sh/uv/releases/download/0.11.14/uv-aarch64-unknown-linux-gnu.tar.gz
-        sha256: c4958f729e216f1610632574ed927b8cf0af1bd02cb88cb30d948571727aee43
+        url: https://github.com/astral-sh/uv/releases/download/0.12.21/uv-aarch64-unknown-linux-gnu.tar.gz
+        sha256: 030b69227b40af8c1981b7301793dc66e71ed3c796ea8688209dd268bd91ec51
   native-base:
     kind: apt
     checks: [file, readelf, objdump, nm, strings]
@@ -124,13 +129,13 @@ installers:
     checks: [r2]
     files:
       x86_64:
-        archive: radare2_6.1.8_amd64.deb
-        url: https://github.com/radareorg/radare2/releases/download/6.1.8/radare2_6.1.8_amd64.deb
-        sha256: 91e64c672e65521758c0deb0f70d98ac90f0a78eb654d8bd0d894dd5735130e3
+        archive: radare2_6.2.2_amd64.deb
+        url: https://github.com/radareorg/radare2/releases/download/6.2.2/radare2_6.2.2_amd64.deb
+        sha256: 09234e4139bf8dfcbb7fc1fdb2519859ad516e63c19d3c27d92aaecdf463b1ad
       aarch64:
-        archive: radare2_6.1.8_arm64.deb
-        url: https://github.com/radareorg/radare2/releases/download/6.1.8/radare2_6.1.8_arm64.deb
-        sha256: fc6717579be2ad2aaa5364aff8b134e9dd8fc0c1414a58c96659f413a2a2b750
+        archive: radare2_6.2.2_arm64.deb
+        url: https://github.com/radareorg/radare2/releases/download/6.2.2/radare2_6.2.2_arm64.deb
+        sha256: 6e3ccf220e5b53adedc9dccc67825e908b545aabd4cf8723f0c43ebfd0c4f437
   sqlmap:
     kind: apt
     checks: [sqlmap]
@@ -138,19 +143,19 @@ installers:
   semgrep:
     kind: pipx
     checks: [semgrep]
-    package: semgrep==1.130.0
+    package: semgrep==1.178.0
   frida:
     kind: pipx
     checks: [frida]
-    package: frida-tools==14.4.5
+    package: frida-tools==14.10.4
   objection:
     kind: pipx
     checks: [objection]
-    package: objection==1.11.0
+    package: objection==1.12.5
   subfinder:
     kind: go
     checks: [subfinder]
-    package: github.com/projectdiscovery/subfinder/v2/cmd/subfinder@v2.14.0
+    package: github.com/projectdiscovery/subfinder/v2/cmd/subfinder@v2.16.0
   bbot:
     kind: uv-tool
     checks: [bbot]
@@ -191,15 +196,15 @@ installers:
   dnsx:
     kind: go
     checks: [dnsx]
-    package: github.com/projectdiscovery/dnsx/cmd/dnsx@v1.3.0
+    package: github.com/projectdiscovery/dnsx/cmd/dnsx@v1.3.1
   httpx:
     kind: go
     checks: [httpx]
-    package: github.com/projectdiscovery/httpx/cmd/httpx@v1.10.0
+    package: github.com/projectdiscovery/httpx/cmd/httpx@v1.12.0
   katana:
     kind: go
     checks: [katana]
-    package: github.com/projectdiscovery/katana/cmd/katana@v1.6.1
+    package: github.com/projectdiscovery/katana/cmd/katana@v1.7.0
   gau:
     kind: go
     checks: [gau]
@@ -220,17 +225,17 @@ installers:
   ffuf:
     kind: go
     checks: [ffuf]
-    package: github.com/ffuf/ffuf/v2@v2.1.0
+    package: github.com/ffuf/ffuf/v2@v2.3.0
   nuclei:
     kind: go
     checks: [nuclei]
-    package: github.com/projectdiscovery/nuclei/v3/cmd/nuclei@v3.11.0
+    package: github.com/projectdiscovery/nuclei/v3/cmd/nuclei@v3.11.1
     post_install: [nuclei, -update-templates]
     post_check: "${HOME}/nuclei-templates"
   interactsh-client:
     kind: go
     checks: [interactsh-client]
-    package: github.com/projectdiscovery/interactsh/cmd/interactsh-client@v1.3.1
+    package: github.com/projectdiscovery/interactsh/cmd/interactsh-client@v1.4.0
   dalfox:
     kind: go
     checks: [dalfox]
@@ -249,15 +254,18 @@ installers:
     binary: trufflehog
     files:
       x86_64:
-        archive: trufflehog_3.96.0_linux_amd64.tar.gz
-        url: https://github.com/trufflesecurity/trufflehog/releases/download/v3.96.0/trufflehog_3.96.0_linux_amd64.tar.gz
-        sha256: 7105f1cd6577f058a9e39d0578f1a99c8a1e481e4d3512cd8a09acfe22a0fdc0
+        archive: trufflehog_3.97.9_linux_amd64.tar.gz
+        url: https://github.com/trufflesecurity/trufflehog/releases/download/v3.97.9/trufflehog_3.97.9_linux_amd64.tar.gz
+        sha256: 40377e6572495412fb9ba0bc21c9401f73b72f1d2afd11b9931bc4a5ed622866
       aarch64:
-        archive: trufflehog_3.96.0_linux_arm64.tar.gz
-        url: https://github.com/trufflesecurity/trufflehog/releases/download/v3.96.0/trufflehog_3.96.0_linux_arm64.tar.gz
-        sha256: 50acd4c7a3b8ebfe5083d8350956057030c44be3515dedd55b45263495c490b2
+        archive: trufflehog_3.97.9_linux_arm64.tar.gz
+        url: https://github.com/trufflesecurity/trufflehog/releases/download/v3.97.9/trufflehog_3.97.9_linux_arm64.tar.gz
+        sha256: 372c568695d49e53517075b5f74d1ee9a19053f13661d689c7928ee1fc27d705
   mihomo:
     kind: service
     checks: []
     host: 127.0.0.1
     port: 7890
+    # Not referenced by any profile: the service is provisioned by the user and
+    # is only required when BB_PROXY_MODE=mihomo. Bootstrap verifies it but
+    # never installs it.

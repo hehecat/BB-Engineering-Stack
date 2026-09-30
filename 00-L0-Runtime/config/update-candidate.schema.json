@@ -45,7 +45,13 @@
     "integrity": {"type": "string", "minLength": 1},
     "reason": {"type": "string", "minLength": 1},
     "error": {"type": "string", "minLength": 1},
-    "validation": {"type": "object"},
+    "validation": {
+      "type": "object",
+      "required": ["digest"],
+      "properties": {
+        "digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
     "validated_at": {"type": "string", "format": "date-time"},
     "approval": {
       "type": "object",
@@ -61,5 +67,16 @@
     "promoted_at": {"type": "string", "format": "date-time"},
     "backup": {"type": "string", "minLength": 1},
     "rolled_back_at": {"type": "string", "format": "date-time"}
-  }
+  },
+  "allOf": [
+    {
+      "if": {
+        "required": ["state"],
+        "properties": {"state": {"const": "validated"}}
+      },
+      "then": {
+        "required": ["validation", "validated_at"]
+      }
+    }
+  ]
 }

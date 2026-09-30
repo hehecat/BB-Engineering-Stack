@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import shlex
 import sys
+from collections.abc import Mapping
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any
@@ -13,13 +16,13 @@ from .capabilities import CapabilityRegistry
 from .configuration import ConfigurationManager
 from .data import DataManager
 from .engagement import EngagementManager
-from .errors import StackError
+from .errors import StackError, ValidationError
 from .evaluation import EvaluationManager
 from .filecodebox import add_filecodebox_subcommands, run_filecodebox_command
 from .io import load_yaml
 from .keysmith import KeysmithAdapter
 from .mail_otp import add_mail_subcommands, run_mail_command
-from .paths import StackPaths
+from .paths import StackPaths, load_stack_manifest, source_root
 from .portable import PortableManager
 from .profiles import ProfileRegistry
 from .recon import BASELINE_STAGE_IDS, ReconManager
@@ -28,7 +31,7 @@ from .self_update import SelfUpdateManager
 from .skills import SkillRegistry
 from .status import StackStatus
 from .updates import UpdateManager
-from .validation import validate
+from .validation import check_minimum_runtime, runtime_versions, validate
 from .workspace import ROUTES, WorkspaceManager
 
 CAPABILITY_PROFILES = [
@@ -71,6 +74,88 @@ RECON_AREAS = [
     "source",
 ]
 
+# Built-in fallbacks, used only when `stack.yaml` declares no default.
+BUILTIN_RUNTIME_PROFILE = "ctf-quick"
+BUILTIN_CAPABILITY_PROFILE = "ctf-web"
+
+
+def _stack_manifest() -> dict[str, Any]:
+    """`stack.yaml` for parser defaults; a malformed manifest degrades to `{}`."""
+    return load_stack_manifest(source_root(), strict=False)
+
+
+def _defaults(manifest: Mapping[str, Any]) -> Mapping[str, Any]:
+    defaults = manifest.get("defaults")
+    return defaults if isinstance(defaults, Mapping) else {}
+
+
+def default_runtime_profile(manifest: Mapping[str, Any]) -> str:
+    """Default L2 runtime profile, declared as `defaults.profile`."""
+    value = _defaults(manifest).get("profile")
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    return BUILTIN_RUNTIME_PROFILE
+
+
+def default_capability_profile(manifest: Mapping[str, Any]) -> str:
+    """Default L5 capability profile for the CLI.
+
+    `stack.yaml` declares one default runtime profile; the capability profile is
+    the unique `defaults.capability_profiles` entry that selects it, so the two
+    axes cannot drift apart. An ambiguous or absent mapping falls back.
+    """
+    defaults = _defaults(manifest)
+    mapping = defaults.get("capability_profiles")
+    if not isinstance(mapping, Mapping):
+        return BUILTIN_CAPABILITY_PROFILE
+    matches = sorted(
+        name
+        for name, profile in mapping.items()
+        if profile == defaults.get("profile") and name in CAPABILITY_PROFILES
+    )
+    return matches[0] if len(matches) == 1 else BUILTIN_CAPABILITY_PROFILE
+
+
+def _reload_command(paths: StackPaths) -> str:
+    """Shell command that reloads the generated environment file."""
+    return f"source {shlex.quote(str(paths.env_file))}"
+
+
+def _minimum_runtime(paths: StackPaths) -> dict[str, Any]:
+    """Compare the declared `minimum_runtime` against the tools on the runtime PATH."""
+    declared = paths.manifest().get("minimum_runtime")
+    return check_minimum_runtime(
+        declared if isinstance(declared, Mapping) else {},
+        runtime_versions(paths.runtime_path()),
+    )
+
+
+def _debug_enabled() -> bool:
+    value = os.environ.get("BB_STACK_DEBUG", "")
+    return value.strip().lower() not in {"", "0", "false", "no", "off"}
+
+
+def _validate_stack_defaults(paths: StackPaths, stack: Mapping[str, Any]) -> None:
+    """`defaults.profile` must be a real runtime profile the CLI can default to."""
+    defaults = _defaults(stack)
+    profile = defaults.get("profile")
+    if not isinstance(profile, str) or not profile:
+        return
+    if not (ProfileRegistry(paths).profile_dir / f"{profile}.yaml").is_file():
+        raise ValidationError(f"defaults.profile {profile!r} is not a runtime profile")
+    mapping = defaults.get("capability_profiles")
+    entries = mapping.items() if isinstance(mapping, Mapping) else ()
+    matches = sorted(
+        name
+        for name, mapped in entries
+        if mapped == profile and name in CAPABILITY_PROFILES
+    )
+    if len(matches) != 1:
+        raise ValidationError(
+            "defaults.capability_profiles must select defaults.profile "
+            f"{profile!r} exactly once; found {matches}"
+        )
+
 
 def emit(value: Any, json_output: bool = False) -> None:
     if json_output or isinstance(value, (dict, list)):
@@ -80,6 +165,9 @@ def emit(value: Any, json_output: bool = False) -> None:
 
 
 def build_parser() -> argparse.ArgumentParser:
+    manifest = _stack_manifest()
+    capability_default = default_capability_profile(manifest)
+    runtime_default = default_runtime_profile(manifest)
     parser = argparse.ArgumentParser(
         prog="bb-stack",
         description="BB Engineering Stack L0-L5 control plane",
@@ -134,7 +222,7 @@ def build_parser() -> argparse.ArgumentParser:
     evaluation_contracts = evaluation_sub.add_parser("contracts")
     evaluation_contracts.add_argument("--json", action="store_true")
     evaluation_agent = evaluation_sub.add_parser("agent")
-    evaluation_agent.add_argument("--profile", default="ctf-quick")
+    evaluation_agent.add_argument("--profile", default=runtime_default)
     evaluation_agent.add_argument("--timeout", type=int, default=180)
     evaluation_agent.add_argument("--model", default="sonnet")
     evaluation_agent.add_argument("--max-budget-usd", type=float, default=1.0)
@@ -146,7 +234,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     status.add_argument(
         "--profile",
-        default="ctf-web",
+        default=capability_default,
         choices=CAPABILITY_PROFILES,
     )
     status.add_argument("--workflow-profile")
@@ -171,7 +259,11 @@ def build_parser() -> argparse.ArgumentParser:
     bootstrap = commands.add_parser(
         "bootstrap", help="create the local runtime and install a profile"
     )
-    bootstrap.add_argument("--profile", default="ctf-web", choices=CAPABILITY_PROFILES)
+    bootstrap.add_argument(
+        "--profile",
+        default=capability_default,
+        choices=CAPABILITY_PROFILES,
+    )
     bootstrap.add_argument(
         "--work-root",
         type=Path,
@@ -394,7 +486,11 @@ def build_parser() -> argparse.ArgumentParser:
     doctor = commands.add_parser(
         "doctor", help="audit runtime, Skills, capabilities, and MCP readiness"
     )
-    doctor.add_argument("--profile", default="ctf-web", choices=CAPABILITY_PROFILES)
+    doctor.add_argument(
+        "--profile",
+        default=capability_default,
+        choices=CAPABILITY_PROFILES,
+    )
     doctor.add_argument("--engagement")
     doctor.add_argument("--strict", action="store_true")
     doctor.add_argument("--probe-mcp", action="store_true")
@@ -466,7 +562,7 @@ def build_parser() -> argparse.ArgumentParser:
     launch = commands.add_parser(
         "launch", help="render a profile and exec Claude Code in the work unit"
     )
-    launch.add_argument("--profile", default="ctf-quick")
+    launch.add_argument("--profile", default=runtime_default)
     launch.add_argument("--engagement")
     launch.add_argument("--platform")
     launch.add_argument("--dry-run", action="store_true")
@@ -482,8 +578,29 @@ def command(args: argparse.Namespace, paths: StackPaths) -> int:
     if args.command == "validate":
         stack = load_yaml(paths.root / "stack.yaml")
         validate(stack, paths.root / "schema" / "stack.schema.json", "stack manifest")
+        _validate_stack_defaults(paths, stack)
+        version = paths.version
+        if version is not None and version != __version__:
+            raise ValidationError(
+                f"{paths.version_file} declares {version} but the package "
+                f"is {__version__}"
+            )
+        minimum = _minimum_runtime(paths)
+        if not minimum["satisfied"]:
+            raise ValidationError(
+                "minimum runtime not satisfied:\n  "
+                + "\n  ".join(
+                    f"{check['tool']} {check['detected']} < {check['required']}: "
+                    f"{check['remedy']}"
+                    for check in minimum["checks"]
+                    if check["status"] == "below-minimum"
+                )
+            )
         result = {
             "stack": "valid",
+            "name": stack["name"],
+            "version": version,
+            "minimum_runtime": minimum,
             "runtime": RuntimeManager(paths).validate_config(),
             "runtime_profiles": ProfileRegistry(paths).validate_all(),
             "skill_count": len(SkillRegistry(paths).validate_all()),
@@ -513,7 +630,7 @@ def command(args: argparse.Namespace, paths: StackPaths) -> int:
         result = manager.configure(updates)
         result["env_file"] = str(RuntimeManager(paths).write_environment())
         result["workspace"] = WorkspaceManager(paths).initialize()
-        result["reload"] = f"source {paths.env_file}"
+        result["reload"] = _reload_command(paths)
         emit(result, args.json)
         return 0
     if args.command == "portable":
@@ -529,7 +646,7 @@ def command(args: argparse.Namespace, paths: StackPaths) -> int:
             if args.yes:
                 result["env_file"] = str(RuntimeManager(paths).write_environment())
                 result["workspace"] = WorkspaceManager(paths).initialize()
-                result["reload"] = f"source {paths.env_file}"
+                result["reload"] = _reload_command(paths)
             emit(result, args.json)
         return 0
     if args.command == "eval":
@@ -597,7 +714,7 @@ def command(args: argparse.Namespace, paths: StackPaths) -> int:
             result = manager.initialize(force=args.force, dry_run=args.dry_run)
             if not args.dry_run:
                 result["env_file"] = str(RuntimeManager(paths).write_environment())
-                result["reload"] = f"source {paths.env_file}"
+                result["reload"] = _reload_command(paths)
         elif args.workspace_command == "status":
             result = manager.status()
         else:
@@ -832,6 +949,7 @@ def command(args: argparse.Namespace, paths: StackPaths) -> int:
             "schema_version": 1,
             "profile": args.profile,
             "runtime": runtime,
+            "minimum_runtime": _minimum_runtime(paths),
             "data": data,
             "capabilities": report,
             "skills": {
@@ -932,13 +1050,25 @@ def main() -> int:
     args = parser.parse_args()
     requested_work_root = getattr(args, "work_root", None)
     if requested_work_root is not None:
-        import os
-
         os.environ["BB_WORK_ROOT"] = str(requested_work_root.expanduser().resolve())
     try:
         return command(args, StackPaths.discover())
-    except (StackError, OSError, KeyError, ValueError) as error:
+    except StackError as error:
+        # Expected, operator-facing failures stay one concise line.
+        if _debug_enabled():
+            raise
         print(f"bb-stack: {error}", file=sys.stderr)
+        return 2
+    except (OSError, KeyError, ValueError) as error:
+        # Unexpected failures keep their type so a malformed stack.yaml is not
+        # reported as an anonymous one-word message.
+        if _debug_enabled():
+            raise
+        print(f"bb-stack: {type(error).__name__}: {error}", file=sys.stderr)
+        print(
+            "bb-stack: run `bb-stack validate` to check the stack contracts",
+            file=sys.stderr,
+        )
         return 2
 
 

@@ -1,3 +1,5 @@
+# Reference sample only. The runtime renders these fields from the platform
+# contract and the supplied target; this file is never copied into an engagement.
 schema_version: 1
 slug: example-program
 title: Example Program
@@ -12,7 +14,7 @@ timestamps:
   updated_at: "2026-01-01T00:00:00Z"
 
 authorization:
-  status: confirmed
+  status: user-asserted
   source: "User instruction and program policy captured in notes/SCOPE.md"
 
 scope:
@@ -27,7 +29,7 @@ scope:
   out_of_scope: []
 
 overlays:
-  delivery: []
+  delivery: [generic-vdp]
 
 identity:
   request_identification:

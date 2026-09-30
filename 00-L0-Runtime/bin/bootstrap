@@ -9,7 +9,15 @@ while [ -L "$SCRIPT" ]; do
   esac
 done
 ROOT=${BB_STACK_ROOT:-"$(CDPATH= cd -- "$(dirname -- "$SCRIPT")/../.." && pwd -P)"}
+LIB="$ROOT/00-L0-Runtime/lib"
+if [ ! -d "$LIB/bb_stack" ]; then
+  printf '%s\n' "bootstrap: $ROOT is not a stack source tree" >&2
+  exit 2
+fi
 VENV="$ROOT/.runtime/venv"
+# Both the readiness probe and the executed control plane must import this tree,
+# never a `bb_stack` shadowed by an inherited PYTHONPATH entry.
+export PYTHONPATH="$LIB${PYTHONPATH:+:$PYTHONPATH}"
 
 if ! command -v python3 >/dev/null 2>&1; then
   printf '%s\n' 'bootstrap: Python 3.11+ is required' >&2

@@ -6,24 +6,15 @@ from pathlib import Path
 from typing import Any
 
 from . import __version__
-from .configuration import ConfigurationManager, url_origin
+from .configuration import ConfigurationManager
 from .errors import StackError, ValidationError
-from .io import atomic_write, load_json, load_yaml
+from .io import atomic_write, load_json
 from .paths import StackPaths
 from .skills import SkillRegistry
 from .validation import validate
 
 PORTABLE_KIND = "bb-stack-portable"
 PORTABLE_SCHEMA_VERSION = 1
-PORTABLE_CONFIG_KEYS = (
-    "BB_PROXY_MODE",
-    "BB_HTTP_PROXY",
-    "BB_SOCKS_PROXY",
-    "BB_H1_USERNAME",
-    "BB_FILECODEBOX_URL",
-    "BB_AGENT_LANGUAGE",
-    "BB_NPM_REGISTRY",
-)
 
 
 def _now() -> str:
@@ -35,6 +26,9 @@ class PortableManager:
         self.paths = paths
         self.schema = paths.root / "schema" / "portable.schema.json"
         self.configuration = ConfigurationManager(paths)
+        # Engagement roots that failed L3 validation during the last export,
+        # reported to the operator instead of failing the whole document.
+        self.skipped_engagements: list[dict[str, str]] = []
 
     def export(self, output: Path, *, force: bool = False) -> dict[str, Any]:
         output = output.expanduser().resolve()
@@ -50,6 +44,7 @@ class PortableManager:
             "path": str(output),
             "schema_version": PORTABLE_SCHEMA_VERSION,
             "engagement_count": len(document["engagements"]),
+            "skipped_engagements": self.skipped_engagements,
             "excluded": document["excluded"],
         }
 
@@ -80,7 +75,7 @@ class PortableManager:
         imported = document["machine_config"]
         decisions: list[dict[str, str]] = []
         updates: dict[str, str] = {}
-        for key in PORTABLE_CONFIG_KEYS:
+        for key in self.configuration.PORTABLE_CONFIG_KEYS:
             if key not in imported:
                 continue
             incoming = imported[key]
@@ -119,24 +114,7 @@ class PortableManager:
         return document
 
     def _document(self) -> dict[str, Any]:
-        config = self.configuration.effective()
-        machine_config = {
-            "BB_PROXY_MODE": config["BB_PROXY_MODE"],
-            "BB_HTTP_PROXY": url_origin(config["BB_HTTP_PROXY"], {"http", "https"}),
-            "BB_SOCKS_PROXY": url_origin(
-                config["BB_SOCKS_PROXY"], {"socks5", "socks5h"}
-            ),
-            "BB_H1_USERNAME": config["BB_H1_USERNAME"],
-            "BB_FILECODEBOX_URL": url_origin(
-                config["BB_FILECODEBOX_URL"], {"http", "https"}
-            ),
-            "BB_AGENT_LANGUAGE": config["BB_AGENT_LANGUAGE"],
-            "BB_NPM_REGISTRY": config["BB_NPM_REGISTRY"],
-        }
-        if any(value is None for value in machine_config.values()):
-            raise ValidationError(
-                "machine configuration contains an invalid portable URL"
-            )
+        machine_config = self.configuration.portable_config()
         engagements = self._engagement_inventory()
         mail_configured = (
             self.paths.home / ".local" / "share" / "pentest-mail" / "config.env"
@@ -210,21 +188,20 @@ class PortableManager:
         result: list[dict[str, Any]] = []
         from .engagement import EngagementManager
 
-        for root in EngagementManager(self.paths).roots():
-            state_path = root / "engagement.yaml"
-            if not state_path.is_file():
+        self.skipped_engagements = []
+        engagement = EngagementManager(self.paths)
+        for root in engagement.roots():
+            if not (root / "engagement.yaml").is_file():
                 continue
-            state = load_yaml(state_path)
-            required = {
-                "slug",
-                "workflow",
-                "platform",
-                "mode",
-                "lifecycle",
-                "phase",
-                "checkpoint",
-            }
-            if not required <= set(state):
+            try:
+                state = engagement.validate(root)
+                checkpoint = state["checkpoint"]
+                if not isinstance(checkpoint, dict):
+                    raise ValidationError(f"{root}: checkpoint must be a mapping")
+            except ValidationError as error:
+                self.skipped_engagements.append(
+                    {"path": str(root), "error": str(error)}
+                )
                 continue
             result.append(
                 {
@@ -235,10 +212,8 @@ class PortableManager:
                     "lifecycle": state["lifecycle"],
                     "phase": state["phase"],
                     "checkpoint": {
-                        "file": state["checkpoint"].get(
-                            "handoff_file", "SESSION-HANDOFF.md"
-                        ),
-                        "updated_at": state["checkpoint"].get("updated_at"),
+                        "file": checkpoint.get("handoff_file", "SESSION-HANDOFF.md"),
+                        "updated_at": checkpoint.get("updated_at"),
                     },
                 }
             )

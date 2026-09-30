@@ -38,8 +38,8 @@ findings/<target-or-program>-<bug-class>/
 └── evidence/                 # screenshots, curl output, response bodies when available
 ```
 
-If `tools/validate.py` already wrote `submission-notes.md`, append/update it
-instead of creating a duplicate.
+If `submission-notes.md` already exists (for example from an earlier review
+pass), append/update it instead of creating a duplicate.
 
 ---
 

@@ -6,6 +6,7 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
 os.environ["BB_STACK_ROOT"] = str(ROOT)
@@ -19,6 +20,8 @@ from bb_stack.errors import CommandError, StackError, ValidationError
 from bb_stack.io import dump_yaml, load_yaml
 from bb_stack.paths import StackPaths
 from bb_stack.runtime import RuntimeManager
+from bb_stack.skills import SkillRegistry
+from bb_stack.validation import validate
 
 
 class LifecycleTests(unittest.TestCase):
@@ -50,6 +53,10 @@ class LifecycleTests(unittest.TestCase):
         self.assertTrue((assessment / "notes" / "findings-live.md").is_file())
         self.assertEqual(
             self.manager.validate(assessment)["platform"], "authorized-assessment"
+        )
+        self.assertEqual(
+            self.manager.validate(assessment)["overlays"]["delivery"],
+            ["authorized-assessment"],
         )
         h1_state = self.manager.validate(h1)
         self.assertEqual(ctf.parent, self.paths.engagements_root)
@@ -163,16 +170,25 @@ class LifecycleTests(unittest.TestCase):
         self.assertNotIn("Record and verify", state["current"]["next_action"])
 
         runtime = RuntimeManager(self.paths)
-        try:
-            runtime.launch(
+        # Skill installation and the Claude Code binary are environment
+        # prerequisites, not the gate under test: stub them so the
+        # protected-workflow authorization path is what launch evaluates.
+        claude = str(self.paths.home / "claude-stub")
+        with (
+            patch.object(SkillRegistry, "status", return_value=[]),
+            patch.dict(os.environ, {"CLAUDE_BIN": claude}),
+        ):
+            result = runtime.launch(
                 "assessment-web",
                 engagement=root,
                 platform=None,
                 claude_args=[],
                 dry_run=True,
             )
-        except CommandError as error:
-            self.assertNotIn("authorization", str(error))
+        self.assertEqual(result["profile"], "assessment-web")
+        self.assertEqual(result["cwd"], str(root))
+        self.assertEqual(result["schema_version"], 1)
+        self.assertEqual(result["command"][0], claude)
 
     def test_sensitive_url_details_are_kept_out_of_shared_state(self) -> None:
         secret = "TOPSECRET"
@@ -194,7 +210,10 @@ class LifecycleTests(unittest.TestCase):
 
     def test_lifecycle_and_secret_permissions(self) -> None:
         root = self.manager.create(
-            "state-test", "example.invalid", workflow="bug-bounty"
+            "state-test",
+            "example.invalid",
+            workflow="bug-bounty",
+            authorization_source="Own asset under test",
         )
         self.assertEqual(
             self.manager.transition(root, "paused", "checkpoint")["lifecycle"], "paused"
@@ -413,6 +432,131 @@ class LifecycleTests(unittest.TestCase):
                 platform="generic-vdp",
                 yes=True,
             )
+
+    def test_validate_requires_authorization_source_for_asserted_status(self) -> None:
+        root = self.manager.create(
+            "source-gate",
+            "https://example.invalid",
+            workflow="assessment",
+            authorization_source="Own application under test",
+        )
+        state = self.manager.validate(root)
+        self.assertEqual(state["authorization"]["status"], "user-asserted")
+        self.assertEqual(
+            state["authorization"]["source"], "Own application under test"
+        )
+
+        pending = self.manager.create(
+            "source-gate-pending", "https://example.invalid", workflow="assessment"
+        )
+        self.assertIsNone(self.manager.validate(pending)["authorization"]["source"])
+
+        damaged = load_yaml(root / "engagement.yaml")
+        damaged["authorization"]["source"] = None
+        dump_yaml(root / "engagement.yaml", damaged)
+        with self.assertRaisesRegex(ValidationError, "requires an authorization source"):
+            self.manager.validate(root)
+
+    def test_revoked_authorization_blocks_resume_until_reauthorized(self) -> None:
+        root = self.manager.create(
+            "revoked-resume",
+            "https://example.invalid",
+            workflow="assessment",
+            authorization_source="Written statement 2026-08-03",
+        )
+        revoked = self.manager.authorize(
+            root, status="revoked", source="Authorization withdrawn 2026-08-04"
+        )
+        self.assertEqual(revoked["lifecycle"], "blocked")
+
+        with self.assertRaisesRegex(ValidationError, "authorization is revoked"):
+            self.manager.transition(root, "active")
+        self.assertEqual(self.manager.validate(root)["lifecycle"], "blocked")
+
+        self.manager.authorize(
+            root, status="user-asserted", source="Re-authorized 2026-08-05"
+        )
+        resumed = self.manager.transition(root, "active")
+        self.assertEqual(resumed["lifecycle"], "active")
+        self.assertIsNone(resumed["current"]["stop_reason"])
+
+        exempt = self.manager.create("exempt-resume", "example.invalid", workflow="ctf")
+        self.manager.transition(exempt, "blocked", "fixture")
+        self.assertEqual(
+            self.manager.transition(exempt, "active")["lifecycle"], "active"
+        )
+
+    def test_failed_create_leaves_no_partial_engagement(self) -> None:
+        def explode(*_args: object, **_kwargs: object) -> None:
+            raise OSError("simulated write failure")
+
+        with (
+            patch.object(EngagementManager, "_write_control_files", explode),
+            self.assertRaises(OSError),
+        ):
+            self.manager.create("partial-failure", "example.invalid", workflow="ctf")
+
+        self.assertFalse((self.paths.engagements_root / "partial-failure").exists())
+        self.assertEqual(
+            sorted(
+                path.name for path in self.paths.engagements_root.glob(".partial-*")
+            ),
+            [],
+        )
+        self.assertEqual(self.manager.roots(), [])
+
+        retry = self.manager.create(
+            "partial-failure", "example.invalid", workflow="ctf"
+        )
+        self.assertEqual(retry.name, "partial-failure")
+        self.assertEqual(
+            [item for item in self.manager.list() if "error" in item], []
+        )
+
+    def test_reference_templates_only_contain_runtime_used_files(self) -> None:
+        layer = ROOT / "03-L3-Engagement-State"
+        validate(
+            load_yaml(layer / "templates" / "engagement.yaml"),
+            layer / "schema" / "engagement.schema.json",
+            "reference engagement template",
+        )
+        self.assertEqual(
+            sorted(
+                str(path.relative_to(layer / "templates"))
+                for path in (layer / "templates").rglob("*")
+                if path.is_file()
+            ),
+            [
+                ".gitignore",
+                "engagement.yaml",
+                "hypotheses.md",
+                "notes/LAB-CREDS.local.md.example",
+                "notes/findings-live.md",
+            ],
+        )
+
+    def test_platform_delivery_overlay_names_a_registered_overlay(self) -> None:
+        registry = load_yaml(
+            ROOT / "02-L2-Workflow-Profiles" / "platforms" / "platforms.yaml"
+        )["platforms"]
+        overlay_dir = ROOT / "02-L2-Workflow-Profiles" / "platforms"
+        for platform, contract in sorted(registry.items()):
+            with self.subTest(platform=platform):
+                overlay = contract["delivery_overlay"]
+                self.assertIn(overlay, registry)
+                self.assertTrue(
+                    (overlay_dir / f"{overlay}.md").is_file(),
+                    f"platform {platform} points at undefined overlay {overlay}",
+                )
+                root = self.manager.create(
+                    f"overlay-{platform}",
+                    "example.invalid",
+                    workflow=contract["workflows"][0],
+                    platform=platform,
+                )
+                self.assertEqual(
+                    self.manager.validate(root)["overlays"]["delivery"], [overlay]
+                )
 
 
 if __name__ == "__main__":

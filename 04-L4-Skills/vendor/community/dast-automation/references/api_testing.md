@@ -408,8 +408,8 @@ const introspection = await page.evaluate(async () => {
 # Nuclei for API CVEs
 nuclei -l api_endpoints.txt -t nuclei-templates/cves/ -t nuclei-templates/exposures/apis/
 
-# Custom testing with Playwright
-python3 scripts/api_security_tester.py --swagger swagger.json --output api_results.json
+# Custom testing: run the vendored tester over a crawl result set
+python3 scripts/vulnerability_tester.py --crawl-results crawl_summary.json --output api_results.json
 ```
 
 This completes the API security testing guide for DAST.

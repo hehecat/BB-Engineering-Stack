@@ -1,16 +1,13 @@
 schema_version: 1
-
 policy:
-  candidate_root: "${BB_STACK_ROOT}/.runtime/update-candidates"
-  backup_root: "${BB_STACK_ROOT}/.runtime/update-backups"
+  candidate_root: ${BB_STACK_ROOT}/.runtime/update-candidates
+  backup_root: ${BB_STACK_ROOT}/.runtime/update-backups
   network_timeout_seconds: 20
   auto_promote: false
-
 inventory:
   skills: 04-L4-Skills/skills.yaml
   mcp_packages: 00-L0-Runtime/config/node-runtime/package.json
   tools: 00-L0-Runtime/config/tools.yaml
-
 components:
   skill.ctf-web:
     category: skills
@@ -19,10 +16,9 @@ components:
     repository: https://github.com/ljagiello/ctf-skills
     branch: main
     subpath: ctf-web
-    current_revision: d19f35fd3dd2e126108752aee84c657c888126d3
-    current_digest: 116ad26f7deb2fde82b3d90cb9f5b6f791496a1ff1f79b739e831e90b123845c
+    current_revision: c332c7be1b27cb64639a20124ac55ba916adef92
+    current_digest: a273727309d4e2dcc7fb23de04fbdffbdadd1255c84c1addeb0f655bc3e22ef8
     license: MIT
-
   skill.ios-pentest:
     category: skills
     target: ios-pentest
@@ -33,7 +29,6 @@ components:
     current_revision: a1a68f7010a9c97b22336dcbcfde539c492a7109
     current_digest: 138320c3bbbf846d5a204c18d2bbb9f4212b33c419f5de483ab726c1ef528cdc
     license: NOASSERTION
-
   skill.network-pentest:
     category: skills
     target: network-pentest
@@ -44,7 +39,6 @@ components:
     current_revision: a1a68f7010a9c97b22336dcbcfde539c492a7109
     current_digest: 2b8787a7b75ceecb16daba3b8fca929d8e76e22155da2fc11e82af92bd34e267
     license: NOASSERTION
-
   skill.cloud-security:
     category: skills
     target: cloud-security
@@ -55,7 +49,6 @@ components:
     current_revision: a1a68f7010a9c97b22336dcbcfde539c492a7109
     current_digest: abab7d3ee8fc367a4375c77b1ab7ea2fd17d0be407a13d91284fa4d878e62df6
     license: NOASSERTION
-
   skill.sast-orchestration:
     category: skills
     target: sast-orchestration
@@ -66,7 +59,6 @@ components:
     current_revision: a1a68f7010a9c97b22336dcbcfde539c492a7109
     current_digest: fac233fb734314f5d4fd345ec4bb762379ed3aea7f8a98872c9ad6a5d9bbf6a0
     license: NOASSERTION
-
   skill.iac-security:
     category: skills
     target: iac-security
@@ -77,7 +69,6 @@ components:
     current_revision: a1a68f7010a9c97b22336dcbcfde539c492a7109
     current_digest: 7dc1eac1d3de07c5b3e3db84c6dff26f7d54ad93af14e60e2e670cee6420c4a2
     license: NOASSERTION
-
   skill.container-security:
     category: skills
     target: container-security
@@ -88,7 +79,6 @@ components:
     current_revision: a1a68f7010a9c97b22336dcbcfde539c492a7109
     current_digest: a1c7b9f2f8b04d6fbfc8f076f774e9744960087c030d2badf699c9e984f50d93
     license: NOASSERTION
-
   skill.sca-security:
     category: skills
     target: sca-security
@@ -99,7 +89,6 @@ components:
     current_revision: a1a68f7010a9c97b22336dcbcfde539c492a7109
     current_digest: 3ccbbee28fbc32ffdd183dfa0b292f1fc8df2da6aba9adf99ee696993a93c6aa
     license: NOASSERTION
-
   skill.threat-modeling:
     category: skills
     target: threat-modeling
@@ -110,46 +99,45 @@ components:
     current_revision: a1a68f7010a9c97b22336dcbcfde539c492a7109
     current_digest: 9abaf91e097036c96c2883c972b0e287c22bf1e448e085de5e8e10ea22909d84
     license: NOASSERTION
-
   mcp.playwright:
     category: mcp
-    target: "@playwright/mcp"
+    target: '@playwright/mcp'
     checker: npm
     provider: playwright-mcp
     license: Apache-2.0
-
   mcp.anastasis:
     category: mcp
     target: anastasis-mcp-server
     checker: npm
     provider: anastasis-mcp
     license: MIT
-
   mcp.osint:
     category: mcp
     target: osint-mcp-server
     checker: npm
     provider: osint-mcp
     license: MIT
-
   mcp.chrome-devtools:
     category: mcp
     target: chrome-devtools-mcp
     checker: npm
     provider: chrome-devtools-mcp
     license: Apache-2.0
-
+  tool.mcp-sdk:
+    category: tools
+    target: '@modelcontextprotocol/sdk'
+    checker: npm
+    license: MIT
   tool.webcrack:
     category: tools
     target: webcrack
     checker: npm
     license: MIT
-
   tool.keysmith:
     category: tools
     target: keysmith
     checker: github-commit
     repository: https://github.com/Jia-Ethan/claude-keysmith
     branch: main
-    current_revision: acb9d0b7ade07415c5e50117d2a55cc50a0be64e
+    current_revision: b3d8cc25331e8bbf2b9ccfdbdb658ee01f351663
     license: NOASSERTION

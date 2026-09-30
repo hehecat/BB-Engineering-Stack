@@ -35,10 +35,12 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Install Playwright + deps
+      - name: Check Python
         run: |
-          pip install -r scripts/requirements.txt
-          python -m playwright install --with-deps chromium
+          # The vendored scripts/ are stdlib-only. Upstream's requirements.txt
+          # was not included in this snapshot, so add your own dependency
+          # install step here if you extend them.
+          python3 --version
 
       - name: Install scanners
         run: |
@@ -59,13 +61,12 @@ jobs:
             --mode "$MODE" \
             --output results/output.json
 
-      - name: Diff against baseline
+      - name: Gate on findings
         run: |
           python3 scripts/check_findings.py \
-            --current  results/output.json \
-            --baseline .dast/baseline.json \
+            --report   results/output.json \
             --fail-on  critical,high \
-            --out      results/diff.json
+            --ci-summary results/ci-summary.json
 
       - name: Upload artifacts
         if: always()

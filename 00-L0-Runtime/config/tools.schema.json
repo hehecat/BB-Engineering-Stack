@@ -63,7 +63,72 @@
           "post_check": {"type": "string"},
           "host": {"type": "string"},
           "port": {"type": "integer", "minimum": 1, "maximum": 65535}
-        }
+        },
+        "allOf": [
+          {
+            "if": {"required": ["kind"], "properties": {"kind": {"const": "apt"}}},
+            "then": {"required": ["packages"]}
+          },
+          {
+            "if": {"required": ["kind"], "properties": {"kind": {"const": "go"}}},
+            "then": {"required": ["package"]}
+          },
+          {
+            "if": {"required": ["kind"], "properties": {"kind": {"const": "pipx"}}},
+            "then": {"required": ["package"]}
+          },
+          {
+            "if": {"required": ["kind"], "properties": {"kind": {"const": "uv-tool"}}},
+            "then": {"required": ["package"]}
+          },
+          {
+            "if": {
+              "required": ["kind"],
+              "properties": {"kind": {"const": "git-data"}}
+            },
+            "then": {"required": ["repository", "revision", "destination"]}
+          },
+          {
+            "if": {
+              "required": ["kind"],
+              "properties": {"kind": {"const": "git-build"}}
+            },
+            "then": {
+              "required": [
+                "repository",
+                "revision",
+                "destination",
+                "build",
+                "executables"
+              ]
+            }
+          },
+          {
+            "if": {
+              "required": ["kind"],
+              "properties": {"kind": {"const": "archive-binary"}}
+            },
+            "then": {"required": ["files", "binary"]}
+          },
+          {
+            "if": {
+              "required": ["kind"],
+              "properties": {"kind": {"const": "archive-tree"}}
+            },
+            "then": {"required": ["files", "format", "destination", "executables"]}
+          },
+          {
+            "if": {"required": ["kind"], "properties": {"kind": {"const": "deb"}}},
+            "then": {"required": ["files"]}
+          },
+          {
+            "if": {
+              "required": ["kind"],
+              "properties": {"kind": {"const": "service"}}
+            },
+            "then": {"required": ["host", "port"]}
+          }
+        ]
       }
     }
   }

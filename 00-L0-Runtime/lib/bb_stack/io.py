@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import stat
 import tempfile
 from collections.abc import Mapping
 from pathlib import Path
@@ -79,8 +80,28 @@ def load_json(path: Path) -> dict[str, Any]:
     return value
 
 
+def _fsync_directory(directory: Path) -> None:
+    """Best-effort fsync of *directory* so a rename is durable."""
+    try:
+        fd = os.open(directory, os.O_RDONLY)
+    except OSError:
+        return
+    try:
+        os.fsync(fd)
+    except OSError:
+        pass
+    finally:
+        os.close(fd)
+
+
 def atomic_write(path: Path, content: str, mode: int | None = None) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
+    if mode is None:
+        # Inherit the existing file's permissions instead of the mkstemp default.
+        try:
+            mode = stat.S_IMODE(path.stat().st_mode)
+        except FileNotFoundError:
+            mode = None
     fd, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as handle:
@@ -90,6 +111,7 @@ def atomic_write(path: Path, content: str, mode: int | None = None) -> None:
         if mode is not None:
             os.chmod(temporary, mode)
         os.replace(temporary, path)
+        _fsync_directory(path.parent)
     finally:
         try:
             os.unlink(temporary)

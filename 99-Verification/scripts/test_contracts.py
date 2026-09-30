@@ -188,12 +188,24 @@ class ContractTests(unittest.TestCase):
             encoding="utf-8"
         )
         self.assertIn("--hash=sha256:", requirements)
-        self.assertIn("pyjwt==2.13.0", requirements.lower())
-        self.assertIn("requests==2.33.0", requirements.lower())
         source = (ROOT / "00-L0-Runtime/config/requirements.in").read_text(
             encoding="utf-8"
         )
-        self.assertIn("PyJWT==2.13.0", source)
+        direct = [
+            line.strip()
+            for line in source.splitlines()
+            if line.strip() and not line.startswith("#")
+        ]
+        self.assertTrue(direct, "requirements.in declares no direct pins")
+        locked = requirements.lower()
+        for pin in direct:
+            name, _, version = pin.partition("==")
+            normalised = name.split("[", 1)[0].lower()
+            self.assertIn(
+                f"{normalised}=={version.lower()}",
+                locked,
+                f"{pin} is pinned in requirements.in but not in requirements.lock",
+            )
         runtime = (ROOT / "00-L0-Runtime/lib/bb_stack/runtime.py").read_text(
             encoding="utf-8"
         )
@@ -403,8 +415,7 @@ class ContractTests(unittest.TestCase):
 
     def test_full_security_skill_updates_have_pinned_channels(self) -> None:
         manager = UpdateManager(self.paths)
-        revision = "a1a68f7010a9c97b22336dcbcfde539c492a7109"
-        manager._git_remote_revision = lambda repository, branch: revision
+        inventory = manager.inventory({"skills"})
         for name in (
             "ios-pentest",
             "network-pentest",
@@ -416,8 +427,26 @@ class ContractTests(unittest.TestCase):
             "threat-modeling",
         ):
             with self.subTest(name=name):
+                revision = inventory[f"skill.{name}"]["current_revision"]
+                # The stub mirrors the audited catalog entry instead of a shared
+                # constant, so a wrong channel -> revision mapping cannot pass.
+                manager._git_remote_revision = lambda repository, branch: revision
                 result = manager.check({"skills"}, f"skill.{name}")["results"][0]
                 self.assertEqual(result["status"], "current")
+                self.assertEqual(result["latest"], revision)
+
+    def test_skill_channel_revision_mismatch_reports_update_available(self) -> None:
+        manager = UpdateManager(self.paths)
+        component = manager.inventory({"skills"})["skill.ios-pentest"]
+        latest = "f" * 40
+        upstream_digest = "0" * 64
+        self.assertNotEqual(component["current_revision"], latest)
+        self.assertNotEqual(component["current_digest"], upstream_digest)
+        manager._git_remote_revision = lambda repository, branch: latest
+        manager._github_tree_digest = lambda component, revision: upstream_digest
+        result = manager.check({"skills"}, "skill.ios-pentest")["results"][0]
+        self.assertEqual(result["status"], "update-available")
+        self.assertEqual(result["latest"], latest)
 
     def test_unrelated_repository_commit_is_not_a_skill_update(self) -> None:
         manager = UpdateManager(self.paths)

@@ -17,7 +17,13 @@ os.environ["BB_STACK_ROOT"] = str(ROOT)
 
 from bb_stack.errors import CommandError, ValidationError
 from bb_stack.paths import StackPaths
-from bb_stack.runtime import RuntimeManager
+from bb_stack.runtime import (
+    APT_TIMEOUT_SECONDS,
+    BUILD_TIMEOUT_SECONDS,
+    UV_TOOL_INSTALL_TIMEOUT_SECONDS,
+    RuntimeManager,
+)
+from bb_stack.validation import validate
 from test_support import isolated_stack_source
 
 
@@ -121,6 +127,7 @@ class RuntimeInstallerTests(unittest.TestCase):
         run.assert_called_once_with(
             ["sudo", "/usr/bin/apt-get", "install", "-y", str(archive)],
             env={"PATH": "/usr/bin:/bin"},
+            timeout=APT_TIMEOUT_SECONDS,
         )
 
     def test_uv_tool_installs_into_stack_managed_directories(self) -> None:
@@ -152,6 +159,7 @@ class RuntimeInstallerTests(unittest.TestCase):
                 "demo==1.2.3",
             ],
             env=expected_env,
+            timeout=UV_TOOL_INSTALL_TIMEOUT_SECONDS,
         )
 
     def test_git_build_creates_managed_executable(self) -> None:
@@ -178,7 +186,10 @@ class RuntimeInstallerTests(unittest.TestCase):
             self.manager._install_tool("demo", spec, {"PATH": "/usr/bin:/bin"})
 
         run.assert_called_once_with(
-            ["make"], cwd=destination, env={"PATH": "/usr/bin:/bin"}
+            ["make"],
+            cwd=destination,
+            env={"PATH": "/usr/bin:/bin"},
+            timeout=BUILD_TIMEOUT_SECONDS,
         )
         wrapper = self.paths.runtime_bin / "demo"
         self.assertTrue(wrapper.is_symlink())
@@ -629,9 +640,21 @@ class RuntimeInstallerTests(unittest.TestCase):
             patch.object(self.manager, "_run") as run,
         ):
             result = self.manager.install_tools("fixture", False, dry_run=False)
+
         self.assertEqual([item["state"] for item in result], ["installed", "installed"])
-        self.assertEqual(run.call_count, 2)
-        self.assertEqual(run.call_args.args[0][-2:], ["one", "two"])
+        commands = [entry.args[0] for entry in run.call_args_list]
+        updates = [command for command in commands if command[-1] == "update"]
+        installs = [command for command in commands if "install" in command]
+        self.assertEqual(len(updates), 1)
+        installed_packages: set[str] = set()
+        for command in installs:
+            self.assertIn("-y", command)
+            installed_packages.update(command[command.index("-y") + 1 :])
+        self.assertEqual(installed_packages, {"one", "two"})
+        self.assertFalse(
+            any(len(command) == command.index("-y") + 1 for command in installs),
+            "apt install must never run without explicit packages",
+        )
 
     def test_install_named_tools_selects_only_requested_installers(self) -> None:
         document = {
@@ -666,6 +689,211 @@ class RuntimeInstallerTests(unittest.TestCase):
             self.assertRaisesRegex(ValidationError, "unknown tool installer"),
         ):
             self.manager.install_named_tools(["missing"], dry_run=True)
+
+    def _fixture_document(self) -> dict:
+        return {
+            "profiles": {"fixture": {"required": ["req"], "optional": ["opt"]}},
+            "installers": {
+                "req": {
+                    "kind": "go",
+                    "package": "example/req@v1",
+                    "checks": ["req"],
+                },
+                "opt": {
+                    "kind": "go",
+                    "package": "example/opt@v1",
+                    "checks": ["opt"],
+                },
+            },
+        }
+
+    def _direct_machine(self) -> dict:
+        return {
+            "BB_PROXY_MODE": "direct",
+            "BB_HTTP_PROXY": "",
+            "BB_SOCKS_PROXY": "",
+        }
+
+    def test_optional_installer_failure_degrades_without_aborting(self) -> None:
+        document = self._fixture_document()
+
+        def install(name: str, spec: dict, env: dict) -> None:
+            if name == "opt":
+                raise CommandError("optional component unreachable")
+
+        with (
+            patch("bb_stack.runtime.load_yaml", return_value=document),
+            patch("bb_stack.runtime.validate"),
+            patch(
+                "bb_stack.runtime.ConfigurationManager.effective",
+                return_value=self._direct_machine(),
+            ),
+            patch.object(self.manager, "_ensure_toolchain"),
+            patch.object(self.manager, "_tool_ready", side_effect=[False, True, False]),
+            patch.object(self.manager, "_install_tool", side_effect=install),
+        ):
+            result = self.manager.install_tools("fixture", True, dry_run=False)
+
+        self.assertEqual(
+            [(item["component"], item["state"]) for item in result],
+            [("tool:req", "installed"), ("tool:opt", "unavailable")],
+        )
+
+    def test_required_installer_failure_still_aborts(self) -> None:
+        document = self._fixture_document()
+        with (
+            patch("bb_stack.runtime.load_yaml", return_value=document),
+            patch("bb_stack.runtime.validate"),
+            patch(
+                "bb_stack.runtime.ConfigurationManager.effective",
+                return_value=self._direct_machine(),
+            ),
+            patch.object(self.manager, "_ensure_toolchain"),
+            patch.object(self.manager, "_tool_ready", return_value=False),
+            patch.object(
+                self.manager,
+                "_install_tool",
+                side_effect=CommandError("required component failed"),
+            ),
+            self.assertRaisesRegex(CommandError, "required component failed"),
+        ):
+            self.manager.install_tools("fixture", True, dry_run=False)
+
+    def test_optional_apt_batch_failure_degrades_and_required_continues(self) -> None:
+        document = {
+            "profiles": {"fixture": {"required": ["req"], "optional": ["opt"]}},
+            "installers": {
+                "req": {"kind": "apt", "packages": ["req-pkg"], "checks": ["req"]},
+                "opt": {"kind": "apt", "packages": ["opt-pkg"], "checks": ["opt"]},
+            },
+        }
+
+        def run(command: list[str], **_kwargs: object) -> None:
+            if "install" in command and "opt-pkg" in command:
+                raise CommandError("optional apt transaction failed")
+
+        with (
+            patch("bb_stack.runtime.load_yaml", return_value=document),
+            patch("bb_stack.runtime.validate"),
+            patch(
+                "bb_stack.runtime.ConfigurationManager.effective",
+                return_value=self._direct_machine(),
+            ),
+            patch.object(self.manager, "_tool_ready", side_effect=[False, False, True]),
+            patch("bb_stack.runtime.shutil.which", return_value="/usr/bin/apt-get"),
+            patch("bb_stack.runtime.os.geteuid", return_value=0),
+            patch.object(self.manager, "_run", side_effect=run),
+        ):
+            result = self.manager.install_tools("fixture", True, dry_run=False)
+
+        self.assertEqual(
+            [(item["component"], item["state"]) for item in result],
+            [("tool:req", "installed"), ("tool:opt", "unavailable")],
+        )
+
+    def test_install_tools_dry_run_plans_optional_without_installing(self) -> None:
+        document = self._fixture_document()
+        with (
+            patch("bb_stack.runtime.load_yaml", return_value=document),
+            patch("bb_stack.runtime.validate"),
+            patch(
+                "bb_stack.runtime.ConfigurationManager.effective",
+                return_value=self._direct_machine(),
+            ),
+            patch.object(self.manager, "_ensure_toolchain"),
+            patch.object(self.manager, "_tool_ready", return_value=False),
+            patch.object(self.manager, "_install_tool") as install,
+        ):
+            result = self.manager.install_tools("fixture", True, dry_run=True)
+
+        self.assertEqual(
+            [(item["component"], item["state"]) for item in result],
+            [("tool:req", "planned"), ("tool:opt", "planned")],
+        )
+        install.assert_not_called()
+
+    def test_run_timeout_error_names_command_and_budget(self) -> None:
+        with (
+            patch(
+                "bb_stack.runtime.subprocess.run",
+                side_effect=subprocess.TimeoutExpired(["fixture"], 7),
+            ),
+            self.assertRaises(CommandError) as context,
+        ):
+            self.manager._run(["fixture", "--flag"], timeout=7)
+
+        message = str(context.exception)
+        self.assertIn("fixture --flag", message)
+        self.assertIn("timed out after 7s", message)
+
+    def test_tools_schema_enforces_per_kind_required_fields(self) -> None:
+        schema = ROOT / "00-L0-Runtime/config/tools.schema.json"
+
+        def document(installer: dict) -> dict:
+            return {
+                "schema_version": 1,
+                "profiles": {"fixture": {"required": [], "optional": []}},
+                "installers": {"demo": installer},
+            }
+
+        valid = [
+            {"kind": "apt", "checks": ["x"], "packages": ["x"]},
+            {"kind": "go", "checks": ["x"], "package": "example/x@v1"},
+            {"kind": "pipx", "checks": ["x"], "package": "x==1"},
+            {"kind": "uv-tool", "checks": ["x"], "package": "x==1"},
+            {"kind": "service", "checks": [], "host": "127.0.0.1", "port": 1},
+            {"kind": "deb", "checks": ["x"], "files": {}},
+            {"kind": "archive-binary", "checks": ["x"], "binary": "x", "files": {}},
+            {
+                "kind": "archive-tree",
+                "checks": ["x"],
+                "format": "zip",
+                "destination": "/tmp/x",
+                "executables": {"x": "bin/x"},
+                "files": {},
+            },
+            {
+                "kind": "git-data",
+                "checks": [],
+                "repository": "https://example.invalid/x.git",
+                "revision": "a" * 40,
+                "destination": "/tmp/x",
+            },
+            {
+                "kind": "git-build",
+                "checks": ["x"],
+                "repository": "https://example.invalid/x.git",
+                "revision": "a" * 40,
+                "destination": "/tmp/x",
+                "build": ["make"],
+                "executables": {"x": "bin/x"},
+            },
+        ]
+        for installer in valid:
+            validate(document(installer), schema, "fixture")
+
+        invalid = [
+            {"kind": "apt", "checks": ["x"]},
+            {"kind": "go", "checks": ["x"]},
+            {"kind": "pipx", "checks": ["x"]},
+            {"kind": "uv-tool", "checks": ["x"]},
+            {"kind": "service", "checks": []},
+            {"kind": "service", "checks": [], "host": "127.0.0.1"},
+            {"kind": "deb", "checks": ["x"]},
+            {"kind": "archive-binary", "checks": ["x"]},
+            {"kind": "archive-tree", "checks": ["x"], "files": {}, "format": "zip"},
+            {"kind": "git-data", "checks": [], "destination": "/tmp/x"},
+            {
+                "kind": "git-build",
+                "checks": ["x"],
+                "repository": "https://example.invalid/x.git",
+                "revision": "a" * 40,
+                "destination": "/tmp/x",
+            },
+        ]
+        for installer in invalid:
+            with self.assertRaises(ValidationError, msg=str(installer)):
+                validate(document(installer), schema, "fixture")
 
     def test_runtime_status_reports_paths_commands_and_registry(self) -> None:
         self.paths.runtime.mkdir(parents=True, exist_ok=True)

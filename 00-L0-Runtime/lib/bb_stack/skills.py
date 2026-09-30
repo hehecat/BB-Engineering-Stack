@@ -11,6 +11,11 @@ from .io import load_yaml, load_yaml_text
 from .paths import StackPaths
 from .validation import validate
 
+# Provenance values that explicitly record "no named upstream". They are a
+# named, greppable review backlog rather than a silent omission; every other
+# provenance value must be auditable, i.e. carry repository and revision.
+UNSOURCED_PROVENANCE = frozenset({"stack", "local-snapshot"})
+
 
 class SkillRegistry:
     def __init__(self, paths: StackPaths):
@@ -58,6 +63,16 @@ class SkillRegistry:
             skill_file = source / "SKILL.md"
             if not skill_file.is_file():
                 raise ValidationError(f"missing SKILL.md for {name}: {skill_file}")
+            provenance = metadata["provenance"]
+            if provenance not in UNSOURCED_PROVENANCE:
+                missing = sorted(
+                    key for key in ("repository", "revision") if not metadata.get(key)
+                )
+                if missing:
+                    raise ValidationError(
+                        f"vendored Skill {name} declares provenance {provenance!r} "
+                        f"but is missing upstream {', '.join(missing)}"
+                    )
             frontmatter = self._frontmatter(skill_file)
             if frontmatter.get("name") != name:
                 raise ValidationError(

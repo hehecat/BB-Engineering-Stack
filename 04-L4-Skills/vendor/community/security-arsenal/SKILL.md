@@ -526,7 +526,7 @@ WAF vendors often return **HTTP 200 OK with a block page** to confuse attackers:
 - Custom enterprise WAFs: `200 OK` + "Your request has been blocked. Log ID: WAF-..."
 - AWS + CloudFront custom error pages: may return `200` or `403` depending on config
 
-**Verdict system in `tools/bypass_403.sh`:**
+**Verdict system — apply it by hand:**
 
 | Verdict | Meaning | Action |
 |---|---|---|
@@ -539,7 +539,7 @@ WAF vendors often return **HTTP 200 OK with a block page** to confuse attackers:
 - `500 Internal Server Error` = payload triggered backend exception (SQLi/SSTI lead)
 - `502/503` = you reached origin (WAF forwarded the request)
 
-**Block baseline:** `bypass_403.sh` samples the target host with a known-bad XSS payload (`/?_waftest=<script>...`) before running probes. It stores the block response length. A bypass probe is only confirmed if:
+**Block baseline:** sample the target host with a known-bad XSS payload (`/?_waftest=<script>...`) before running probes, and record the block response length. This Skill ships no probe runner — issue the probes with `curl`/your HTTP client and keep the raw responses. A bypass probe is only confirmed if:
 1. Status ∈ {200, 201, 204, 301, 302, **401, 500, 502, 503**}
 2. Body does NOT match vendor block signatures
 3. Body length diverges from block baseline by >5%
@@ -555,7 +555,7 @@ WAF vendors often return **HTTP 200 OK with a block page** to confuse attackers:
 | AWS | Header: `X-Amzn-Trace-Id: Root=1-<hex-ts>-...` | Timestamp in hex |
 | Generic | Body: `Log ID: WAF-20240512-xxxx` | Include in bug report for triage |
 
-Log IDs extracted by `tools/bypass_403.sh` and `tools/waf_response_analyzer.py --classify`. Include them in reports — triage can verify directly from internal WAF logs.
+Read the log ID out of the block response body or headers as listed above. Include it in reports — triage can verify directly from internal WAF logs.
 
 ### 403 Bypass Quick Reference
 
@@ -631,7 +631,7 @@ Log IDs extracted by `tools/bypass_403.sh` and `tools/waf_response_analyzer.py -
 | SQL operator | `=` | `LIKE` | Avoid `=` token |
 | Base64 XSS | `alert(1)` | `<svg onload=eval(atob('YWxlcnQoMSk='))>` | Bypass keyword filter |
 
-Generate all variants with: `tools/waf_encoder.py "<payload>" --class sqli|xss|generic`
+Build the variants by hand — this Skill ships no encoder script. For each blocked payload, walk the table above and emit one candidate per applicable row (URL single/double/triple for query and path context, HTML decimal/hex for HTML reflection, SQL comment/whitespace/operator for SQL context, Base64 for keyword filters), keeping the raw payload beside each variant so a success is reproducible.
 
 ### Content-Type Confusion
 
@@ -655,7 +655,7 @@ Generate all variants with: `tools/waf_encoder.py "<payload>" --class sqli|xss|g
 | Duplicate `filename=` param | Parser picks first value, scanner sees second |
 | CRLF/LF mix between parts | Strict-CRLF parser breaks, lenient parser continues |
 
-Generate variants with: `tools/multipart_mutator.py --file shell.aspx --field file`
+Apply these variants by hand to the multipart body of an upload request you already captured, keeping the original part `name` and a plausible `filename` so the backend still routes the part as an upload. This Skill ships no mutator script.
 
 ### Origin Server Discovery (Cloudflare Bypass)
 
@@ -677,17 +677,18 @@ curl --resolve "$TARGET:443:<origin-ip>" "https://$TARGET/admin"
 
 ```
 Got 403?
-├── Run /bypass-403 <url>           (17 headers + 15 paths + 6 methods = 38 probes)
+├── Replay the endpoint with the header / path / method variants above
+│   (this Skill ships no probe runner — drive them with curl or your HTTP client)
 │   ├── Hit → escalate the endpoint (may be Security Misconfiguration finding)
 │   └── No hit → continue below
-├── Fingerprint WAF (in bypass_403.sh output or wafw00f)
+├── Fingerprint WAF (vendor signatures in the block body, or wafw00f)
 │   ├── Cloudflare → origin IP discovery + TE+XFH trick
 │   ├── AWS WAF   → /**/ comment split + oversized body
 │   ├── Imperva   → unicode overlong + param pollution
 │   └── F5        → double-slash path + strip TS cookie
-├── Payload blocked? tools/waf_encoder.py "<payload>" --class sqli|xss
+├── Payload blocked? Re-encode it with the Encoding Bypass Reference rows
 │   └── Try each variant until 200 response
-├── Upload endpoint? tools/multipart_mutator.py --file shell --field f
+├── Upload endpoint? Apply the Content-Type Confusion variants to the part
 │   └── Try all 10 parser-confusion variants
 └── 5 min total, still blocked → kill (5-minute rule)
 ```

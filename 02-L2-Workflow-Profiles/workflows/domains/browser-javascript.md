@@ -18,4 +18,6 @@ Reproduce only the dependencies required by the target function. Validate the
 result against a captured baseline or differential replay. Choose the output
 from the requested outcome: recovered source, call-flow notes, protocol/API
 documentation, a Node module, a runtime probe or hook, a patched bundle, a
-browser extension, a user script, or another directly usable artifact.
+browser extension, a user script, or another directly usable artifact. A browser
+extension or user script is not assumed to be the deliverable; the requested
+outcome selects it.

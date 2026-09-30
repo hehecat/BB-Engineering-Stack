@@ -7,10 +7,12 @@
 - Keep credentials, cookies, tokens, and private keys out of Prompt, chat,
   shared notes, reports, screenshots, and version control.
 - Load only the specialist Skill needed for the current lead.
-- `STOP_LEAD` rotates one hypothesis. `STOP_FINDING` closes one candidate.
-  Neither ends an engagement.
-- In continuous mode, a progress update is not a terminal action while another
-  useful in-scope action remains.
+- Track each hypothesis through `queued`, `active`, `validated`, `killed`, or
+  `deferred`. Killing or deferring one hypothesis rotates to the next lead; it
+  does not end the Engagement.
+- Keep the workflow phase explicit (for example `EXPLORE`, `PROVE`, `SHIP`).
+  Reaching a phase boundary or reporting status is not a terminal action; the
+  rendered Active Mode contract owns continuation and checkpointing.
 
 Preserve native tool protocols in append profiles. This text adds execution
 behavior and does not contain platform policy or vulnerability knowledge.

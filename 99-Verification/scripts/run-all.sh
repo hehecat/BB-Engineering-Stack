@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT="$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)"
 PYTHON="$ROOT/.runtime/venv/bin/python"
+[[ -x "$PYTHON" ]] || PYTHON="$ROOT/.venv/bin/python"
 [[ -x "$PYTHON" ]] || PYTHON=python3
 export BB_STACK_ROOT="$ROOT"
 export PYTHONPATH="$ROOT/00-L0-Runtime/lib${PYTHONPATH:+:$PYTHONPATH}"
@@ -45,7 +46,9 @@ doctor_if_installed() {
 "$PYTHON" "$ROOT/99-Verification/scripts/test_workspace.py"
 "$STACK" validate --json >/dev/null
 
-if [[ -x "$ROOT/.runtime/venv/bin/python" && -d "$ROOT/.runtime/node_modules" ]]; then
+RUNTIME_NODE_MODULES="$ROOT/.runtime/node_modules"
+
+if [[ -d "$RUNTIME_NODE_MODULES" ]] && command -v node >/dev/null 2>&1; then
   (
     cd "$ROOT/.runtime"
     node --input-type=module -e \
@@ -55,11 +58,18 @@ if [[ -x "$ROOT/.runtime/venv/bin/python" && -d "$ROOT/.runtime/node_modules" ]]
   doctor_if_installed web
   if command -v chromium >/dev/null 2>&1; then
     doctor_if_installed browser-js --probe-mcp
+  else
+    printf 'SKIP profile doctor probe (chromium not on PATH): browser-js\n'
   fi
   if [[ -x "$ROOT/.runtime/bin/jadx" ]] && command -v r2 >/dev/null 2>&1; then
     doctor_if_installed android
     doctor_if_installed reverse
+  else
+    printf 'SKIP profile doctors (jadx or r2 not on PATH): android, reverse\n'
   fi
+else
+  printf 'SKIP node runtime smoke (webcrack): %s not ready\n' "$RUNTIME_NODE_MODULES"
+  printf 'SKIP profile doctor probes (--probe-mcp) and node smoke: ctf-web, web, browser-js, android, reverse\n'
 fi
 
 printf '%s\n' 'BB_STACK_VERIFICATION_OK'

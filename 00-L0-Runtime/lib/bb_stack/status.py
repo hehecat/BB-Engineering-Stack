@@ -765,6 +765,34 @@ class StackStatus:
             "probe": probe if probe is not None else "not-run",
         }
 
+    @staticmethod
+    def _provider_status(
+        registry: CapabilityRegistry,
+        providers: dict[str, Any],
+        name: str,
+        env: dict[str, str],
+    ) -> dict[str, Any]:
+        """Provider state, or an explicit "not configured" state.
+
+        The L5 registry schema only requires a non-empty provider map, so an
+        operator may rename or drop a provider entry; status then reports the
+        provider as absent instead of failing with a ``KeyError``.
+        """
+        provider = providers.get(name)
+        if provider is None:
+            return {
+                "name": name,
+                "kind": "unknown",
+                "present": False,
+                "resolved": None,
+                "locator_detail": "not configured",
+                "configuration": "not-configured",
+                "configuration_detail": [],
+                "usable": False,
+                "placement": "main",
+            }
+        return registry.provider_status(name, provider, env)
+
     def _personal(
         self,
         profile: str,
@@ -785,11 +813,9 @@ class StackStatus:
         )
         mail_relevant = "otp.mail" in selected_capabilities
         delivery_relevant = "delivery.file-share" in selected_capabilities
-        mail = registry.provider_status(
-            "mail-otp", providers["mail-otp"], configured_env
-        )
-        delivery = registry.provider_status(
-            "filecodebox", providers["filecodebox"], configured_env
+        mail = self._provider_status(registry, providers, "mail-otp", configured_env)
+        delivery = self._provider_status(
+            registry, providers, "filecodebox", configured_env
         )
         mail_config = (
             self.paths.home / ".local" / "share" / "pentest-mail" / "config.env"

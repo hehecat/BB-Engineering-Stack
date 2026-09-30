@@ -29,6 +29,20 @@ from .skills import SkillRegistry
 from .validation import validate
 
 
+def go_proxy_module_path(module: str) -> str:
+    """Return the Go module proxy path form of *module*.
+
+    The Go module proxy escapes every uppercase letter as ``!`` followed by its
+    lowercase form, so ``github.com/BishopFox/jsluice`` is requested as
+    ``github.com/!bishop!fox/jsluice``. Requesting the unescaped path returns
+    HTTP 404 even though the module exists.
+    """
+    return "".join(
+        f"!{character.lower()}" if character.isupper() else character
+        for character in module
+    )
+
+
 class UpdateManager:
     """Audited update discovery with isolated staging and explicit promotion."""
 
@@ -90,6 +104,12 @@ class UpdateManager:
             raise ValidationError(
                 "npm upstream is not pinned in node runtime: "
                 + ", ".join(missing_npm_targets)
+            )
+        uncovered_dependencies = sorted(set(dependencies) - npm_targets)
+        if uncovered_dependencies:
+            raise ValidationError(
+                "node runtime dependency is missing from the update registry: "
+                + ", ".join(uncovered_dependencies)
             )
 
         seen_targets: set[tuple[str, str]] = set()
@@ -378,11 +398,18 @@ class UpdateManager:
             result["upstream"] = latest_data["info"].get("project_url")
             result["upstream_license"] = latest_data["info"].get("license") or None
         elif checker == "go":
-            module = quote(component["package"], safe="/")
+            module = quote(go_proxy_module_path(component["package"]), safe="/!")
             latest_data = self._request_json(
                 f"https://proxy.golang.org/{module}/@latest"
             )
             latest = latest_data["Version"]
+            # A proxy pseudo-version embeds the commit it resolves to
+            # (v0.0.0-<timestamp>-<12hex>). A component pinned to a bare commit
+            # hash is already current when the proxy reports that same commit,
+            # and comparing the two strings directly would report a phantom
+            # update forever.
+            if len(current) == 40 and latest.endswith(f"-{current[:12]}"):
+                latest = current
             result["upstream"] = f"https://{component['package']}"
         else:
             raise ValidationError(f"unsupported update checker: {checker}")
@@ -440,12 +467,12 @@ class UpdateManager:
                     manifest["reason"] = (
                         "upstream revision has the same Skill tree digest"
                     )
-            elif component["checker"] == "npm" and component["category"] == "mcp":
+            elif component["checker"] == "npm":
                 self._stage_npm(component, result["latest"], candidate, manifest)
             else:
                 manifest["state"] = "review-required"
                 manifest["reason"] = (
-                    "automatic staging is limited to GitHub-tree Skills and npm MCP packages"
+                    "automatic staging is limited to GitHub-tree Skills and npm packages"
                 )
         except Exception as error:
             manifest["state"] = "stage-failed"
@@ -499,13 +526,17 @@ class UpdateManager:
                 digest = SkillRegistry.tree_digest(payload)
                 if digest != manifest["candidate_digest"]:
                     raise ValidationError("staged Skill digest changed after staging")
-                manifest["validation"] = {"skill": "valid", "digest": digest}
+                validation = {"skill": "valid"}
             elif component["checker"] == "npm":
-                manifest["validation"] = self._validate_npm_mcp(component, candidate)
+                validation = self._validate_npm_mcp(component, candidate)
             else:
                 raise ValidationError(
                     "candidate requires manual review and cannot be promoted"
                 )
+            validation["digest"] = self._candidate_content_digest(
+                component, candidate
+            )
+            manifest["validation"] = validation
             manifest["state"] = "validated"
             manifest["validated_at"] = self._now()
             manifest.pop("approval", None)
@@ -535,7 +566,9 @@ class UpdateManager:
             approval = {
                 "reviewer": reviewer,
                 "approved_at": self._now(),
-                "content_digest": self._candidate_content_digest(component, candidate),
+                "content_digest": self._validated_content_digest(
+                    name, manifest, candidate, component
+                ),
             }
             if approved_note:
                 approval["note"] = approved_note
@@ -565,6 +598,12 @@ class UpdateManager:
         if approval["content_digest"] != content_digest:
             raise ValidationError(
                 f"candidate {name} changed after approval; validate and approve it again"
+            )
+        validation = manifest.get("validation")
+        if not isinstance(validation, dict) or validation.get("digest") != content_digest:
+            raise ValidationError(
+                f"candidate {name} validation record does not match the approved "
+                "content; validate and approve it again"
             )
         fresh = self.check(name=name)["results"][0]
         if fresh["status"] != "update-available" or fresh.get("latest") != manifest.get(
@@ -606,14 +645,25 @@ class UpdateManager:
         manifest = self._load_candidate(manifest_path)
         if manifest["state"] not in {"promoted", "rollback-failed"}:
             raise ValidationError(f"candidate {name} is not promoted")
+        component = self.inventory()[name]
         backup = Path(manifest["backup"]).resolve()
+        backup_root = (
+            self._backup_root().resolve() / self._directory_name(name)
+        ).resolve()
         try:
-            backup.relative_to(self._backup_root().resolve())
+            backup.relative_to(backup_root)
         except ValueError as error:
             raise ValidationError(
-                "candidate backup path escapes managed backup root"
+                f"candidate {name} backup does not belong to this component"
             ) from error
-        component = self.inventory()[name]
+        if component["checker"] == "github-tree" and not (backup / "payload").is_dir():
+            raise ValidationError(
+                f"candidate {name} backup is missing the Skill payload"
+            )
+        if component["checker"] == "npm" and not (backup / "package.json").is_file():
+            raise ValidationError(
+                f"candidate {name} backup is missing package.json"
+            )
         manifest["state"] = "rolling-back"
         dump_json(manifest_path, manifest)
         try:
@@ -755,8 +805,13 @@ class UpdateManager:
             env=env,
             timeout=180,
         )
+        provider_name = component.get("provider")
+        if not provider_name:
+            # A plain runtime dependency rather than an MCP server: a clean
+            # install is the whole contract, so there is nothing to handshake.
+            return {"npm_ci": "passed", "mcp_handshake": "skipped"}
         registry = CapabilityRegistry(self.paths)
-        provider = registry.registry()["providers"][component["provider"]]
+        provider = registry.registry()["providers"][provider_name]
         mcp = expand(provider["mcp"], env)
         old_modules = str(self.paths.runtime / "node_modules")
         new_modules = str(candidate / "node_modules")
@@ -865,6 +920,7 @@ class UpdateManager:
                 "candidate_digest"
             ]
             dump_yaml(self.config_path, config)
+            self._sync_skill_manifest_revision(component["target"], manifest["latest"])
             self._validate_stack_contracts()
         except Exception:
             if source.exists():
@@ -872,6 +928,28 @@ class UpdateManager:
             (backup / "payload").rename(source)
             shutil.copy2(backup / "upstreams.yaml", self.config_path)
             raise
+
+    def _sync_skill_manifest_revision(self, target: str, revision: str) -> None:
+        """Move the L4 provenance revision with the pinned revision.
+
+        A vendored Skill whose `skills.yaml` entry names a revision repeats the
+        pin that `upstreams.yaml` carries. Promotion is the only operation that
+        may advance it, so the two records cannot drift apart. Skills that do not
+        record a revision there (the `local-snapshot` majority) are untouched,
+        and the edit is textual so the hand-formatted manifest keeps its layout.
+        """
+        path = self.paths.root / "04-L4-Skills" / "skills.yaml"
+        text = path.read_text(encoding="utf-8")
+        pattern = re.compile(
+            rf"^  {re.escape(target)}:\n(?:    \S.*\n)*?    revision: "
+            r"[0-9a-f]{40}$",
+            re.MULTILINE,
+        )
+        updated, count = pattern.subn(
+            lambda match: match.group(0)[: -40] + revision, text
+        )
+        if count:
+            path.write_text(updated, encoding="utf-8")
 
     def _promote_npm(
         self, candidate: Path, backup: Path, manifest: dict[str, Any]
@@ -926,6 +1004,36 @@ class UpdateManager:
                     f"{restore_error}"
                 ) from original_error
             raise
+
+    def _validated_content_digest(
+        self,
+        name: str,
+        manifest: dict[str, Any],
+        candidate: Path,
+        component: dict[str, Any],
+    ) -> str:
+        """Re-derive the candidate content digest and bind it to its validation record.
+
+        Validation evidence only applies to the exact bytes it was produced from, so
+        the recorded digest must be present and must still match the candidate.
+        """
+        validation = manifest.get("validation")
+        if not isinstance(validation, dict):
+            raise ValidationError(
+                f"candidate {name} has no validation evidence; validate it first"
+            )
+        recorded = validation.get("digest")
+        if not isinstance(recorded, str):
+            raise ValidationError(
+                f"candidate {name} validation record has no content digest"
+            )
+        current = self._candidate_content_digest(component, candidate)
+        if current != recorded:
+            raise ValidationError(
+                f"candidate {name} content changed after validation; "
+                "validate and approve it again"
+            )
+        return current
 
     def _candidate_content_digest(
         self, component: dict[str, Any], candidate: Path

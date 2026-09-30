@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import io
 import os
+import signal
 import subprocess
+import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -16,6 +20,57 @@ from bb_stack.errors import ValidationError
 from bb_stack.io import dump_json, dump_yaml, load_json, load_yaml
 from bb_stack.paths import StackPaths
 from bb_stack.recon import BASELINE_STAGE_IDS, ReconManager
+
+# Unused by real processes, so ``os.getpgid`` fails and ``_provider_pgid``
+# falls back to the pid while ``os.killpg`` stays patched.
+FAKE_PROVIDER_PID = 3_900_001
+
+
+class FakeProviderProcess:
+    """Minimal ``subprocess.Popen`` stand-in for provider execution tests."""
+
+    def __init__(
+        self,
+        *,
+        returncode: int = 0,
+        stdout: str = "",
+        stderr: str = "",
+        timeout: bool = False,
+        pid: int = FAKE_PROVIDER_PID,
+    ) -> None:
+        self.pid = pid
+        self.returncode = returncode
+        self.stdin = io.StringIO()
+        self.stdout = io.StringIO(stdout)
+        self.stderr = io.StringIO(stderr)
+        self._stdout = stdout
+        self._stderr = stderr
+        self._timeout = timeout
+
+    def communicate(
+        self, input: str | None = None, timeout: float | None = None
+    ) -> tuple[str, str]:
+        if self._timeout:
+            raise subprocess.TimeoutExpired("provider", timeout or 0)
+        return self._stdout, self._stderr
+
+    def poll(self) -> int | None:
+        return None if self._timeout else self.returncode
+
+    def wait(self, timeout: float | None = None) -> int:
+        return self.returncode
+
+    def kill(self) -> None:
+        self.returncode = -signal.SIGKILL
+
+
+def _process_alive(pid: int) -> bool:
+    """True while ``pid`` still runs; a zombie counts as terminated."""
+    try:
+        stat = Path(f"/proc/{pid}/stat").read_text(encoding="utf-8")
+    except OSError:
+        return False
+    return stat.rsplit(") ", 1)[1][:1] not in {"Z", "X", "x"}
 
 
 class ReconManagerTests(unittest.TestCase):
@@ -343,20 +398,39 @@ class ReconManagerTests(unittest.TestCase):
             "https://example.invalid/app.js\n",
         )
 
-        for provider, environment_variable in (
-            ("exa", "EXA_API_KEY"),
-            ("tavily", "TAVILY_API_KEY"),
-            ("brave", "BRAVE_SEARCH_API_KEY"),
-        ):
+        for provider in ("exa", "tavily", "brave"):
             command = self.manager._provider_command(
                 provider, "organization-assets", "example.invalid", recon, output
             )
             self.assertEqual(command[0], "bb-search")
             self.assertIn(provider, command)
-            self.assertEqual(
-                self.manager._provider_available(provider),
-                bool(os.environ.get(environment_variable, "").strip()),
-            )
+
+    def test_provider_availability_is_credential_specific(self) -> None:
+        with patch.dict(os.environ, {"EXA_API_KEY": "fixture-exa"}, clear=False):
+            os.environ.pop("TAVILY_API_KEY", None)
+            os.environ.pop("BRAVE_SEARCH_API_KEY", None)
+            self.assertTrue(self.manager._provider_available("exa"))
+            self.assertFalse(self.manager._provider_available("tavily"))
+            self.assertFalse(self.manager._provider_available("brave"))
+        with patch.dict(os.environ, {"TAVILY_API_KEY": "   "}, clear=False):
+            os.environ.pop("EXA_API_KEY", None)
+            self.assertFalse(self.manager._provider_available("tavily"))
+            os.environ["EXA_API_KEY"] = "fixture-exa"
+            self.assertTrue(self.manager._provider_available("exa"))
+
+    def test_provider_availability_requires_both_puredns_binaries(self) -> None:
+        def which(name: str, **_: object) -> str | None:
+            return f"/usr/bin/{name}" if name == "puredns" else None
+
+        with patch("bb_stack.recon.shutil.which", side_effect=which):
+            self.assertFalse(self.manager._provider_available("puredns"))
+        with patch("bb_stack.recon.shutil.which", return_value="/usr/bin/tool"):
+            self.assertTrue(self.manager._provider_available("puredns"))
+            self.assertTrue(self.manager._provider_available("subfinder"))
+        with patch("bb_stack.recon.shutil.which", return_value=None):
+            self.assertFalse(self.manager._provider_available("puredns"))
+            self.assertFalse(self.manager._provider_available("subfinder"))
+
 
     def test_bbot_output_is_archived_to_the_declared_artifact(self) -> None:
         self.manager._ensure_layout(self.engagement)
@@ -367,15 +441,15 @@ class ReconManagerTests(unittest.TestCase):
             "bbot", "organization-assets", "example.invalid", recon, output
         )
 
-        def run_bbot(command: list[str], **_: object) -> MagicMock:
+        def run_bbot(command: list[str], **_: object) -> FakeProviderProcess:
             output_dir = Path(command[command.index("--output-dir") + 1])
             scan_name = command[command.index("--name") + 1]
             generated = output_dir / scan_name / "output.json"
             generated.parent.mkdir(parents=True, exist_ok=True)
             generated.write_text('{"type":"DNS_NAME","data":"example.invalid"}\n')
-            return MagicMock(returncode=0, stdout="", stderr="")
+            return FakeProviderProcess()
 
-        with patch("bb_stack.recon.subprocess.run", side_effect=run_bbot):
+        with patch("bb_stack.recon.subprocess.Popen", side_effect=run_bbot):
             result = self.manager._execute_provider("bbot", command, output, log)
 
         self.assertEqual(result["returncode"], 0)
@@ -395,8 +469,8 @@ class ReconManagerTests(unittest.TestCase):
         )
 
         with patch(
-            "bb_stack.recon.subprocess.run",
-            return_value=MagicMock(returncode=0, stdout="", stderr=""),
+            "bb_stack.recon.subprocess.Popen",
+            return_value=FakeProviderProcess(),
         ):
             result = self.manager._execute_provider("bbot", command, output, log)
 
@@ -414,18 +488,32 @@ class ReconManagerTests(unittest.TestCase):
             "subfinder", "passive-assets", "example.invalid", recon, output
         )
 
-        def timeout(command: list[str], **_: object) -> MagicMock:
+        def timeout(command: list[str], **_: object) -> FakeProviderProcess:
             attempt = Path(command[command.index("-o") + 1])
             attempt.write_text("fresh.example.invalid\n", encoding="utf-8")
-            raise subprocess.TimeoutExpired(command, 900)
+            return FakeProviderProcess(timeout=True)
 
-        with patch("bb_stack.recon.subprocess.run", side_effect=timeout):
+        kill_calls: list[tuple[int, int]] = []
+
+        def fake_killpg(pgid: int, sig: int) -> None:
+            if sig == 0:
+                raise ProcessLookupError(pgid)
+            kill_calls.append((pgid, sig))
+
+        with (
+            patch("bb_stack.recon.subprocess.Popen", side_effect=timeout),
+            patch("os.killpg", side_effect=fake_killpg),
+        ):
             result = self.manager._execute_provider("subfinder", command, output, log)
 
+        self.assertEqual(kill_calls, [(FAKE_PROVIDER_PID, signal.SIGTERM)])
         self.assertEqual(result["state"], "partial")
         self.assertTrue(result["artifact_usable"])
         self.assertEqual(output.read_text(encoding="utf-8"), "fresh.example.invalid\n")
         self.assertIn("TimeoutExpired", log.read_text(encoding="utf-8"))
+        self.assertIn(
+            f"process_group: {FAKE_PROVIDER_PID}", log.read_text(encoding="utf-8")
+        )
 
     def test_provider_success_without_attempt_file_replaces_stale_output(self) -> None:
         self.manager._ensure_layout(self.engagement)
@@ -438,12 +526,8 @@ class ReconManagerTests(unittest.TestCase):
         )
 
         with patch(
-            "bb_stack.recon.subprocess.run",
-            return_value=MagicMock(
-                returncode=0,
-                stdout="fresh.example.invalid\n",
-                stderr="",
-            ),
+            "bb_stack.recon.subprocess.Popen",
+            return_value=FakeProviderProcess(stdout="fresh.example.invalid\n"),
         ):
             result = self.manager._execute_provider("subfinder", command, output, log)
 
@@ -461,17 +545,82 @@ class ReconManagerTests(unittest.TestCase):
         )
 
         with patch(
-            "bb_stack.recon.subprocess.run",
-            return_value=MagicMock(
-                returncode=0,
-                stdout="fresh.example.invalid\n",
-                stderr="",
-            ),
+            "bb_stack.recon.subprocess.Popen",
+            return_value=FakeProviderProcess(stdout="fresh.example.invalid\n"),
         ):
             result = self.manager._execute_provider("assetfinder", command, output, log)
 
         self.assertEqual(result["state"], "completed")
         self.assertEqual(output.read_text(encoding="utf-8"), "fresh.example.invalid\n")
+
+    def test_provider_launch_isolates_the_process_group(self) -> None:
+        self.manager._ensure_layout(self.engagement)
+        recon = self.engagement / "recon"
+        output = recon / "inventory/passive-assets.assetfinder.txt"
+        log = recon / "logs/passive-assets.assetfinder.log"
+        command = self.manager._provider_command(
+            "assetfinder", "passive-assets", "example.invalid", recon, output
+        )
+        launches: list[dict[str, object]] = []
+
+        def fake_popen(
+            execution_command: list[str], **kwargs: object
+        ) -> FakeProviderProcess:
+            launches.append({"command": execution_command, **kwargs})
+            return FakeProviderProcess(stdout="fresh.example.invalid\n")
+
+        with patch("bb_stack.recon.subprocess.Popen", side_effect=fake_popen):
+            result = self.manager._execute_provider(
+                "assetfinder", command, output, log
+            )
+
+        self.assertEqual(result["state"], "completed")
+        self.assertEqual(len(launches), 1)
+        self.assertIs(launches[0]["start_new_session"], True)
+        self.assertEqual(launches[0]["stdin"], subprocess.PIPE)
+
+    def test_provider_timeout_terminates_the_whole_process_group(self) -> None:
+        self.manager._ensure_layout(self.engagement)
+        recon = self.engagement / "recon"
+        output = recon / "inventory/passive-assets.assetfinder.txt"
+        log = recon / "logs/passive-assets.assetfinder.log"
+        marker = Path(self.temporary.name) / "grandchild.pid"
+        script = Path(self.temporary.name) / "provider_with_grandchild.py"
+        script.write_text(
+            "import subprocess, sys, time\n"
+            "child = subprocess.Popen(\n"
+            "    [sys.executable, '-c', 'import time; time.sleep(300)']\n"
+            ")\n"
+            f"open({str(marker)!r}, 'w').write(str(child.pid))\n"
+            "time.sleep(300)\n",
+            encoding="utf-8",
+        )
+        command = [sys.executable, str(script)]
+
+        with patch.object(self.manager, "_provider_timeout", return_value=1):
+            result = self.manager._execute_provider("assetfinder", command, output, log)
+
+        self.assertEqual(
+            sorted(result),
+            [
+                "artifact_usable",
+                "command",
+                "error",
+                "error_kind",
+                "returncode",
+                "state",
+            ],
+        )
+        self.assertEqual(result["state"], "failed")
+        self.assertEqual(result["error_kind"], "timeout")
+        grandchild = int(marker.read_text(encoding="utf-8"))
+        deadline = time.monotonic() + 15
+        while time.monotonic() < deadline and _process_alive(grandchild):
+            time.sleep(0.05)
+        self.assertFalse(
+            _process_alive(grandchild),
+            f"grandchild {grandchild} outlived the provider timeout",
+        )
 
     def test_required_partial_provider_allows_dependents_and_creates_gap(self) -> None:
         required = set(self.manager.required_providers())

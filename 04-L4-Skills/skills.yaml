@@ -25,7 +25,12 @@ skills:
   bug-bounty: {role: reference, source: vendor/community/bug-bounty, provenance: local-snapshot}
   business-logic: {role: specialist, source: vendor/community/business-logic, provenance: local-snapshot}
   csrf: {role: specialist, source: vendor/community/csrf, provenance: local-snapshot}
-  ctf-web: {role: specialist, source: vendor/community/ctf-web, provenance: ljagiello-ctf-skills-snapshot}
+  ctf-web:
+    role: specialist
+    source: vendor/community/ctf-web
+    provenance: ljagiello-ctf-skills-snapshot
+    repository: https://github.com/ljagiello/ctf-skills
+    revision: c332c7be1b27cb64639a20124ac55ba916adef92
   ctf-writeup: {role: delivery, source: vendor/community/ctf-writeup, provenance: local-snapshot}
   dast-automation: {role: automation, source: vendor/community/dast-automation, provenance: local-snapshot}
   file-reading: {role: specialist, source: vendor/community/file-reading, provenance: local-snapshot}

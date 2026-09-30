@@ -262,7 +262,7 @@ Server RSA-signs an order string, then parses `&`-separated parameters. Python's
 
 ## Hash Length Extension Attack (ASIS CTF 2017)
 
-*See also [ctf-crypto/modern-ciphers-2.md — Hash Length Extension Attack (PlaidCTF 2014)](../ctf-crypto/modern-ciphers-2.md#hash-length-extension-attack-plaidctf-2014) for the canonical crypto writeup of the same primitive.*
+*Canonical writeup of the same primitive: PlaidCTF 2014's hash length extension challenge. This stack does not vendor a `ctf-crypto` reference set, so treat the summary here as the whole note.*
 
 **Pattern:** Merkle-Damgård hash functions (MD5, SHA-1, SHA-256) used as `MAC = H(secret || message)` are vulnerable to length extension. Given `H(secret || message)` and the length of `secret`, an attacker can compute `H(secret || message || padding || extension)` without knowing the secret. The internal hash state at the end of the original digest is sufficient to continue hashing.
 

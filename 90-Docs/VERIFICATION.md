@@ -15,23 +15,27 @@ bb-stack eval agent --profile ctf-quick
 `run-all.sh` performs contracts, lifecycle tests, Prompt budgets, Skill
 frontmatter checks, strict YAML and MCP uniqueness tests, update-inventory and
 candidate-isolation tests, first-party mail-otp config/MIME/Fake-IMAP contracts,
-safe archive/deb installer tests, 17-profile Agent contracts, unified-status
-redaction and profile tests, strict doctors for locally installed profiles,
-and a real Playwright MCP handshake when runtime dependencies exist. Profiles
-that were not installed are reported as `SKIP`; `full-fresh-machine.sh` is the
-gate that installs and checks every profile. Fresh-machine verification also
-requires `bb-stack status --strict` and the `mail-otp` wrapper to pass in an
-isolated HOME. The other scripts isolate HOME and work roots. Claude smoke
-requires working Claude authentication and consumes one small model request.
+safe archive/deb installer tests, 18-profile Agent contracts (108 checks),
+unified-status redaction and profile tests, strict doctors for locally installed
+profiles, and a real Playwright MCP handshake when runtime dependencies exist.
+Profiles that were not installed are reported as `SKIP`; `full-fresh-machine.sh`
+is the gate that installs and checks every profile in its `PROFILES` array.
+Fresh-machine verification also requires `bb-stack status --profile minimal
+--json` and the `mail-otp` wrapper to pass in an isolated HOME, while
+`full-fresh-machine.sh` additionally requires `bb-stack status --strict` for
+each installed profile. The other scripts isolate HOME and work roots. Claude
+smoke requires working Claude authentication and consumes one small model
+request.
 
 `audit-dependencies.sh` checks the hash-pinned Python runtime with pip-audit and
 the committed npm lock against the official npm advisory endpoint. It does not
 change local registry configuration.
 
 `full-fresh-machine.sh` is a manual, network-heavy acceptance test. It installs
-every capability profile in an isolated HOME, validates all natural-language
-routes, and checks Webcrack plus managed browser CDP. It is intentionally not
-part of `run-all.sh`. On a machine that uses mihomo, run it with:
+the 16 profiles listed in its `PROFILES` array in an isolated HOME, validates
+all natural-language routes, and checks Webcrack plus managed browser CDP. It
+is intentionally not part of `run-all.sh`. On a machine that uses mihomo, run
+it with:
 
 ```bash
 BB_FULL_FRESH_PROXY_MODE=mihomo \

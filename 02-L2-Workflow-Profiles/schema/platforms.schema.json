@@ -24,7 +24,11 @@
           "report_language": {"type": "string", "minLength": 1},
           "request_identification": {"enum": ["required", "optional", "program-defined", "disabled"]},
           "identity_value_from": {"type": ["string", "null"]},
-          "delivery_overlay": {"type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"}
+          "delivery_overlay": {
+            "type": "string",
+            "enum": ["generic-vdp", "authorized-assessment", "hackerone", "butian", "standalone-ctf", "local-lab", "standalone-analysis"],
+            "description": "Name of the platform overlay Prompt that defines delivery for this platform; must have a matching platforms/<name>.md."
+          }
         }
       }
     }

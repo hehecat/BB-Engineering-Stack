@@ -11,10 +11,13 @@ effects; findings record proof level, observed versus inferred basis, negative
 control, root-cause cluster, cleanup, and redacted secret references.
 
 New work units live under `$BB_WORK_ROOT/engagements/<slug>/`. The optional
-`routing.kind` field records whether the natural workspace selected CTF Web,
-Web/BB, assessment domain, Browser-JS, Android, Reverse, or Lab so a later
-plain-Claude session resumes the same Profile. Legacy work units directly under
-`$BB_WORK_ROOT` remain
+`routing.kind` field records which of the 18 routing kinds the natural workspace
+selected — `ctf-web`, `web`, `web-assessment`, `ctf-android`, `android`,
+`android-assessment`, `android-analysis`, `ios-assessment`, `ctf-reverse`,
+`reverse`, `reverse-analysis`, `reverse-assessment`, `network-assessment`,
+`cloud-assessment`, `llm-assessment`, `source-audit`, `browser-js`, or `lab` —
+so a later plain-Claude session resumes the same Profile. Legacy work units
+directly under `$BB_WORK_ROOT` remain
 readable but new data is never created there.
 
 Protected workflows use `pending`, `user-asserted`, `verified`, or `revoked`
@@ -30,9 +33,13 @@ one from access, credentials, asset ownership, or a discovered relationship.
 
 ```text
 active -> paused | blocked | closed
-paused | blocked -> active
+paused | blocked -> active | closed
 closed -> active only by explicit reopen
 ```
+
+Protected workflows cannot resume to `active` while `authorization.status` is
+`pending` or `revoked`; record the basis first with
+`bb-stack engagement authorize`.
 
 Workflow phases:
 

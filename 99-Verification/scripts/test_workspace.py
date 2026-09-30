@@ -175,16 +175,110 @@ class WorkspaceTests(unittest.TestCase):
         )
         self.assertEqual(ctf["profile"], "ctf-replacement")
 
-        android = self.manager.route(
-            kind="android",
-            target="./inbox/continuous.apk",
-            slug="continuous-android",
+    def test_continuous_mode_requires_a_matching_workflow_profile(self) -> None:
+        self.manager.initialize()
+        cases = {
+            "web-assessment": "./inbox/assessment.zip",
+            "android-assessment": "./inbox/product.apk",
+            "reverse-analysis": "./inbox/library.so",
+            "lab": "./fixture.zip",
+        }
+        for kind, target in cases.items():
+            with self.subTest(kind=kind):
+                slug = f"continuous-{kind}"
+                with self.assertRaisesRegex(
+                    ValidationError, "no continuous workflow profile"
+                ):
+                    self.manager.route(
+                        kind=kind,
+                        target=target,
+                        slug=slug,
+                        platform=None,
+                        mode="continuous",
+                    )
+                self.assertFalse((self.paths.engagements_root / slug).exists())
+
+        web = self.manager.route(
+            kind="web",
+            target="https://continuous.invalid",
+            slug="continuous-web",
             platform=None,
             mode="continuous",
         )
-        android_prompt = Path(android["prompt_file"]).read_text()
-        self.assertIn("mode=continuous", android_prompt)
-        self.assertIn("A status update is not a terminal action", android_prompt)
+        self.assertEqual(web["profile"], "bb-continuous")
+        self.assertTrue(Path(web["prompt_file"]).is_file())
+
+    def test_route_resumes_engagement_across_target_normalization(self) -> None:
+        self.manager.initialize()
+        first = self.manager.route(
+            kind="web",
+            target="https://Example.com/a",
+            slug=None,
+            platform=None,
+            mode=None,
+        )
+        self.assertTrue(first["created"])
+        self.assertEqual(Path(first["engagement"]).name, "example-com-bb")
+
+        for variant in (
+            "https://example.com/a?query=1",
+            "https://EXAMPLE.com/a#fragment",
+            "https://user@example.com/a",
+        ):
+            with self.subTest(target=variant):
+                resumed = self.manager.route(
+                    kind=None,
+                    target=variant,
+                    slug=None,
+                    platform=None,
+                    mode=None,
+                )
+                self.assertFalse(resumed["created"])
+                self.assertEqual(resumed["engagement"], first["engagement"])
+
+        engagements = sorted(
+            path.name
+            for path in self.paths.engagements_root.iterdir()
+            if path.is_dir() and not path.name.startswith(".")
+        )
+        self.assertEqual(engagements, ["example-com-bb"])
+
+    def test_route_rejects_target_outside_resolved_engagement_scope(self) -> None:
+        self.manager.initialize()
+        created = self.manager.route(
+            kind="web",
+            target="https://example.invalid",
+            slug="conflict-slug",
+            platform=None,
+            mode=None,
+        )
+        matching = self.manager.route(
+            kind=None,
+            target="https://EXAMPLE.invalid",
+            slug="conflict-slug",
+            platform=None,
+            mode=None,
+        )
+        self.assertFalse(matching["created"])
+        self.assertEqual(matching["engagement"], created["engagement"])
+
+        with self.assertRaisesRegex(
+            ValidationError, "conflicts with the recorded scope"
+        ):
+            self.manager.route(
+                kind=None,
+                target="https://other.invalid",
+                slug="conflict-slug",
+                platform=None,
+                mode=None,
+            )
+        self.assertFalse((self.paths.engagements_root / "other-invalid-bb").exists())
+        self.assertEqual(
+            EngagementManager(self.paths).validate(Path(created["engagement"]))[
+                "scope"
+            ]["in_scope"][0]["pattern"],
+            "https://example.invalid/",
+        )
 
     def test_browser_js_route_uses_analysis_workflow_without_bb_budget(self) -> None:
         self.manager.initialize()
@@ -218,7 +312,7 @@ class WorkspaceTests(unittest.TestCase):
             target="./inbox/product.apk",
             slug="product-android",
             platform=None,
-            mode="continuous",
+            mode="interactive",
         )
         analysis = self.manager.route(
             kind="android-analysis",

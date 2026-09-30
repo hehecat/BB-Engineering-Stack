@@ -1,4 +1,4 @@
-notes/*.local.md
+*.local.md
 *.local.env
 *.local.json
 *.jwt

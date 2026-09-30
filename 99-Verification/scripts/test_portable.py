@@ -7,6 +7,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import yaml
+
 ROOT = Path(__file__).resolve().parents[2]
 os.environ["BB_STACK_ROOT"] = str(ROOT)
 
@@ -120,6 +122,37 @@ class PortableTests(unittest.TestCase):
         self.bundle.write_text(json.dumps(document), encoding="utf-8")
         with self.assertRaises(ValidationError):
             PortableManager(self.source).inspect(self.bundle)
+
+    def test_invalid_engagement_checkpoint_is_reported_not_raised(self) -> None:
+        state_path = self.source.engagements_root / "portable-ctf/engagement.yaml"
+        original = state_path.read_text(encoding="utf-8")
+        for checkpoint, expected in (
+            ("SESSION-HANDOFF.md", "checkpoint"),
+            ({}, "handoff_file"),
+        ):
+            with self.subTest(checkpoint=checkpoint):
+                state = yaml.safe_load(original)
+                state["checkpoint"] = checkpoint
+                state_path.write_text(yaml.safe_dump(state), encoding="utf-8")
+
+                exported = PortableManager(self.source).export(self.bundle, force=True)
+
+                self.assertEqual(exported["engagement_count"], 0)
+                self.assertEqual(
+                    [item["path"] for item in exported["skipped_engagements"]],
+                    [str(self.source.engagements_root / "portable-ctf")],
+                )
+                error = exported["skipped_engagements"][0]["error"]
+                self.assertIn(expected, error)
+                document = json.loads(self.bundle.read_text(encoding="utf-8"))
+                self.assertEqual(document["engagements"], [])
+
+    def test_export_rejects_invalid_configured_url(self) -> None:
+        self.source_config.path.write_text(
+            'BB_HTTP_PROXY="ftp://proxy.invalid"\n', encoding="utf-8"
+        )
+        with self.assertRaisesRegex(ValidationError, "BB_HTTP_PROXY"):
+            PortableManager(self.source).export(self.bundle)
 
 
 if __name__ == "__main__":

@@ -205,7 +205,11 @@ After remediation, verify:
 
 ### Custom Templates
 
-Create custom report templates in `assets/report_templates/`:
+The vendored `scripts/report_generator.py` renders only its built-in templates
+(`--input`, `--format`, `--output` / `--output-dir`); it takes no template
+override. For custom branding, post-process its HTML output, or reuse the same
+string-template shape below in your own renderer and keep those files inside the
+engagement workspace:
 
 ```python
 # Custom HTML template
@@ -229,10 +233,11 @@ custom_template = """
 ### Branding
 
 ```python
-# Add company branding
+# Add company branding (applied by your own post-processing step; the vendored
+# generator has no branding option and no bundled logo asset)
 report_config = {
     'company_name': 'Acme Corp',
-    'company_logo': 'assets/logo.png',
+    'company_logo': '<path-to-your-logo>.png',
     'color_scheme': {
         'primary': '#0066cc',
         'critical': '#d32f2f',
@@ -443,13 +448,12 @@ python3 scripts/report_generator.py \
   --format html \
   --output report.html
 
-# With custom branding
+# With custom branding: render the built-in HTML, then post-process it
 python3 scripts/report_generator.py \
   --input scan_results.json \
   --format html \
-  --template assets/report_templates/custom.html \
-  --branding config/branding.yaml \
-  --output branded_report.html
+  --output report.html
+# then apply your branding step to report.html
 ```
 
 ## Best Practices

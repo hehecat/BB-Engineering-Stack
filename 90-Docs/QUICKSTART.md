@@ -133,15 +133,23 @@ source "$HOME/.config/bb-stack/env.sh"
 bb-stack status --profile web --strict --probe-mcp
 
 bb-stack new example-bb https://example.com \
-  --workflow bug-bounty --platform generic-vdp --mode interactive
+  --workflow bug-bounty --platform generic-vdp --mode interactive \
+  --authorization-status user-asserted \
+  --authorization-source "user statement: own program"
 bb-recon run example-bb --json
 bb-stack launch --profile bb-interactive --engagement example-bb
 ```
 
+A protected Bug Bounty or assessment Engagement without a recorded basis stays
+`pending`, and both `bb-recon run` and `bb-stack launch` refuse to start it.
+Record the basis at creation with `--authorization-status user-asserted
+--authorization-source ...`, or later with `bb-stack engagement authorize
+example-bb --status user-asserted --source "user statement: own program"`.
+
 For HackerOne, run `bb-stack configure --h1-username NAME`, create with
-`--platform hackerone`, then copy current written program rules into
-`notes/SCOPE.md` before testing. For Butian use `--platform butian`; it does not
-inherit HackerOne identity or report fields.
+`--platform hackerone` and the same authorization flags, then copy current
+written program rules into `notes/SCOPE.md` before testing. For Butian use
+`--platform butian`; it does not inherit HackerOne identity or report fields.
 
 For a continuous engagement, create it with `--mode continuous`, inspect it
 with `bb-stack status --profile web --engagement example-bb`, and launch
@@ -232,7 +240,10 @@ no marker; provide the correct Profile once:
 bb-stack update --profile minimal
 ```
 
-Use `--dry-run` for a read-only remote comparison and planned refresh. Use
+Use `--dry-run` for a read-only remote comparison: it reads the remote branch
+with `git ls-remote` and reports `would_refresh` or `remote_differs` without
+fetching, so its `relationship` is `current` or `unknown_without_fetch` and its
+`bootstrap` field stays `null`; it returns no refresh plan. Use
 `--skip-tools`, `--skip-node`, `--skip-skills`, or `--with-optional` with the
 same meanings as Bootstrap. Non-refreshing `--check` and `--dry-run` tolerate local
 source edits. A real update stops before fetching when tracked source files are dirty,

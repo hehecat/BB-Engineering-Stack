@@ -11,4 +11,5 @@
 - Keep internal finding IDs, credentials, complete tokens, unrelated recon, and
   absolute operator paths out of submissions.
 - Every evidence path named in a report must exist inside that package.
-- Load validation and reporting Skills only during SHIP.
+- Load validation and reporting Skills during SHIP, or earlier when the user
+  explicitly requests delivery.

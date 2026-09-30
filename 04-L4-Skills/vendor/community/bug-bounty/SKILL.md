@@ -50,7 +50,7 @@ Full pipeline: Recon -> Learn -> Hunt -> Validate -> Report. One skill for every
 16. **TWO-EYE APPROACH** -- combine systematic testing (checklist) with anomaly detection (watch for unexpected behavior)
 17. **T-SHAPED KNOWLEDGE** -- go DEEP in one area and BROAD across everything else
 
-> **For the full hunting methodology** — 5-phase non-linear workflow, developer psychology framework, session discipline, tool routing by phase, and Wide/Deep route selection — see **`skills/bb-methodology/SKILL.md`**.
+> **For the full hunting methodology** — 5-phase non-linear workflow, developer psychology framework, session discipline, tool routing by phase, and Wide/Deep route selection — see the **`bb-methodology`** Skill.
 
 ---
 
@@ -59,35 +59,37 @@ Full pipeline: Recon -> Learn -> Hunt -> Validate -> Report. One skill for every
 Anonymous recon misses the bugs that pay most. IDOR, BOLA, mass-assignment,
 privilege escalation, auth bypass, SSRF behind login, and most LLM/agent
 bugs are invisible until you log in. Load auth **once** at session start and
-every downstream tool (httpx, katana, ffuf, nuclei, dalfox, the SQLi / SSTI
-/ upload PoC verifiers) sends those headers automatically.
+apply that same identity to every downstream command.
+
+This Skill ships no harness: the upstream `hunt.py` wrapper was never vendored,
+so carry the identity explicitly with each tool's own header flag.
 
 ```bash
-# Pick ONE of these and run hunt.py normally:
-python3 tools/hunt.py --target T --cookie 'session=eyJabc...'
-python3 tools/hunt.py --target T --bearer 'eyJhbGciOi...'
-python3 tools/hunt.py --target T --auth-file .private/T.json
+# Capture the identity once per session, then reuse it:
+export BB_AUTH_COOKIE='session=eyJabc...'
+export BB_AUTH_BEARER='eyJhbGciOi...'
 
-# Or via env (persists for the shell):
-export BBHUNT_COOKIE='session=eyJabc...'
-python3 tools/hunt.py --target T
+ffuf   -u https://T/FUZZ -w <list> -H "Cookie: $BB_AUTH_COOKIE"
+nuclei -u https://T -H "Cookie: $BB_AUTH_COOKIE"
+curl -s -H "Authorization: Bearer $BB_AUTH_BEARER" https://T/api/me
 ```
 
-**For IDOR / BOLA hunts**, load two sessions and diff behavior:
+**For IDOR / BOLA hunts**, replay the *same* request as two identities and
+diff the responses — anything that differs by identity is a strong lead:
 
 ```bash
-python3 tools/hunt.py --target T --auth-file .private/T-user-a.json
-python3 tools/hunt.py --target T --auth-file .private/T-user-b.json
-# Audit log entries carry different session_id hashes → diff which
-# endpoints behaved differently per identity.
+curl -s -H "Cookie: $BB_AUTH_USER_A" https://T/api/users/1
+curl -s -H "Cookie: $BB_AUTH_USER_B" https://T/api/users/1
 ```
 
-**Safety**: cookies/tokens never appear in logs, hunt-memory, or `repr()`.
-Only a 12-char `session_id` hash is recorded. `.private/` is gitignored.
-MFA-skip and SAML signature-stripping probes deliberately stay anonymous —
-that's the attack they're checking for.
+**Safety**: cookies/tokens never get committed, logged, or pasted into reports.
+Keep the material in the engagement's gitignored local notes (see
+`03-L3-Engagement-State/templates/notes/LAB-CREDS.local.md.example`, rendered
+per engagement as `notes/LAB-CREDS.local.md` at mode 600) and reference it by
+file path, never by value. MFA-skip and SAML signature-stripping probes
+deliberately stay anonymous — that's the attack they're checking for.
 
-Full guide: `docs/auth-sessions.md`. Template: `docs/auth.example.json`.
+Full policy: `90-Docs/SECURITY-AND-SECRETS.md`.
 
 ---
 

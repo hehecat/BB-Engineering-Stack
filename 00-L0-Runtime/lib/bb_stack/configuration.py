@@ -24,10 +24,47 @@ MACHINE_CONFIG_DEFAULTS = {
 }
 MACHINE_CONFIG_KEYS = tuple(MACHINE_CONFIG_DEFAULTS)
 _ASSIGNMENT = re.compile(r"^\s*(?:export\s+)?([A-Z_][A-Z0-9_]*)=(.*)$")
+# Literal right-hand side: one wrapping quote pair is stripped, nothing else.
+_LITERAL_RHS = re.compile(r"'([^']*)'|\"([^\"]*)\"|(.*)", re.S)
+
+
+def parse_literal_rhs(rhs: str) -> str:
+    """Return the literal value of a config.env right-hand side.
+
+    The right-hand side is never shell-evaluated: comments, expansions and
+    escapes are preserved verbatim.  Only a single matching pair of wrapping
+    quotes is stripped.
+    """
+    match = _LITERAL_RHS.fullmatch(rhs)
+    for group in match.groups() if match else (rhs,):
+        if group is not None:
+            return group
+    return rhs
+
+
+def serialize_literal(value: str) -> str:
+    """Encode *value* so ``parse_literal_rhs(serialize_literal(v)) == v``.
+
+    ``shlex.quote`` is preferred (it produces the canonical shell form), but
+    it is only used when its output round-trips through the literal parser —
+    e.g. a value containing an apostrophe expands to ``'"'"'`` which a literal
+    reader would keep verbatim.  Otherwise the value is emitted raw, wrapping
+    it in the opposite quote style only when it otherwise looks quoted.
+    """
+    if "\n" in value:
+        raise ValidationError("config.env values must not contain newlines")
+    quoted = shlex.quote(value)
+    if parse_literal_rhs(quoted) == value:
+        return quoted
+    if value.startswith("'") and value.endswith("'") and "'" not in value[1:-1]:
+        return f'"{value}"'
+    if value.startswith('"') and value.endswith('"') and '"' not in value[1:-1]:
+        return f"'{value}'"
+    return value
 
 
 def load_machine_config(path: Path) -> tuple[dict[str, str], list[str]]:
-    """Parse literal shell assignments without evaluating shell syntax."""
+    """Parse literal KEY=value assignments without evaluating shell syntax."""
     if not path.is_file():
         return {}, []
     values: dict[str, str] = {}
@@ -40,15 +77,7 @@ def load_machine_config(path: Path) -> tuple[dict[str, str], list[str]]:
         if not match:
             invalid.append(f"line {number}")
             continue
-        try:
-            parsed = shlex.split(match.group(2), comments=True, posix=True)
-        except ValueError:
-            invalid.append(f"line {number}")
-            continue
-        if len(parsed) > 1:
-            invalid.append(f"line {number}")
-            continue
-        values[match.group(1)] = parsed[0] if parsed else ""
+        values[match.group(1)] = parse_literal_rhs(match.group(2))
     return values, invalid
 
 
@@ -117,10 +146,13 @@ class ConfigurationManager:
         known.update({key: values[key] for key in MACHINE_CONFIG_KEYS if key in values})
         unknown = {key: value for key, value in values.items() if key not in known}
         lines = [
-            "# Managed by bb-stack configure. Values are parsed as literals.",
+            "# Managed by bb-stack configure.",
+            "# Values are read literally: one wrapping quote pair is stripped, nothing else.",
             "# Store mailbox credentials and engagement secrets in their dedicated locations.",
         ]
-        lines.extend(f"{key}={shlex.quote(known[key])}" for key in MACHINE_CONFIG_KEYS)
+        lines.extend(
+            f"{key}={serialize_literal(known[key])}" for key in MACHINE_CONFIG_KEYS
+        )
         if unknown:
             lines.extend(
                 [
@@ -129,28 +161,53 @@ class ConfigurationManager:
                 ]
             )
             lines.extend(
-                f"{key}={shlex.quote(unknown[key])}" for key in sorted(unknown)
+                f"{key}={serialize_literal(unknown[key])}" for key in sorted(unknown)
             )
         atomic_write(self.path, "\n".join(lines) + "\n", 0o600)
 
+    # Keys shared with portable documents (see 90-Docs/CONFIGURATION.md).
+    PORTABLE_CONFIG_KEYS = (
+        "BB_PROXY_MODE",
+        "BB_HTTP_PROXY",
+        "BB_SOCKS_PROXY",
+        "BB_H1_USERNAME",
+        "BB_FILECODEBOX_URL",
+        "BB_AGENT_LANGUAGE",
+        "BB_NPM_REGISTRY",
+    )
+    _PORTABLE_ORIGIN_SCHEMES = {
+        "BB_HTTP_PROXY": frozenset({"http", "https"}),
+        "BB_SOCKS_PROXY": frozenset({"socks5", "socks5h"}),
+        "BB_FILECODEBOX_URL": frozenset({"http", "https"}),
+    }
+
+    def portable_config(self, values: dict[str, str] | None = None) -> dict[str, Any]:
+        """Project machine configuration onto the portable seven-key subset.
+
+        URL-typed keys are normalized to their origin; an invalid value is an
+        error rather than a ``null`` placeholder.
+        """
+        resolved = self.effective() if values is None else values
+        projected: dict[str, Any] = {}
+        for key in self.PORTABLE_CONFIG_KEYS:
+            value = resolved.get(key, "")
+            schemes = self._PORTABLE_ORIGIN_SCHEMES.get(key)
+            if schemes is None:
+                projected[key] = value
+                continue
+            origin = url_origin(value, set(schemes))
+            if origin is None:
+                raise ValidationError(f"{key} is not a valid portable value")
+            projected[key] = origin
+        return projected
+
     def snapshot(self) -> dict[str, Any]:
         values = self.effective()
+        projected = self.portable_config(values)
+        projected["BB_EXTRA_PATH"] = values["BB_EXTRA_PATH"]
         return {
             "path": str(self.path),
-            "values": {
-                "BB_PROXY_MODE": values["BB_PROXY_MODE"],
-                "BB_HTTP_PROXY": url_origin(values["BB_HTTP_PROXY"], {"http", "https"}),
-                "BB_SOCKS_PROXY": url_origin(
-                    values["BB_SOCKS_PROXY"], {"socks5", "socks5h"}
-                ),
-                "BB_H1_USERNAME": values["BB_H1_USERNAME"],
-                "BB_FILECODEBOX_URL": url_origin(
-                    values["BB_FILECODEBOX_URL"], {"http", "https"}
-                ),
-                "BB_AGENT_LANGUAGE": values["BB_AGENT_LANGUAGE"],
-                "BB_NPM_REGISTRY": values["BB_NPM_REGISTRY"],
-                "BB_EXTRA_PATH": values["BB_EXTRA_PATH"],
-            },
+            "values": projected,
             "unknown_keys": sorted(set(self.read()) - set(MACHINE_CONFIG_KEYS)),
         }
 

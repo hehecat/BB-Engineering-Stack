@@ -154,6 +154,7 @@ $BB_WORK_ROOT/
   engagements/
     <slug>/                     # 每个目标或分析任务的独立状态和产物
 $BB_CONFIG_HOME/                # 当前机器的非仓库配置和生成状态
+$BB_DATA_ROOT/                  # 固定版本的字典和 payload 仓库
 ```
 
 目标数据不得写入 `$BB_STACK_ROOT`。切换电脑时分别迁移源码、机器配置意图和
@@ -183,6 +184,7 @@ Prompt 决定任务边界和连续性，Skill 提供专项方法，MCP/CLI 负�
 - [Engagement 运维](90-Docs/OPERATIONS.md)
 - [切换电脑](90-Docs/MIGRATION.md)
 - [Skill、MCP 和工具更新](90-Docs/UPDATES.md)
+- [数据资产](90-Docs/DATA-ASSETS.md)
 - [验证与真实 Claude 行为测试](90-Docs/VERIFICATION.md)
 - [Keysmith 可选集成](90-Docs/KEYSMITH.md)
 
@@ -190,6 +192,7 @@ Prompt 决定任务边界和连续性，Skill 提供专项方法，MCP/CLI 负�
 
 ```bash
 ./99-Verification/scripts/run-all.sh
+./99-Verification/scripts/audit-dependencies.sh
 ./99-Verification/scripts/fresh-machine.sh
 ```
 

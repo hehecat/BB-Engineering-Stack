@@ -354,6 +354,33 @@
           }
         }
       }
+    },
+    {
+      "if": {
+        "required": ["authorization"],
+        "properties": {
+          "authorization": {
+            "required": ["status"],
+            "properties": {
+              "status": {
+                "enum": ["user-asserted", "verified"]
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "authorization": {
+            "properties": {
+              "source": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        }
+      }
     }
   ]
 }

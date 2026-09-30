@@ -1,6 +1,7 @@
 # Local Test Credentials
 
-Render this template as `LAB-CREDS.local.md` with file mode 600. Local use only.
+Render this template as `notes/LAB-CREDS.local.md` with file mode 600. Local use
+only.
 Exclude the rendered file from commits, archives, reports, Prompt, screenshots,
 and chat.
 

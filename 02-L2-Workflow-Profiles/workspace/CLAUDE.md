@@ -33,9 +33,8 @@ Related assets remain candidates until written rules cover them.
 
 Environment, proxy, identity, mailbox, FileCodeBox delivery, managed data,
 update, and migration requests are stack operations, not Engagements. Inspect
-status, make
-and verify the machine-local change, then report it. Personal integrations
-remain optional.
+status, make and verify the machine-local change, then report it. Personal
+integrations remain optional.
 
 For a Stack version update, run `bb-stack update --check`, then
 `bb-stack update`. If the old installation has no saved Bootstrap Profile, run
@@ -104,8 +103,8 @@ Treat the returned `engagement` directory as the active working directory for
 all reads, commands, evidence, scripts, reports, and checkpoints. Run the
 returned repair commands yourself when required components are missing, then
 rerun the route. Diagnose and retry recoverable failures; ask only when an
-external prerequisite or unresolved local-file conflict blocks progress. Use
-Use the ordered `skill_route`; add only the specialist for the current lead. Keep
+external prerequisite or unresolved local-file conflict blocks progress. Use the
+ordered `skill_route`; add only the specialist for the current lead. Keep
 discovered assets as candidates until written Scope matches them. For protected
 work, confirm lifecycle is `active` and authorization is `user-asserted` or
 `verified`, recording the basis exactly as the user states it; a `DESCRIPTION`

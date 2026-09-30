@@ -6,6 +6,10 @@ minimum_runtime:
   node: "22"
   claude_code: "2.1"
 
+# Layer directories relative to this file. `runtime` and `global_prompt` are
+# read by the runtime and Prompt renderer. The remaining entries name layers
+# whose modules still hard-code their own location; they are the declared
+# source of truth for those lookups and must be kept in step with them.
 paths:
   runtime: .runtime
   global_prompt: 01-L1-Global-Prompt
@@ -17,6 +21,9 @@ paths:
   verification: 99-Verification
 
 defaults:
+  # Default L2 runtime Profile (`bb-stack launch`, `bb-stack eval agent`). The
+  # CLI default L5 capability Profile is the unique capability_profiles entry
+  # that selects this profile, so both axes stay consistent by construction.
   profile: ctf-quick
   workflow_profiles:
     bug-bounty: bb-interactive
@@ -56,5 +63,5 @@ registries:
 
 keysmith:
   repository: https://github.com/Jia-Ethan/claude-keysmith.git
-  revision: acb9d0b7ade07415c5e50117d2a55cc50a0be64e
+  revision: b3d8cc25331e8bbf2b9ccfdbdb658ee01f351663
   cache_dir: "${BB_CONFIG_HOME}/vendor/claude-keysmith"

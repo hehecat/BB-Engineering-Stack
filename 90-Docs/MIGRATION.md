@@ -78,5 +78,19 @@ Add `--yes` to copy into
 excludes Git internals, dependency trees, cookies, and common token files. It
 never moves or deletes the source.
 
-The legacy command copies into a new Engagement and never moves or deletes the
-source. After import, validate the Engagement and resume from HANDOFF.
+`engagement migrate` accepts no authorization or mode flags; it creates the
+Engagement through the same path as `bb-stack new` with mode `interactive`. A
+protected workflow (`bug-bounty` or `assessment`) therefore imports as
+`pending`, which blocks `bb-recon run` and `bb-stack launch` until a basis is
+recorded. Record it before any target work:
+
+```bash
+bb-stack engagement authorize NEW-SLUG --status user-asserted \
+  --source "user statement: own program"
+```
+
+Then validate the Engagement and resume from HANDOFF:
+
+```bash
+bb-stack engagement validate NEW-SLUG
+```

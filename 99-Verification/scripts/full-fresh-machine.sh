@@ -93,6 +93,7 @@ PROFILES=(
   assessment-cloud
   assessment-llm
   assessment-source
+  assessment-reverse
   analysis-android
   analysis-reverse
 )
@@ -128,12 +129,13 @@ bb-stack validate --json >"$REPORT/validate.json"
 bb-stack eval contracts --json >"$REPORT/contracts.json"
 bb-stack workspace status --json >"$REPORT/workspace.json"
 
-python3 - "$REPORT" <<'PY'
+python3 - "$REPORT" "$ROOT" <<'PY'
 import json
 from pathlib import Path
 import sys
 
 report = Path(sys.argv[1])
+profile_dir = Path(sys.argv[2]) / '02-L2-Workflow-Profiles' / 'profiles'
 for path in sorted(report.glob('doctor-*.json')):
     data = json.loads(path.read_text(encoding='utf-8'))
     assert data['ready'], path
@@ -145,7 +147,12 @@ assert workspace['ready']
 assert workspace['mcp_servers'] == []
 contracts = json.loads((report / 'contracts.json').read_text(encoding='utf-8'))
 assert contracts['passed']
-assert contracts['profile_count'] == 17
+profiles_on_disk = sorted(path.stem for path in profile_dir.glob('*.yaml'))
+assert profiles_on_disk, f'no L2 profiles found under {profile_dir}'
+assert contracts['profile_count'] == len(profiles_on_disk), (
+    f"contracts profile_count {contracts['profile_count']} != "
+    f"{len(profiles_on_disk)} L2 profiles on disk"
+)
 PY
 
 ROUTES=(

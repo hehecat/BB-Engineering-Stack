@@ -43,7 +43,8 @@ not apply to standalone CTF or local lab workflows.
 
 - `EXPLORE`: map and rank in-scope surface.
 - `PROVE`: reproduce or kill one lead and preserve evidence.
-- `SHIP`: validate, redact, and package only on request.
+- `SHIP`: validate, redact, and package when the work reaches this phase or the
+  user asks for delivery.
 
 For material progress record surface, changed input, identity context, baseline
 versus test delta, proof level, observed versus inferred claim basis,

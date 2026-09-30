@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import inspect
+import json
 import shutil
 import subprocess
 import time
@@ -192,6 +193,11 @@ WEB_BEHAVIOR_EXPECTED = {
 }
 
 WEB_SAFE_SECRET_HANDLING = {"local-reference", "redacted-inline"}
+
+# Claude Code permission rules use the ``//<path>`` form for absolute paths.
+# The evaluated Agent only keeps the Read and Write tools, so denying reads of the
+# stack tree is what keeps the scoring harness out of its reach.
+ISOLATION_DENY_TEMPLATES = ("Read(//{root}/**)", "Edit(//{root}/**)")
 
 BROWSER_JS_DECISION_SCENARIO = """# Browser JavaScript Decision Scenario
 
@@ -404,6 +410,8 @@ class EvaluationManager:
                 "low",
                 "--max-budget-usd",
                 str(max_budget_usd),
+                "--settings",
+                json.dumps(self._agent_isolation_settings()),
             ]
         )
         if model:
@@ -718,6 +726,23 @@ class EvaluationManager:
             "BB_AGENT_EVAL_DONE."
         )
 
+    def _agent_isolation_settings(self) -> dict[str, Any]:
+        """Deny the evaluated Agent read access to the harness that scores it.
+
+        The evaluation subprocess keeps only the Read and Write tools, so the
+        expected decisions stored in this module stay transcribable unless the
+        stack tree itself is denied. Rules use Claude Code's ``//<path>`` form,
+        which anchors at the filesystem root instead of the working directory.
+        """
+        root = self.paths.root.resolve().as_posix().lstrip("/")
+        return {
+            "permissions": {
+                "deny": [
+                    template.format(root=root) for template in ISOLATION_DENY_TEMPLATES
+                ],
+            }
+        }
+
     def contract_sha256(self, profile: str) -> str:
         definition = self.profile_registry.load(profile)
         capability_profile = str(definition["l5_profile"])
@@ -727,8 +752,13 @@ class EvaluationManager:
             self.result_schema.read_text(encoding="utf-8"),
             self._agent_prompt(capability_profile),
             SCENARIOS[capability_profile],
+            repr(STATE_FILES),
+            repr(ROUTE_SUFFIXES),
+            repr(WEB_SAFE_SECRET_HANDLING),
+            repr(ISOLATION_DENY_TEMPLATES),
             inspect.getsource(self._prepare_fixture),
             inspect.getsource(self._score_agent),
+            inspect.getsource(self._skill_route),
         ]
         if capability_profile == "web":
             values.extend([WEB_DECISION_SCENARIO, repr(WEB_BEHAVIOR_EXPECTED)])

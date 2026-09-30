@@ -11,7 +11,7 @@ platforms:
     report_language: operator-defined
     request_identification: program-defined
     identity_value_from: null
-    delivery_overlay: assessment-report
+    delivery_overlay: authorized-assessment
   hackerone:
     workflows: [bug-bounty]
     report_language: en
@@ -29,16 +29,16 @@ platforms:
     report_language: challenge-defined
     request_identification: disabled
     identity_value_from: null
-    delivery_overlay: ctf-writeup
+    delivery_overlay: standalone-ctf
   local-lab:
     workflows: [lab]
     report_language: operator-defined
     request_identification: disabled
     identity_value_from: null
-    delivery_overlay: lab-notes
+    delivery_overlay: local-lab
   standalone-analysis:
     workflows: [analysis]
     report_language: operator-defined
     request_identification: disabled
     identity_value_from: null
-    delivery_overlay: analysis-deliverable
+    delivery_overlay: standalone-analysis

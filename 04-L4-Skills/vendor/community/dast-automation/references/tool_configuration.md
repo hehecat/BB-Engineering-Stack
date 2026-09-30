@@ -277,11 +277,8 @@ apt-get install mailutils
 # Configure in continuous_dast.sh:
 export ALERT_EMAIL="security@example.com"
 
-# Or use dedicated email service:
-python3 scripts/send_alert.py \
-  --to security@example.com \
-  --subject "DAST Findings" \
-  --report results/report.json
+# Or hand off to your own alerting script/hook; no alert script is vendored
+# with this Skill.
 ```
 
 ### Slack Integration

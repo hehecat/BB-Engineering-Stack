@@ -12,9 +12,9 @@ from urllib.parse import urlparse
 from . import __version__
 from .capabilities import CapabilityRegistry
 from .configuration import ConfigurationManager
-from .engagement import AUTHORIZED_STATUSES, EngagementManager
+from .engagement import AUTHORIZED_STATUSES, EngagementManager, normalize_target
 from .errors import StackError, ValidationError
-from .io import atomic_write, dump_json, dump_yaml, load_json
+from .io import atomic_write, dump_json, load_json
 from .paths import StackPaths
 from .profiles import ProfileRegistry
 from .skills import SkillRegistry
@@ -211,6 +211,22 @@ ROUTES: dict[str, dict[str, Any]] = {
 }
 
 
+def _target_key(value: str) -> str:
+    """Canonical comparison key for a scope pattern or a route target."""
+    try:
+        asset = normalize_target(value)[0]
+    except ValidationError:
+        return value
+    pattern = asset["pattern"]
+    if asset["type"] in {"host", "domain", "cidr", "app-id"}:
+        return pattern.lower()
+    return pattern
+
+
+def _scope_target_keys(state: dict[str, Any]) -> set[str]:
+    return {_target_key(str(item["pattern"])) for item in state["scope"]["in_scope"]}
+
+
 class WorkspaceManager:
     def __init__(self, paths: StackPaths):
         self.paths = paths
@@ -382,6 +398,13 @@ class WorkspaceManager:
             if matches:
                 root, state = matches[0]
         if state is not None:
+            if target is not None and _target_key(target) not in _scope_target_keys(
+                state
+            ):
+                raise ValidationError(
+                    f"target {target} conflicts with the recorded scope of "
+                    f"engagement {state['slug']}"
+                )
             if authorization_status or authorization_source:
                 state = manager.authorize(
                     root,
@@ -405,9 +428,7 @@ class WorkspaceManager:
                 )
             kind = resolved_kind
             if stored_kind is None:
-                state["routing"] = {"kind": kind}
-                dump_yaml(root / "engagement.yaml", state)
-                state = manager.validate(root)
+                state = manager.set_route_kind(root, kind)
         else:
             if target is None:
                 raise ValidationError("a new route requires --target")
@@ -416,6 +437,9 @@ class WorkspaceManager:
             route = ROUTES[kind]
             selected_platform = platform or route["platform"]
             selected_mode = mode or "interactive"
+            # Reject a mode the kind has no workflow profile for before any
+            # directory or state file is created.
+            self._profile_for_route(kind, route, selected_mode)
             selected_slug = slug or self._available_slug(
                 self._slug_for(target, route["slug_suffix"])
             )
@@ -434,12 +458,7 @@ class WorkspaceManager:
 
         assert root is not None and state is not None and kind is not None
         route = ROUTES[kind]
-        if kind == "web" and state["mode"] == "continuous":
-            profile_name = "bb-continuous"
-        elif kind == "ctf-web" and state["mode"] == "continuous":
-            profile_name = "ctf-replacement"
-        else:
-            profile_name = route["profile"]
+        profile_name = self._profile_for_route(kind, route, state["mode"])
         rendered = ProfileRegistry(self.paths).render(
             profile_name, platform=state["platform"], engagement=root
         )
@@ -670,10 +689,33 @@ class WorkspaceManager:
                 "BB_WORK_ROOT must not equal, contain, or be contained by the stack source, config home, or Claude config"
             )
 
+    def _profile_for_route(
+        self, kind: str, route: dict[str, Any], mode: str
+    ) -> str:
+        """Resolve the L2 profile for a route, validating the requested mode."""
+        if mode != "continuous":
+            return str(route["profile"])
+        registry = ProfileRegistry(self.paths)
+        base = registry.load(str(route["profile"]))
+        matches = sorted(
+            name
+            for name in registry.names()
+            if (definition := registry.load(name))["default_mode"] == "continuous"
+            and definition["workflow"] == base["workflow"]
+            and definition["l5_profile"] == base["l5_profile"]
+        )
+        if len(matches) != 1:
+            raise ValidationError(
+                f"kind {kind} has no continuous workflow profile for "
+                f"{base['workflow']}/{base['l5_profile']}; use --mode interactive"
+            )
+        return matches[0]
+
     def _matching_engagements(
         self, manager: EngagementManager, target: str, kind: str | None
     ) -> list[tuple[Path, dict[str, Any]]]:
         expected_workflow = ROUTES[kind]["workflow"] if kind else None
+        key = _target_key(target)
         result: list[tuple[Path, dict[str, Any]]] = []
         for root in manager.roots():
             try:
@@ -682,8 +724,7 @@ class WorkspaceManager:
                 continue
             if expected_workflow and state["workflow"] != expected_workflow:
                 continue
-            patterns = {item["pattern"] for item in state["scope"]["in_scope"]}
-            if target in patterns:
+            if key in _scope_target_keys(state):
                 result.append((root, state))
         return result
 

@@ -351,68 +351,261 @@ class UpdateManagerTests(unittest.TestCase):
         failed = json.loads((candidate / "candidate.json").read_text(encoding="utf-8"))
         self.assertEqual(failed["state"], "validation-failed")
 
-    def test_approve_promote_and_rollback_dispatch(self) -> None:
-        candidate = Path(self.temporary.name) / "candidate-state"
-        candidate.mkdir()
-        manifest = {
-            "component": "fixture",
+    def validated_skill_candidate(self) -> tuple[Path, dict[str, object], str]:
+        candidate = Path(self.temporary.name) / "skill__fixture"
+        payload = candidate / "payload"
+        payload.mkdir(parents=True, exist_ok=True)
+        (payload / "SKILL.md").write_text(
+            "---\nname: fixture\ndescription: fixture\n---\n\nFixture.\n",
+            encoding="utf-8",
+        )
+        digest = SkillRegistry.tree_digest(payload)
+        manifest: dict[str, object] = {
+            "schema_version": 1,
+            "component": "skill.fixture",
+            "category": "skills",
+            "checker": "github-tree",
+            "current": "a" * 40,
+            "latest": "b" * 40,
+            "created_at": "2026-08-03T00:00:00Z",
             "state": "validated",
-            "latest": "b",
+            "candidate_digest": digest,
+            "validation": {"skill": "valid", "digest": digest},
+            "validated_at": "2026-08-03T00:00:00Z",
         }
-        component = self.component("github-tree", target="fixture")
+        dump_json(candidate / "candidate.json", manifest)
+        return candidate, manifest, digest
+
+    def component_fixture(self) -> dict[str, object]:
+        return self.component("github-tree", name="skill.fixture", target="fixture")
+
+    def test_candidate_schema_requires_validation_evidence(self) -> None:
+        candidate, manifest, _digest = self.validated_skill_candidate()
+        self.manager._load_candidate(candidate / "candidate.json")
+        for drop in ("validation", "validated_at"):
+            with self.subTest(drop=drop):
+                dump_json(
+                    candidate / "candidate.json",
+                    {key: value for key, value in manifest.items() if key != drop},
+                )
+                with self.assertRaises(ValidationError):
+                    self.manager._load_candidate(candidate / "candidate.json")
+        dump_json(
+            candidate / "candidate.json",
+            dict(manifest, validation={"skill": "valid"}),
+        )
+        with self.assertRaises(ValidationError):
+            self.manager._load_candidate(candidate / "candidate.json")
+
+    def test_approve_requires_validation_bound_to_the_content(self) -> None:
+        candidate, manifest, digest = self.validated_skill_candidate()
+        component = self.component_fixture()
+        dump_json(candidate / "candidate.json", manifest)
         with (
             patch.object(self.manager, "_candidate", return_value=candidate),
-            patch.object(self.manager, "_load_candidate", return_value=manifest),
             patch.object(
-                self.manager, "inventory", return_value={"fixture": component}
+                self.manager, "inventory", return_value={"skill.fixture": component}
+            ),
+            patch.object(self.manager, "_operation_lock", return_value=nullcontext()),
+        ):
+            approved = self.manager.approve("skill.fixture", reviewer="Reviewer")
+        self.assertEqual(approved["approval"]["content_digest"], digest)
+
+        for replacement, message in (
+            (
+                {key: value for key, value in manifest.items() if key != "validation"},
+                "no validation evidence",
+            ),
+            (dict(manifest, validation={"skill": "valid"}), "has no content digest"),
+            (
+                dict(manifest, validation={"skill": "valid", "digest": "0" * 64}),
+                "changed after validation",
+            ),
+        ):
+            with (
+                self.subTest(message=message),
+                patch.object(self.manager, "_candidate", return_value=candidate),
+                patch.object(self.manager, "_load_candidate", return_value=replacement),
+                patch.object(
+                    self.manager,
+                    "inventory",
+                    return_value={"skill.fixture": component},
+                ),
+                patch.object(
+                    self.manager, "_operation_lock", return_value=nullcontext()
+                ),
+                self.assertRaisesRegex(ValidationError, message),
+            ):
+                self.manager.approve("skill.fixture", reviewer="Reviewer")
+
+    def test_approve_rejects_content_swapped_after_validation(self) -> None:
+        candidate, _manifest, digest = self.validated_skill_candidate()
+        component = self.component_fixture()
+        (candidate / "payload" / "SKILL.md").write_text(
+            "---\nname: fixture\ndescription: swapped\n---\n\nSwapped.\n",
+            encoding="utf-8",
+        )
+        self.assertNotEqual(SkillRegistry.tree_digest(candidate / "payload"), digest)
+        with (
+            patch.object(self.manager, "_candidate", return_value=candidate),
+            patch.object(
+                self.manager, "inventory", return_value={"skill.fixture": component}
+            ),
+            patch.object(self.manager, "_operation_lock", return_value=nullcontext()),
+            self.assertRaisesRegex(ValidationError, "changed after validation"),
+        ):
+            self.manager.approve("skill.fixture", reviewer="Reviewer")
+
+    def test_promotion_rejects_contradictory_validation_record(self) -> None:
+        candidate, manifest, digest = self.validated_skill_candidate()
+        contradictory = dict(
+            manifest,
+            approval={
+                "reviewer": "Reviewer",
+                "approved_at": "2026-08-03T00:00:00Z",
+                "content_digest": digest,
+            },
+            validation={"skill": "valid", "digest": "0" * 64},
+        )
+        dump_json(candidate / "candidate.json", contradictory)
+        with (
+            patch.object(self.manager, "_candidate", return_value=candidate),
+            patch.object(
+                self.manager,
+                "inventory",
+                return_value={"skill.fixture": self.component_fixture()},
+            ),
+            self.assertRaisesRegex(ValidationError, "validation record does not match"),
+        ):
+            self.manager._promote_locked("skill.fixture")
+
+    def test_rollback_rejects_backups_of_other_components(self) -> None:
+        candidate, manifest, _digest = self.validated_skill_candidate()
+        manifest["state"] = "promoted"
+        component = self.component_fixture()
+        backup_root = Path(self.temporary.name) / "backups"
+        foreign = backup_root / "skill__other" / "20260803T000000Z"
+        (foreign / "payload").mkdir(parents=True)
+        outside = Path(self.temporary.name) / "outside-backup"
+        (outside / "payload").mkdir(parents=True)
+        for backup, message in (
+            (foreign, "does not belong to this component"),
+            (outside, "does not belong to this component"),
+        ):
+            with (
+                self.subTest(backup=str(backup)),
+                patch.object(self.manager, "_candidate", return_value=candidate),
+                patch.object(
+                    self.manager,
+                    "_load_candidate",
+                    return_value=dict(manifest, backup=str(backup)),
+                ),
+                patch.object(
+                    self.manager, "inventory", return_value={"skill.fixture": component}
+                ),
+                patch.object(self.manager, "_backup_root", return_value=backup_root),
+                self.assertRaisesRegex(ValidationError, message),
+            ):
+                self.manager._rollback_locked("skill.fixture")
+
+    def test_rollback_requires_backup_payload(self) -> None:
+        candidate, manifest, _digest = self.validated_skill_candidate()
+        manifest["state"] = "promoted"
+        backup_root = Path(self.temporary.name) / "backups"
+        empty = backup_root / "skill__fixture" / "20260803T000000Z"
+        empty.mkdir(parents=True)
+        with (
+            patch.object(self.manager, "_candidate", return_value=candidate),
+            patch.object(
+                self.manager,
+                "_load_candidate",
+                return_value=dict(manifest, backup=str(empty)),
             ),
             patch.object(
-                self.manager, "_candidate_content_digest", return_value="digest"
+                self.manager,
+                "inventory",
+                return_value={"skill.fixture": self.component_fixture()},
+            ),
+            patch.object(self.manager, "_backup_root", return_value=backup_root),
+            patch.object(self.manager, "_rollback_skill") as rollback,
+            self.assertRaisesRegex(ValidationError, "missing the Skill payload"),
+        ):
+            self.manager._rollback_locked("skill.fixture")
+        rollback.assert_not_called()
+
+        npm_component = self.component("npm", name="mcp.fixture", target="fixture")
+        npm_root = backup_root / "mcp__fixture"
+        (npm_root / "mcp__fixture" / "20260803T000000Z").mkdir(parents=True)
+        with (
+            patch.object(self.manager, "_candidate", return_value=candidate),
+            patch.object(
+                self.manager,
+                "_load_candidate",
+                return_value=dict(
+                    manifest,
+                    component="mcp.fixture",
+                    backup=str(npm_root / "mcp__fixture" / "20260803T000000Z"),
+                ),
+            ),
+            patch.object(
+                self.manager, "inventory", return_value={"mcp.fixture": npm_component}
+            ),
+            patch.object(self.manager, "_backup_root", return_value=npm_root),
+            patch.object(self.manager, "_rollback_npm") as rollback_npm,
+            self.assertRaisesRegex(ValidationError, "missing package.json"),
+        ):
+            self.manager._rollback_locked("mcp.fixture")
+        rollback_npm.assert_not_called()
+
+    def test_approve_promote_and_rollback_dispatch(self) -> None:
+        candidate, _manifest, digest = self.validated_skill_candidate()
+        component = self.component_fixture()
+        backup_root = Path(self.temporary.name) / "backups"
+        backup = backup_root / "skill__fixture" / "20260803T000000Z"
+        (backup / "payload").mkdir(parents=True)
+        with (
+            patch.object(self.manager, "_candidate", return_value=candidate),
+            patch.object(
+                self.manager, "inventory", return_value={"skill.fixture": component}
             ),
             patch.object(self.manager, "_operation_lock", return_value=nullcontext()),
         ):
             approved = self.manager.approve(
-                "fixture", reviewer="Reviewer", note="Looks good"
+                "skill.fixture", reviewer="Reviewer", note="Looks good"
             )
-        self.assertEqual(approved["approval"]["content_digest"], "digest")
+        self.assertEqual(approved["approval"]["content_digest"], digest)
+        self.assertEqual(approved["approval"]["reviewer"], "Reviewer")
+        self.assertEqual(approved["approval"]["note"], "Looks good")
 
-        manifest["approval"] = {"content_digest": "digest"}
-        backup = Path(self.temporary.name) / "backup"
-        backup.mkdir()
         with (
             patch.object(self.manager, "_candidate", return_value=candidate),
-            patch.object(self.manager, "_load_candidate", return_value=manifest),
             patch.object(
-                self.manager, "inventory", return_value={"fixture": component}
-            ),
-            patch.object(
-                self.manager, "_candidate_content_digest", return_value="digest"
+                self.manager, "inventory", return_value={"skill.fixture": component}
             ),
             patch.object(
                 self.manager,
                 "check",
                 return_value={
-                    "results": [{"status": "update-available", "latest": "b"}]
+                    "results": [{"status": "update-available", "latest": "b" * 40}]
                 },
             ),
             patch.object(self.manager, "_new_backup", return_value=backup),
             patch.object(self.manager, "_promote_skill") as promote,
         ):
-            promoted = self.manager._promote_locked("fixture")
+            promoted = self.manager._promote_locked("skill.fixture")
         self.assertEqual(promoted["state"], "promoted")
+        self.assertEqual(promoted["backup"], str(backup))
         promote.assert_called_once()
 
-        promoted["backup"] = str(backup)
         with (
             patch.object(self.manager, "_candidate", return_value=candidate),
-            patch.object(self.manager, "_load_candidate", return_value=promoted),
             patch.object(
-                self.manager, "inventory", return_value={"fixture": component}
+                self.manager, "inventory", return_value={"skill.fixture": component}
             ),
-            patch.object(self.manager, "_backup_root", return_value=backup.parent),
+            patch.object(self.manager, "_backup_root", return_value=backup_root),
             patch.object(self.manager, "_rollback_skill") as rollback,
         ):
-            rolled_back = self.manager._rollback_locked("fixture")
+            rolled_back = self.manager._rollback_locked("skill.fixture")
         self.assertEqual(rolled_back["state"], "rolled-back")
         rollback.assert_called_once()
 

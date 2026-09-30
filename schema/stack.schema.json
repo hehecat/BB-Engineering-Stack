@@ -23,8 +23,12 @@
   "properties": {
     "schema_version": {"const": 1},
     "name": {"const": "bb-engineering-stack"},
-    "version_file": {"$ref": "#/$defs/relativePath"},
+    "version_file": {
+      "description": "File under the stack root holding the released stack version. `bb-stack validate` compares it with bb_stack.__version__.",
+      "$ref": "#/$defs/relativePath"
+    },
     "minimum_runtime": {
+      "description": "Minimum tool versions. `bb-stack validate` and `bb-stack doctor` report each detected tool against these values.",
       "type": "object",
       "additionalProperties": false,
       "required": ["python", "node", "claude_code"],
@@ -35,16 +39,22 @@
       }
     },
     "paths": {
+      "description": "Layer directories relative to the stack root. `runtime` is the resolved runtime directory and `global_prompt` the Prompt fragment layer.",
       "type": "object",
       "minProperties": 1,
       "additionalProperties": {"$ref": "#/$defs/relativePath"}
     },
     "defaults": {
+      "description": "Default profile selection and machine paths.",
       "type": "object",
       "additionalProperties": false,
       "required": ["profile", "workflow_profiles", "capability_profiles", "work_root", "config_home", "claude_config_dir"],
       "properties": {
-        "profile": {"type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"},
+        "profile": {
+          "description": "Default L2 runtime profile. The CLI derives its default L5 capability profile from the unique `capability_profiles` entry selecting this profile.",
+          "type": "string",
+          "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+        },
         "workflow_profiles": {
           "type": "object",
           "required": ["bug-bounty", "assessment", "ctf", "lab", "analysis"],
@@ -86,6 +96,7 @@
       }
     },
     "registries": {
+      "description": "Registry locations relative to the stack root. `runtime_profiles`, `platforms`, `capability_profiles`, and `skill_profiles` are read by the profile registry.",
       "type": "object",
       "additionalProperties": false,
       "required": [

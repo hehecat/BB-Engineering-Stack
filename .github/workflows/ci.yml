@@ -36,9 +36,18 @@ jobs:
           uv pip install --python .venv/bin/python --require-hashes \
             -r 00-L0-Runtime/config/requirements.lock
           uv pip install --python .venv/bin/python --no-deps -e .
+      - name: Install node runtime dependencies
+        id: node_runtime
+        run: |
+          mkdir -p .runtime
+          cp 00-L0-Runtime/config/node-runtime/package.json \
+            00-L0-Runtime/config/node-runtime/package-lock.json .runtime/
+          npm ci --prefix .runtime --ignore-scripts --no-audit --no-fund \
+            --cache "$HOME/.cache/bb-stack-npm"
+          printf 'node_dir=%s\n' "$(dirname "$(command -v node)")" >> "$GITHUB_OUTPUT"
       - name: Run contracts as non-root
         env:
-          PATH: ${{ github.workspace }}/.venv/bin:/usr/local/bin:/usr/bin:/bin
+          PATH: ${{ github.workspace }}/.venv/bin:${{ steps.node_runtime.outputs.node_dir }}:/usr/local/bin:/usr/bin:/bin
         run: ./99-Verification/scripts/run-all.sh
       - name: Run Python static checks
         run: |

@@ -8,7 +8,9 @@ import os
 import re
 import shlex
 import shutil
+import signal
 import subprocess
+import time
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
@@ -60,6 +62,11 @@ SEARCH_PROVIDER_ENV = {
     "tavily": "TAVILY_API_KEY",
     "brave": "BRAVE_SEARCH_API_KEY",
 }
+# Providers are launched in their own session/process group so a timeout can
+# terminate grandchildren (puredns -> massdns, BBOT worker processes) instead
+# of only the direct child, which would keep sending packets.
+PROVIDER_KILL_GRACE_SECONDS = 5.0
+PROVIDER_KILL_POLL_SECONDS = 0.05
 
 
 def _now() -> str:
@@ -524,19 +531,43 @@ class ReconManager:
         ]
         if uses_attempt:
             attempt.unlink(missing_ok=True)
+        provider_stdin = self._provider_stdin(provider, recon_root)
         try:
-            completed = subprocess.run(
+            process = subprocess.Popen(
                 execution_command,
                 env=env,
                 text=True,
-                input=self._provider_stdin(provider, recon_root),
+                stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
+                start_new_session=True,
+            )
+        except OSError as error:
+            attempt.unlink(missing_ok=True)
+            atomic_write(log, f"{error.__class__.__name__}: {error}\n")
+            return {
+                "state": "failed",
+                "returncode": 1,
+                "artifact_usable": False,
+                "command": command,
+                "error_kind": "execution",
+                "error": str(error),
+            }
+        pgid = self._provider_pgid(process)
+        try:
+            stdout, stderr = process.communicate(
+                input=provider_stdin,
                 timeout=self._provider_timeout(provider),
-                check=False,
             )
         except subprocess.TimeoutExpired as error:
-            atomic_write(log, f"{error.__class__.__name__}: {error}\n")
+            kill_signals = self._terminate_provider_group(process, pgid)
+            self._close_provider_streams(process)
+            atomic_write(
+                log,
+                f"{error.__class__.__name__}: {error}\n"
+                f"process_group: {pgid}\n"
+                f"kill_signals: {', '.join(kill_signals) if kill_signals else 'none'}\n",
+            )
             if provider == "subfinder" and self._usable_line_output(attempt):
                 os.replace(attempt, output)
                 return {
@@ -556,24 +587,14 @@ class ReconManager:
                 "error_kind": "timeout",
                 "error": str(error),
             }
-        except OSError as error:
-            attempt.unlink(missing_ok=True)
-            atomic_write(log, f"{error.__class__.__name__}: {error}\n")
-            return {
-                "state": "failed",
-                "returncode": 1,
-                "artifact_usable": False,
-                "command": command,
-                "error_kind": "execution",
-                "error": str(error),
-            }
         atomic_write(
             log,
             f"command: {shlex.join(command)}\n"
-            f"exit_code: {completed.returncode}\n\n"
-            f"{completed.stderr}",
+            f"process_group: {pgid}\n"
+            f"exit_code: {process.returncode}\n\n"
+            f"{stderr}",
         )
-        if completed.returncode == 0 and provider == "bbot":
+        if process.returncode == 0 and provider == "bbot":
             output.unlink(missing_ok=True)
             if not self._archive_bbot_output(command, output):
                 error = "BBOT did not create output.json"
@@ -585,23 +606,92 @@ class ReconManager:
                     "command": command,
                     "error": error,
                 }
-        if completed.returncode == 0:
+        if process.returncode == 0:
             if uses_attempt and attempt.exists():
                 os.replace(attempt, output)
             elif uses_attempt:
-                atomic_write(output, completed.stdout)
+                atomic_write(output, stdout)
             elif provider != "bbot":
-                atomic_write(output, completed.stdout)
+                atomic_write(output, stdout)
         else:
             attempt.unlink(missing_ok=True)
-        error = completed.stderr.strip() or None
+        error = stderr.strip() or None
         return {
-            "state": "completed" if completed.returncode == 0 else "failed",
-            "returncode": completed.returncode,
-            "artifact_usable": completed.returncode == 0 and output.exists(),
+            "state": "completed" if process.returncode == 0 else "failed",
+            "returncode": process.returncode,
+            "artifact_usable": process.returncode == 0 and output.exists(),
             "command": command,
             "error": error,
         }
+
+    @staticmethod
+    def _provider_pgid(process: subprocess.Popen[str]) -> int:
+        """Return the process group id of a provider started in a new session."""
+        try:
+            return os.getpgid(process.pid)
+        except OSError:
+            # ``start_new_session=True`` makes the child its own group leader,
+            # so its pid is the group id even if the lookup raced its exit.
+            return process.pid
+
+    @classmethod
+    def _terminate_provider_group(
+        cls, process: subprocess.Popen[str], pgid: int
+    ) -> list[str]:
+        """SIGTERM then SIGKILL every process in the provider's group.
+
+        The provider is launched with ``start_new_session=True``, so its
+        grandchildren share ``pgid``; killing the group is what stops puredns'
+        massdns child and BBOT workers from outliving the stage timeout.
+        """
+        sent: list[str] = []
+        try:
+            os.killpg(pgid, signal.SIGTERM)
+        except ProcessLookupError:
+            cls._reap_provider(process)
+            return sent
+        sent.append("SIGTERM")
+        deadline = time.monotonic() + PROVIDER_KILL_GRACE_SECONDS
+        while True:
+            cls._reap_provider(process)
+            if not cls._provider_group_alive(pgid):
+                return sent
+            if time.monotonic() >= deadline:
+                break
+            time.sleep(PROVIDER_KILL_POLL_SECONDS)
+        try:
+            os.killpg(pgid, signal.SIGKILL)
+        except ProcessLookupError:
+            return sent
+        sent.append("SIGKILL")
+        cls._reap_provider(process, blocking=True)
+        return sent
+
+    @staticmethod
+    def _provider_group_alive(pgid: int) -> bool:
+        try:
+            os.killpg(pgid, 0)
+        except ProcessLookupError:
+            return False
+        except PermissionError:
+            return True
+        return True
+
+    @staticmethod
+    def _reap_provider(process: subprocess.Popen[str], *, blocking: bool = False) -> None:
+        if blocking:
+            process.wait()
+            return
+        # Reap a zombie child so it stops counting as a live group member while
+        # the grace period waits for surviving grandchildren.
+        process.poll()
+
+    @staticmethod
+    def _close_provider_streams(process: subprocess.Popen[str]) -> None:
+        """Release the provider pipes after a timeout aborted ``communicate``."""
+        for stream in (process.stdin, process.stdout, process.stderr):
+            if stream is not None:
+                stream.close()
 
     @staticmethod
     def _usable_line_output(path: Path) -> bool:

@@ -86,4 +86,4 @@ form in chat, STATUS, HANDOFF, and normal notes.
 After material progress, update the active lead/finding, `STATUS.md`,
 `SESSION-HANDOFF.md`, then `engagement.yaml`. In continuous mode immediately
 execute the next useful in-scope action. Use `triage-validation` and
-`report-writing` only in SHIP or when the user requests delivery.
+`report-writing` during SHIP, or earlier when the user requests delivery.

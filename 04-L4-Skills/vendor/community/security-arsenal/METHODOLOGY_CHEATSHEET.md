@@ -71,7 +71,7 @@ table during the hunt.
 5. ZIP/tar slip: filename `../../../etc/passwd` extracted into restricted dir.
 
 ### Subdomain takeover
-1. Run `tools/takeover_scanner.sh --recon recon/<target>` — covers most fingerprints.
+1. Sweep the CNAMEs in `recon/<target>` and match each dangling one against a takeover fingerprint list — no scanner is shipped with this stack, so drive the sweep yourself.
 2. Manual: `dig CNAME suspect.target.com`; if it points at a service that returns a "no such app/page" page → claimable.
 3. Check `EdOverflow/can-i-take-over-xyz` for the per-provider claim flow.
 

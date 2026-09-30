@@ -9,7 +9,14 @@ from typing import Any
 from .configuration import ConfigurationManager
 from .errors import ValidationError
 from .io import dump_json, load_yaml, read_fragments
-from .paths import StackPaths
+from .paths import (
+    BUILTIN_CAPABILITY_PROFILES,
+    BUILTIN_GLOBAL_PROMPT,
+    BUILTIN_PLATFORMS,
+    BUILTIN_RUNTIME_PROFILES,
+    BUILTIN_SKILL_PROFILES,
+    StackPaths,
+)
 from .validation import validate
 
 WORKFLOW_FILES = {
@@ -48,16 +55,22 @@ class RenderResult:
 class ProfileRegistry:
     def __init__(self, paths: StackPaths):
         self.paths = paths
-        self.profile_dir = paths.root / "02-L2-Workflow-Profiles" / "profiles"
-        self.platform_dir = paths.root / "02-L2-Workflow-Profiles" / "platforms"
-        self.workflow_dir = paths.root / "02-L2-Workflow-Profiles" / "workflows"
-        self.schema = (
-            paths.root / "02-L2-Workflow-Profiles" / "schema" / "profile.schema.json"
+        # Registry locations are declared in `stack.yaml`; the layer directories
+        # that hold no registry of their own are derived from them.
+        self.profile_dir = paths.registry("runtime_profiles", BUILTIN_RUNTIME_PROFILES)
+        self.platform_dir = paths.registry("platforms", BUILTIN_PLATFORMS)
+        self.capability_profile_dir = paths.registry(
+            "capability_profiles", BUILTIN_CAPABILITY_PROFILES
         )
+        self.skill_profile_dir = paths.registry(
+            "skill_profiles", BUILTIN_SKILL_PROFILES
+        )
+        self.global_prompt_dir = paths.layer("global_prompt", BUILTIN_GLOBAL_PROMPT)
+        layer = self.profile_dir.parent
+        self.workflow_dir = layer / "workflows"
+        self.schema = layer / "schema" / "profile.schema.json"
         self.platform_registry_path = self.platform_dir / "platforms.yaml"
-        self.platform_schema = (
-            paths.root / "02-L2-Workflow-Profiles" / "schema" / "platforms.schema.json"
-        )
+        self.platform_schema = layer / "schema" / "platforms.schema.json"
 
     def names(self) -> list[str]:
         return sorted(path.stem for path in self.profile_dir.glob("*.yaml"))
@@ -84,13 +97,10 @@ class ProfileRegistry:
             self.platform_dir, profile["platform"], ".md", "platform"
         )
         self._require_named_file(
-            self.paths.root / "05-L5-MCP-CLI" / "profiles",
-            profile["l5_profile"],
-            ".yaml",
-            "L5 profile",
+            self.capability_profile_dir, profile["l5_profile"], ".yaml", "L5 profile"
         )
         self._require_named_file(
-            self.paths.root / "04-L4-Skills" / "profiles",
+            self.skill_profile_dir,
             profile["skill_profile"],
             ".yaml",
             "Skill profile",
@@ -109,7 +119,7 @@ class ProfileRegistry:
     ) -> Path:
         path = directory / f"{name}{suffix}"
         if not path.is_file() and not (
-            allow_missing_registry and not any(directory.glob("*"))
+            allow_missing_registry and not directory.is_dir()
         ):
             raise ValidationError(f"unknown {label}: {name}")
         return path
@@ -170,14 +180,11 @@ class ProfileRegistry:
 
         fragments: list[Path] = []
         if profile["prompt_mode"] == "replacement":
-            fragments.append(
-                self.paths.root / "01-L1-Global-Prompt" / "replacement-runtime.md"
-            )
+            fragments.append(self.global_prompt_dir / "replacement-runtime.md")
         fragments.extend(
             [
-                self.paths.root / "01-L1-Global-Prompt" / "personal-security.md",
-                self.paths.root
-                / "01-L1-Global-Prompt"
+                self.global_prompt_dir / "personal-security.md",
+                self.global_prompt_dir
                 / "languages"
                 / f"{ConfigurationManager(self.paths).effective()['BB_AGENT_LANGUAGE']}.md",
                 self.workflow_dir / WORKFLOW_FILES[profile["workflow"]],
