@@ -508,6 +508,33 @@ class ContractTests(unittest.TestCase):
         with self.assertRaisesRegex(ValidationError, "changed after approval"):
             manager.promote("skill.ctf-web")
 
+    def test_skill_install_self_heals_stale_symlink(self) -> None:
+        from bb_stack.errors import StackError
+
+        registry = SkillRegistry(self.paths)
+        skills_root = self.paths.claude_config_dir / "skills"
+        skills_root.mkdir(parents=True)
+        stale_name, real_name = registry.selected("ctf-web")[:2]
+
+        unrelated = Path(self.temporary.name) / "unrelated-skill-tree"
+        unrelated.mkdir()
+        stale = skills_root / stale_name
+        stale.symlink_to(unrelated, target_is_directory=True)
+
+        results = registry.install("ctf-web", agent="claude", force=False)
+        installed = {entry["name"]: entry for entry in results}[stale_name]
+        self.assertTrue(installed["state"].startswith("relinked"))
+        self.assertEqual(stale.readlink(), registry.source(stale_name))
+
+        real_dir = skills_root / real_name
+        real_dir.unlink()
+        real_dir.mkdir()
+        marker = real_dir / "user-content.txt"
+        marker.write_text("keep me\n", encoding="utf-8")
+        with self.assertRaisesRegex(StackError, "Skill directory conflict"):
+            registry.install("ctf-web", agent="claude", force=False)
+        self.assertTrue(marker.is_file())
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

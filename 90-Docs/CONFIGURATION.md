@@ -26,6 +26,7 @@ bb-stack configure --proxy-mode mihomo \
 bb-stack configure --h1-username your-hackerone-username
 bb-stack configure --agent-language zh-CN
 bb-stack configure --npm-registry auto
+bb-stack configure --pypi-index https://pypi.org/simple
 bb-stack configure --show
 ```
 
@@ -95,6 +96,7 @@ the environment or included in portable exports.
 | `BB_FILECODEBOX_URL` | FileCodeBox base origin | empty |
 | `BB_AGENT_LANGUAGE` | Agent visible output language: `zh-CN` or `en` | `zh-CN` |
 | `BB_NPM_REGISTRY` | `auto`, `npmjs`, `npmmirror`, or a custom HTTPS origin | `auto` |
+| `BB_PYPI_INDEX` | Python package index URL used by `pip`, `pipx`, and `uv tool install` | `https://pypi.org/simple` |
 | `BB_EXTRA_PATH` | uncommon global binary paths, colon-separated | empty |
 
 ## Recon Search Sources
@@ -139,6 +141,22 @@ Runtime selection is passed directly to `npm ci`; it does not rewrite the
 source lockfile. Repository and staged update lockfiles always store canonical
 `registry.npmjs.org` URLs, independent of global `.npmrc` and
 `npm_config_registry` values.
+
+`BB_PYPI_INDEX` is passed explicitly to every Python install step
+(`python -m pip install --index-url`, `pipx install --index-url`,
+`uv tool install --default-index`), so `requirements.lock` resolves against one
+reproducible index instead of inheriting the caller's `PIP_INDEX_URL` /
+`UV_INDEX_URL`. When a local mirror lags behind a version pinned in the lock,
+either point the key at that mirror (`bb-stack configure --pypi-index
+https://mirror.example/simple`) or leave it at the default:
+
+```bash
+bb-stack configure --pypi-index https://pypi.org/simple
+```
+
+The value must be an HTTP(S) URL without embedded credentials, query, or
+fragment; a trailing `/simple` path is allowed. It is machine-specific and is
+never exported by `bb-stack portable`.
 
 ## Proxy Comparison
 
@@ -331,7 +349,8 @@ bb-stack portable export "$HOME/bb-stack-portable.json"
 bb-stack portable inspect "$HOME/bb-stack-portable.json"
 ```
 
-`BB_EXTRA_PATH`, old-machine absolute roots, mailbox credentials, Claude auth,
+`BB_EXTRA_PATH`, `BB_PYPI_INDEX`, old-machine absolute roots, mailbox
+credentials, Claude auth,
 cookies, tokens, Engagement evidence, runtime data, and generated Keysmith/MCP
 state are excluded. Import is a preview unless `--yes` is supplied. Existing
 non-empty destination values win unless `--force` is also supplied:

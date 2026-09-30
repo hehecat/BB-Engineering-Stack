@@ -220,6 +220,8 @@ providers:
         - "${BB_CHROMIUM_BIN}"
         - --output-dir
         - "${BB_ARTIFACT_ROOT}/browser"
+        - --image-responses
+        - omit
         - --save-session
 
   chrome-devtools-cli:

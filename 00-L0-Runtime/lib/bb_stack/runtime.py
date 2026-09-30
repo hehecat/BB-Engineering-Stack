@@ -183,6 +183,14 @@ class RuntimeManager:
                 f"command failed: {shlex.join(command)}: {error}"
             ) from error
 
+    def _pypi_index(self) -> str:
+        """Explicit package index for every Python install step.
+
+        Passed to pip/pipx/uv so the pinned ``requirements.lock`` resolves
+        identically regardless of the caller's ``PIP_INDEX_URL`` / ``UV_INDEX_URL``.
+        """
+        return ConfigurationManager(self.paths).effective()["BB_PYPI_INDEX"]
+
     def _python_runtime(self, dry_run: bool) -> dict[str, Any]:
         python = self.paths.venv / "bin" / "python"
         requirements = self.config / "requirements.lock"
@@ -214,6 +222,8 @@ class RuntimeManager:
                 "install",
                 "--disable-pip-version-check",
                 "--require-hashes",
+                "--index-url",
+                self._pypi_index(),
                 "-r",
                 str(requirements),
             ],
@@ -226,6 +236,8 @@ class RuntimeManager:
                 "pip",
                 "install",
                 "--no-deps",
+                "--index-url",
+                self._pypi_index(),
                 "-e",
                 str(self.paths.root),
             ],
@@ -1014,7 +1026,7 @@ class RuntimeManager:
                         f"pipx installation did not expose its command for {name}"
                     )
             self._run(
-                [pipx, "install", spec["package"]],
+                [pipx, "install", "--index-url", self._pypi_index(), spec["package"]],
                 env=env,
                 timeout=PIPX_INSTALL_TIMEOUT_SECONDS,
             )
@@ -1034,6 +1046,8 @@ class RuntimeManager:
                     "install",
                     "--python",
                     spec.get("python", "3.12"),
+                    "--default-index",
+                    self._pypi_index(),
                     "--force",
                     spec["package"],
                 ],

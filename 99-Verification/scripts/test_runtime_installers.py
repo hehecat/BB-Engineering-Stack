@@ -148,18 +148,18 @@ class RuntimeInstallerTests(unittest.TestCase):
             "UV_TOOL_BIN_DIR": str(self.paths.runtime_bin),
             "UV_TOOL_DIR": str(self.paths.runtime / "uv-tools"),
         }
-        run.assert_called_once_with(
-            [
-                "/usr/bin/uv",
-                "tool",
-                "install",
-                "--python",
-                "3.12",
-                "--force",
-                "demo==1.2.3",
-            ],
-            env=expected_env,
-            timeout=UV_TOOL_INSTALL_TIMEOUT_SECONDS,
+        run.assert_called_once()
+        args = run.call_args.args[0]
+        self.assertEqual(args[:3], ["/usr/bin/uv", "tool", "install"])
+        self.assertIn("demo==1.2.3", args)
+        self.assertEqual(args[args.index("--python") + 1], "3.12")
+        self.assertIn("--default-index", args)
+        self.assertEqual(
+            args[args.index("--default-index") + 1], self.manager._pypi_index()
+        )
+        self.assertEqual(run.call_args.kwargs["env"], expected_env)
+        self.assertEqual(
+            run.call_args.kwargs["timeout"], UV_TOOL_INSTALL_TIMEOUT_SECONDS
         )
 
     def test_git_build_creates_managed_executable(self) -> None:

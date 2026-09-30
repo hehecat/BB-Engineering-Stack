@@ -181,12 +181,19 @@ class SkillRegistry:
         if destination.is_symlink():
             if destination.resolve() == source.resolve():
                 return "managed"
-            if not force:
-                raise StackError(f"Skill symlink conflict (use --force): {destination}")
-            backup = self._backup_name(destination)
-            destination.rename(backup)
+            # A symlink at a managed destination is always a product of an
+            # earlier install: every managed path is written by this method
+            # alone and it only ever creates symlinks there, never real
+            # directory content. A stale link (e.g. left behind by a previous
+            # stack source tree) is therefore rebuilt in place rather than
+            # treated as user content; self-healing here keeps `bb-stack
+            # update` running without forcing `--force` on the operator. The
+            # link target itself is never modified, and the previous target is
+            # reported for auditability.
+            previous = os.readlink(destination)
+            destination.unlink()
             destination.symlink_to(source, target_is_directory=True)
-            return f"replaced; backup={backup}"
+            return f"relinked; previous={previous}"
         if destination.exists():
             if destination.is_dir() and self.tree_digest(
                 destination

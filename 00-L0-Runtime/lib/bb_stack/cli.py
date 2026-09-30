@@ -193,6 +193,7 @@ def build_parser() -> argparse.ArgumentParser:
     configure.add_argument("--filecodebox-url")
     configure.add_argument("--agent-language", choices=["zh-CN", "en"])
     configure.add_argument("--npm-registry")
+    configure.add_argument("--pypi-index")
     configure.add_argument("--extra-path")
     configure.add_argument("--show", action="store_true")
     configure.add_argument("--json", action="store_true")
@@ -622,6 +623,7 @@ def command(args: argparse.Namespace, paths: StackPaths) -> int:
             "BB_FILECODEBOX_URL": args.filecodebox_url,
             "BB_AGENT_LANGUAGE": args.agent_language,
             "BB_NPM_REGISTRY": args.npm_registry,
+            "BB_PYPI_INDEX": args.pypi_index,
             "BB_EXTRA_PATH": args.extra_path,
         }
         updates = {key: value for key, value in option_map.items() if value is not None}

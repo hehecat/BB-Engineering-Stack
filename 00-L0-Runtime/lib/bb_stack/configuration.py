@@ -20,6 +20,7 @@ MACHINE_CONFIG_DEFAULTS = {
     "BB_FILECODEBOX_URL": "",
     "BB_AGENT_LANGUAGE": "zh-CN",
     "BB_NPM_REGISTRY": "auto",
+    "BB_PYPI_INDEX": "https://pypi.org/simple",
     "BB_EXTRA_PATH": "",
 }
 MACHINE_CONFIG_KEYS = tuple(MACHINE_CONFIG_DEFAULTS)
@@ -253,6 +254,19 @@ class ConfigurationManager:
             ConfigurationManager._validate_url(
                 "BB_NPM_REGISTRY", npm_registry, {"https"}
             )
+        pypi_index = values.get("BB_PYPI_INDEX", "")
+        if not pypi_index or url_origin(pypi_index, {"http", "https"}) is None:
+            raise ValidationError("BB_PYPI_INDEX must be an HTTP(S) URL")
+        parsed_index = urlparse(pypi_index)
+        if (
+            parsed_index.username is not None
+            or parsed_index.password is not None
+            or parsed_index.query
+            or parsed_index.fragment
+        ):
+            raise ValidationError(
+                "BB_PYPI_INDEX must not contain credentials, query, or fragment"
+            )
         extra_path = values.get("BB_EXTRA_PATH", "")
         for item in extra_path.split(os.pathsep):
             if item and not Path(item).expanduser().is_absolute():
@@ -296,6 +310,9 @@ class ConfigurationManager:
             "BB_NPM_REGISTRY": ask(
                 "npm registry (auto/npmjs/npmmirror/HTTPS URL)",
                 "BB_NPM_REGISTRY",
+            ),
+            "BB_PYPI_INDEX": ask(
+                "Python package index URL", "BB_PYPI_INDEX"
             ),
             "BB_EXTRA_PATH": ask("Extra PATH entries", "BB_EXTRA_PATH"),
         }

@@ -190,6 +190,95 @@ class ConfigurationTests(unittest.TestCase):
         ):
             self.manager.interactive_updates()
 
+    def test_pypi_index_default_is_public_pypi(self) -> None:
+        self.assertEqual(
+            self.manager.effective()["BB_PYPI_INDEX"], "https://pypi.org/simple"
+        )
+        # Machine-specific: never part of a cross-machine portable snapshot.
+        self.assertNotIn("BB_PYPI_INDEX", ConfigurationManager.PORTABLE_CONFIG_KEYS)
+        self.assertNotIn("BB_PYPI_INDEX", self.manager.portable_config())
+
+    def test_pypi_index_configure_round_trip(self) -> None:
+        result = self.manager.configure(
+            {"BB_PYPI_INDEX": "https://mirror.example/pypi/simple"}
+        )
+        self.assertIn("BB_PYPI_INDEX", result["changed"])
+        self.assertEqual(
+            self.manager.effective()["BB_PYPI_INDEX"],
+            "https://mirror.example/pypi/simple",
+        )
+        self.assertEqual(
+            self.manager.read()["BB_PYPI_INDEX"],
+            "https://mirror.example/pypi/simple",
+        )
+        # A plain re-write preserves the value verbatim.
+        self.manager.write(self.manager.read())
+        self.assertEqual(
+            self.manager.read()["BB_PYPI_INDEX"],
+            "https://mirror.example/pypi/simple",
+        )
+
+    def test_validation_rejects_invalid_pypi_index(self) -> None:
+        for invalid in (
+            "",
+            "not-a-url",
+            "ftp://mirror.example/simple",
+            "https://user:secret@mirror.example/simple",
+            "https://mirror.example/simple?token=1",
+        ):
+            with self.assertRaises(ValidationError):
+                self.manager.configure({"BB_PYPI_INDEX": invalid})
+        # PEP 503 indexes live under a path and must be accepted.
+        self.manager.configure({"BB_PYPI_INDEX": "http://mirror.local:8080/simple"})
+        self.assertEqual(
+            self.manager.read()["BB_PYPI_INDEX"], "http://mirror.local:8080/simple"
+        )
+
+    def test_python_runtime_pins_the_configured_index(self) -> None:
+        self.manager.configure({"BB_PYPI_INDEX": "https://mirror.example/simple"})
+        runtime = RuntimeManager(self.paths)
+        commands: list[list[str]] = []
+        with patch.object(
+            runtime,
+            "_run",
+            side_effect=lambda command, **_: commands.append(list(command)),
+        ):
+            runtime._python_runtime(False)
+        pip_commands = [c for c in commands if c[1:3] == ["-m", "pip"]]
+        self.assertTrue(pip_commands)
+        for command in pip_commands:
+            index = command.index("--index-url")
+            self.assertEqual(command[index + 1], "https://mirror.example/simple")
+
+    def test_pipx_and_uv_installs_pin_the_configured_index(self) -> None:
+        self.manager.configure({"BB_PYPI_INDEX": "https://mirror.example/simple"})
+        runtime = RuntimeManager(self.paths)
+        env = {"PATH": os.environ.get("PATH", "")}
+        captured: list[list[str]] = []
+        with (
+            patch("bb_stack.runtime.shutil.which", return_value="/usr/bin/tool"),
+            patch.object(
+                runtime,
+                "_run",
+                side_effect=lambda command, **_: captured.append(list(command)),
+            ),
+        ):
+            runtime._install_tool("demo-pipx", {"kind": "pipx", "package": "demo"}, env)
+            runtime._install_tool(
+                "demo-uv", {"kind": "uv-tool", "package": "demo"}, env
+            )
+        pipx_command, uv_command = captured
+        self.assertIn("--index-url", pipx_command)
+        self.assertEqual(
+            pipx_command[pipx_command.index("--index-url") + 1],
+            "https://mirror.example/simple",
+        )
+        self.assertIn("--default-index", uv_command)
+        self.assertEqual(
+            uv_command[uv_command.index("--default-index") + 1],
+            "https://mirror.example/simple",
+        )
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
