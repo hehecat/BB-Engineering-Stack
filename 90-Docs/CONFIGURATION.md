@@ -123,6 +123,14 @@ Backend-specific limits an operator must know:
   directory.** Discovery reads `<cwd>/.omp/mcp.json` and `<cwd>/.cursor/mcp.json`
   without walking up, so the file is created in the Engagement directory the
   agent starts in. It is not a global MCP registration.
+- **`omp` drops recognized browser-automation MCP servers.** While its bundled
+  browser tool is enabled (the default), omp filters out any MCP server named
+  `playwright`/`puppeteer`/`browser`/… or whose command or args reference a
+  browser MCP package such as `@playwright/mcp` — silently, before any
+  connection attempt, and it never appears in `/mcp list`. The stack's
+  `playwright` provider matches both rules, so under `omp` browser work runs on
+  omp's own browser tool and the stack's CDP-managed chain does not engage. Set
+  `browser.enabled: false` in omp settings to load the MCP server instead.
 - **`codex` append is command-line text injection.** The Prompt body is passed
   literally through `-c developer_instructions=…`, so very large Prompts are
   bounded by the OS argument-size limit. Replacement mode instead names a file

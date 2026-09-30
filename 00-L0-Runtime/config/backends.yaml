@@ -99,6 +99,12 @@ backends:
       # omp has no MCP flag and no environment channel; discovery reads
       # <cwd>/.omp/mcp.json without walking up, so the file must land in the
       # directory the agent starts in.
+      #
+      # Caveat an operator must know: while omp's bundled browser tool is
+      # enabled (default), omp silently drops any MCP server named
+      # playwright/puppeteer/... or referencing a browser MCP package such as
+      # @playwright/mcp, so the stack's playwright provider will not load under
+      # this backend unless omp's `browser.enabled` is turned off.
       style: project-file
       path: .omp/mcp.json
       format: mcpServers
