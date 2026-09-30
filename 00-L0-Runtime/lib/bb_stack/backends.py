@@ -14,20 +14,66 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+import yaml
+
 from .errors import StackError, ValidationError
-from .io import dump_json, load_yaml
+from .io import dump_json, dump_yaml, load_yaml
 from .paths import StackPaths
 from .validation import validate
+
+
+class _PatchLoader(yaml.SafeLoader):
+    """SafeLoader that tolerates DSH's `!!js` loader expressions.
+
+    `dsh --dump-config` emits expressions such as `!!js process.env.DSH_TOOLS_MODE`
+    for values the profile leaves to the environment. The tag is DSH-specific and
+    the value is irrelevant here, so it is read as an opaque string.
+    """
+
+
+_PatchLoader.add_multi_constructor(
+    "tag:yaml.org,2002:js",
+    lambda loader, _suffix, node: loader.construct_scalar(node)
+    if isinstance(node, yaml.ScalarNode)
+    else None,
+)
+
+
+def read_patch(path: Path) -> list[Any]:
+    """Read a DSH patch overlay as a list, tolerating `!!js` expressions."""
+    if not path.is_file():
+        return []
+    loaded = yaml.load(path.read_text(encoding="utf-8"), Loader=_PatchLoader)
+    if loaded is None:
+        return []
+    if not isinstance(loaded, list):
+        raise ValidationError(f"patch overlay {path} must be a YAML list")
+    return loaded
+
+
+def write_patch(path: Path, entries: list[Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        yaml.safe_dump(entries, sort_keys=False, allow_unicode=True), encoding="utf-8"
+    )
 
 
 def _toml_string(value: str) -> str:
     """Encode *value* as a TOML basic string for a `-c key=value` override."""
     return json.dumps(value)
+
+
+# DSH restricts `serverName` to this alphabet and length. The stack's provider
+# names (playwright, chrome-devtools, …) satisfy it, but a future provider that
+# does not must fail loudly rather than produce an unloadable patch.
+DSH_SERVER_NAME = re.compile(r"^[A-Za-z0-9_-]{1,32}$")
 
 
 @dataclass(frozen=True)
@@ -66,6 +112,7 @@ class Backend:
         prompt_file: Path,
         command: list[str],
         env: dict[str, str],
+        work_dir: Path,
     ) -> dict[str, Any]:
         """Extend *command*/*env* so this backend receives the routed Prompt."""
         injector = self.prompt_injector(prompt_mode)
@@ -90,6 +137,34 @@ class Backend:
                 [injector["flag"], f"{injector['key']}={_toml_string(str(prompt_file))}"]
             )
             record["key"] = injector["key"]
+        elif style == "patch-config":
+            path = work_dir / injector["patch"]
+            config = self._patch_persona(injector, env)
+            prompt_text = prompt_file.read_text(encoding="utf-8")
+            if prompt_mode == "replacement":
+                config["personaPrefix"] = prompt_text
+            else:
+                existing = config.get("personaSuffix") or ""
+                config["personaSuffix"] = (
+                    f"{existing}\n\n{prompt_text}" if existing else prompt_text
+                )
+            entries = [
+                entry
+                for entry in read_patch(path)
+                if not (isinstance(entry, dict) and entry.get("id") == injector["entry"])
+            ]
+            entries.append(
+                {"id": injector["entry"], "name": injector["plugin"], "config": config}
+            )
+            write_patch(path, entries)
+            record["patch"] = str(path)
+            record["keys"] = sorted(config)
+            # The Prompt lives in the same overlay as the MCP entries, so the
+            # launcher flag is claimed here too; `apply_mcp` adds it only when
+            # it is not already present.
+            flag = self.mcp.get("flag")
+            if flag and flag not in command:
+                command.extend([flag, str(path)])
         elif style == "env-config":
             _merge_env_config(
                 env,
@@ -111,6 +186,46 @@ class Backend:
                 f"working prompt injector to backends.yaml"
             )
         return record
+
+    def _patch_persona(
+        self, injector: dict[str, Any], env: dict[str, str]
+    ) -> dict[str, Any]:
+        """Read the profile's current system-prompt config through `probe`.
+
+        A DSH patch replaces a plugin's whole `config` instead of merging into
+        it, so the injector has to write back the fields it is not changing.
+        Probing the live profile keeps that from silently dropping the harness's
+        own persona text when a future release adds or renames a field.
+        """
+        binary = self.binary(env.get("PATH"))
+        if not binary:
+            raise StackError(
+                f"agent backend {self.name!r} binary was not found for its probe"
+            )
+        completed = subprocess.run(
+            [binary, *injector["probe"]],
+            env=env,
+            text=True,
+            capture_output=True,
+            timeout=180,
+            check=False,
+        )
+        if completed.returncode != 0:
+            raise StackError(
+                f"agent backend {self.name!r} probe failed: "
+                + (completed.stderr.strip() or f"exit {completed.returncode}")
+            )
+        try:
+            document = yaml.load(completed.stdout, Loader=_PatchLoader)
+        except yaml.YAMLError as error:
+            raise StackError(
+                f"agent backend {self.name!r} probe output is not YAML: {error}"
+            ) from error
+        for entry in document or []:
+            if isinstance(entry, dict) and entry.get("id") == injector["entry"]:
+                config = entry.get("config")
+                return dict(config) if isinstance(config, dict) else {}
+        return {}
 
     def render_servers(self, servers: dict[str, Any]) -> Any:
         """Return MCP servers in this backend's native configuration shape."""
@@ -174,6 +289,42 @@ class Backend:
             target.parent.mkdir(parents=True, exist_ok=True)
             dump_json(target, self.render_servers(servers))
             record["path"] = str(target)
+        elif style == "patch-file":
+            path = work_dir / self.mcp["patch"]
+            entries = read_patch(path)
+            for name, server in servers.items():
+                if not DSH_SERVER_NAME.match(name):
+                    raise ValidationError(
+                        f"MCP server name {name!r} cannot be a DSH serverName "
+                        f"(expected [A-Za-z0-9_-]{{1,32}})"
+                    )
+                config: dict[str, Any] = {"serverName": name}
+                if server.get("command"):
+                    config["transport"] = "stdio"
+                    config["command"] = server["command"]
+                    config["args"] = list(server.get("args", []))
+                    if server.get("env"):
+                        config["env"] = dict(server["env"])
+                else:
+                    config["transport"] = "streamable-http"
+                    config["url"] = server.get("url", "")
+                    if server.get("headers"):
+                        config["headers"] = dict(server["headers"])
+                entries.append(
+                    {
+                        "insert": [
+                            {
+                                "id": f"mcp-{name}",
+                                "name": self.mcp["plugin"],
+                                "config": config,
+                            }
+                        ]
+                    }
+                )
+            write_patch(path, entries)
+            record["patch"] = str(path)
+            if self.mcp["flag"] not in command:
+                command.extend([self.mcp["flag"], str(path)])
         elif style == "env-config":
             _merge_env_config(env, self.mcp["env"], self.render_servers(servers))
             record["env"] = self.mcp["env"]
@@ -251,6 +402,7 @@ class BackendRegistry:
             "omp_agent": Path(
                 os.environ.get("PI_CODING_AGENT_DIR", home / ".omp" / "agent")
             ),
+            "dsh_home": Path(os.environ.get("DSH_HOME", home / ".dsh")),
             "opencode_config": Path(
                 os.environ.get("OPENCODE_CONFIG_DIR", home / ".config" / "opencode")
             ),

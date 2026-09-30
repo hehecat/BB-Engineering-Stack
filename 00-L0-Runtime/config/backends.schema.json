@@ -15,13 +15,21 @@
         "flag-text",
         "config-text",
         "config-file",
+        "patch-config",
         "env-config",
         "context-only",
         "unsupported"
       ]
     },
     "mcpStyle": {
-      "enum": ["flag-file", "config-table", "project-file", "env-config", "unsupported"]
+      "enum": [
+        "flag-file",
+        "config-table",
+        "project-file",
+        "patch-file",
+        "env-config",
+        "unsupported"
+      ]
     },
     "injector": {
       "type": "object",
@@ -32,7 +40,15 @@
         "flag": {"type": "string", "minLength": 1},
         "key": {"type": "string", "minLength": 1},
         "env": {"type": "string", "minLength": 1},
-        "agent": {"type": "string", "minLength": 1}
+        "agent": {"type": "string", "minLength": 1},
+        "patch": {"type": "string", "minLength": 1},
+        "plugin": {"type": "string", "minLength": 1},
+        "entry": {"type": "string", "minLength": 1},
+        "probe": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string", "minLength": 1}
+        }
       },
       "allOf": [
         {
@@ -46,6 +62,10 @@
         {
           "if": {"properties": {"style": {"const": "config-file"}}},
           "then": {"required": ["key"]}
+        },
+        {
+          "if": {"properties": {"style": {"const": "patch-config"}}},
+          "then": {"required": ["patch", "plugin", "entry", "probe"]}
         },
         {
           "if": {"properties": {"style": {"const": "env-config"}}},
@@ -65,6 +85,8 @@
         "env": {"type": "string", "minLength": 1},
         "key": {"type": "string", "minLength": 1},
         "table": {"type": "string", "minLength": 1},
+        "patch": {"type": "string", "minLength": 1},
+        "plugin": {"type": "string", "minLength": 1},
         "format": {"enum": ["mcpServers", "opencode"]}
       },
       "allOf": [
@@ -79,6 +101,10 @@
         {
           "if": {"properties": {"style": {"const": "project-file"}}},
           "then": {"required": ["path", "format"]}
+        },
+        {
+          "if": {"properties": {"style": {"const": "patch-file"}}},
+          "then": {"required": ["patch", "plugin", "flag"]}
         },
         {
           "if": {"properties": {"style": {"const": "env-config"}}},
@@ -136,6 +162,7 @@
               "mcp-flag",
               "mcp-table",
               "mcp-project-file",
+              "mcp-patch-file",
               "mcp-env-config",
               "skills",
               "headless",

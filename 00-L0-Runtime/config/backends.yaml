@@ -32,6 +32,9 @@ paths:
   agents:
     base: user_agents
     sub: skills
+  dsh_home:
+    base: dsh_home
+    sub: skills
 
 backends:
   claude:
@@ -135,6 +138,43 @@ backends:
       key: mcp
       format: opencode
     capabilities: [prompt-replace, prompt-append, mcp-env-config, skills, headless]
+
+  dsh:
+    label: DeepSeek Harness
+    command: dsh
+    bin_env: DSH_BIN
+    config_base: dsh_home
+    # Shares ~/.agents/skills with codex/omp/opencode/cursor-agent.
+    skills_dir: agents
+    context_files: [AGENTS.md, CLAUDE.md]
+    headless: [--profile, headless]
+    prompt:
+      # The launcher has no Prompt flag and the headless app has none either.
+      # `@deepseek-ai/dsh-system-prompt` is the only text seam, and a patch
+      # replaces its whole `config` rather than merging it, so the injector
+      # reads the profile's current persona fields through `probe` and writes
+      # them back alongside the routed Prompt.
+      append:
+        style: patch-config
+        patch: .dsh/bb-stack.patch.yml
+        plugin: '@deepseek-ai/dsh-system-prompt'
+        entry: system-prompt
+        probe: [--profile, headless, --dump-config]
+      replace:
+        style: patch-config
+        patch: .dsh/bb-stack.patch.yml
+        plugin: '@deepseek-ai/dsh-system-prompt'
+        entry: system-prompt
+        probe: [--profile, headless, --dump-config]
+    mcp:
+      # No MCP flag and no inline-env channel: MCP servers are plugin entries
+      # (`@deepseek-ai/dsh-mcp-client`) mounted through a patch overlay, passed
+      # with the launcher's `--patch`, which must precede the app arguments.
+      style: patch-file
+      patch: .dsh/bb-stack.patch.yml
+      plugin: '@deepseek-ai/dsh-mcp-client'
+      flag: --patch
+    capabilities: [prompt-replace, prompt-append, mcp-patch-file, skills, headless]
 
   cursor-agent:
     label: Cursor Agent

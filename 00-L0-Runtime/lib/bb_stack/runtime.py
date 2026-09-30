@@ -1428,6 +1428,7 @@ class RuntimeManager:
             prompt_file=Path(render.output_file),
             command=command,
             env=env,
+            work_dir=cwd,
         )
         mcp_record = agent.apply_mcp(
             servers=mcp["mcpServers"],

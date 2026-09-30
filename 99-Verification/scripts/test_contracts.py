@@ -17,7 +17,7 @@ import yaml
 ROOT = Path(__file__).resolve().parents[2]
 os.environ["BB_STACK_ROOT"] = str(ROOT)
 
-from bb_stack.backends import BackendRegistry
+from bb_stack.backends import Backend, BackendRegistry
 from bb_stack.capabilities import CapabilityRegistry
 from bb_stack.data import DataManager
 from bb_stack.errors import ValidationError
@@ -621,6 +621,89 @@ class ContractTests(unittest.TestCase):
             registry.install("ctf-web", agent="not-a-backend")
         with self.assertRaisesRegex(ValidationError, "unsupported Skill agent"):
             registry.status("ctf-web", "both")
+
+    def test_dsh_backend_shares_one_patch_between_prompt_and_mcp(self) -> None:
+        """The dsh injectors write Prompt and MCP into a single overlay.
+
+        A DSH patch replaces a plugin's whole `config` rather than merging into
+        it, so the Prompt injector has to write back the persona fields it is
+        not changing; and because both injectors touch one file, the launcher's
+        `--patch` must be claimed exactly once.
+        """
+        backend = BackendRegistry(self.paths).get("dsh")
+        with tempfile.TemporaryDirectory(prefix="bb-dsh-patch-") as temporary:
+            work = Path(temporary)
+            prompt = work / "prompt.md"
+            prompt.write_text("ROUTED-POLICY-MARKER", encoding="utf-8")
+            env = {"PATH": "/usr/bin:/bin"}
+            command: list[str] = ["/usr/bin/dsh"]
+            with patch.object(
+                Backend,
+                "_patch_persona",
+                return_value={"personaPrefix": "PFX", "personaSuffix": "SFX"},
+            ):
+                backend.apply_prompt(
+                    prompt_mode="append",
+                    prompt_file=prompt,
+                    command=command,
+                    env=env,
+                    work_dir=work,
+                )
+            backend.apply_mcp(
+                servers={
+                    "playwright": {
+                        "type": "stdio",
+                        "command": "node",
+                        "args": ["cli.js"],
+                    }
+                },
+                rendered_file=work / "mcp.json",
+                command=command,
+                env=env,
+                work_dir=work,
+            )
+            patch_path = work / ".dsh" / "bb-stack.patch.yml"
+            entries = yaml.safe_load(patch_path.read_text(encoding="utf-8"))
+
+        self.assertEqual(command.count("--patch"), 1)
+        self.assertEqual(command[-2:], ["--patch", str(patch_path)])
+        persona = next(e for e in entries if e.get("id") == "system-prompt")
+        self.assertEqual(persona["name"], "@deepseek-ai/dsh-system-prompt")
+        self.assertEqual(persona["config"]["personaPrefix"], "PFX")
+        self.assertIn("SFX", persona["config"]["personaSuffix"])
+        self.assertIn("ROUTED-POLICY-MARKER", persona["config"]["personaSuffix"])
+        inserted = [e for e in entries if isinstance(e, dict) and "insert" in e]
+        self.assertEqual(len(inserted), 1)
+        server = inserted[0]["insert"][0]
+        self.assertEqual(server["name"], "@deepseek-ai/dsh-mcp-client")
+        self.assertEqual(server["config"]["serverName"], "playwright")
+        self.assertEqual(server["config"]["transport"], "stdio")
+
+    def test_dsh_replacement_prompt_replaces_persona_prefix(self) -> None:
+        backend = BackendRegistry(self.paths).get("dsh")
+        with tempfile.TemporaryDirectory(prefix="bb-dsh-replace-") as temporary:
+            work = Path(temporary)
+            prompt = work / "prompt.md"
+            prompt.write_text("FULL-REPLACEMENT", encoding="utf-8")
+            command: list[str] = ["/usr/bin/dsh"]
+            with patch.object(
+                Backend,
+                "_patch_persona",
+                return_value={"personaPrefix": "PFX", "personaSuffix": "SFX"},
+            ):
+                backend.apply_prompt(
+                    prompt_mode="replacement",
+                    prompt_file=prompt,
+                    command=command,
+                    env={"PATH": "/usr/bin:/bin"},
+                    work_dir=work,
+                )
+            entries = yaml.safe_load(
+                (work / ".dsh" / "bb-stack.patch.yml").read_text(encoding="utf-8")
+            )
+        persona = next(e for e in entries if e.get("id") == "system-prompt")
+        self.assertEqual(persona["config"]["personaPrefix"], "FULL-REPLACEMENT")
+        self.assertEqual(persona["config"]["personaSuffix"], "SFX")
 
 
 if __name__ == "__main__":

@@ -116,9 +116,20 @@ an unknown name is rejected.
 | `omp` | `--append-system-prompt <f>` | `--system-prompt <f>` | writes `<cwd>/.omp/mcp.json` | `~/.agents/skills` |
 | `opencode` | env `OPENCODE_CONFIG_CONTENT` + `--agent bb-stack` | same as append | same as append (inline `mcp`) | `~/.agents/skills` |
 | `cursor-agent` | none (`context-only`) | unsupported (raises) | writes `<cwd>/.cursor/mcp.json` | `~/.agents/skills` |
+| `dsh` | `--patch` overlay (persona suffix) | `--patch` overlay (persona prefix) | `--patch` overlay (`@deepseek-ai/dsh-mcp-client`) | `~/.agents/skills` |
 
 Backend-specific limits an operator must know:
 
+- **`dsh` is driven entirely through one patch overlay.** It has no Prompt flag
+  (neither the launcher nor the headless app has one) and no MCP flag or inline
+  config channel. Both are written into `.dsh/bb-stack.patch.yml` in the launch
+  directory and passed with the launcher's `--patch`, which must precede the app
+  arguments. Because a DSH patch **replaces a plugin's whole `config`** instead
+  of merging into it, the stack reads the profile's current persona fields with
+  `dsh --profile headless --dump-config` and writes them back next to the routed
+  Prompt; a patch that only set `personaSuffix` would silently drop the
+  harness's own `personaPrefix`. The overlay is verified to parse by the
+  harness itself (`dsh --patch <file> --dump-config`).
 - **`omp` and `cursor-agent` write MCP configuration into the launch
   directory.** Discovery reads `<cwd>/.omp/mcp.json` and `<cwd>/.cursor/mcp.json`
   without walking up, so the file is created in the Engagement directory the
