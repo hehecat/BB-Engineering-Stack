@@ -99,6 +99,47 @@ the environment or included in portable exports.
 | `BB_PYPI_INDEX` | Python package index URL used by `pip`, `pipx`, and `uv tool install` | `https://pypi.org/simple` |
 | `BB_EXTRA_PATH` | uncommon global binary paths, colon-separated | empty |
 
+## Agent Backends
+
+`bb-stack launch` does not hard-code one agent CLI. Every backend is declared in
+`00-L0-Runtime/config/backends.yaml` (validated against `backends.schema.json`),
+which records how that CLI receives the routed Prompt, how it receives
+per-profile MCP servers, where its Skills live, and which capabilities it
+actually offers. Select a backend with `--backend NAME` on `bb-stack launch`, or
+set `BB_AGENT_BACKEND=NAME` for the default. The registry default is `claude`;
+an unknown name is rejected.
+
+| Backend | Prompt append | Prompt replace | MCP | `skills_root` |
+| --- | --- | --- | --- | --- |
+| `claude` | `--append-system-prompt-file <f>` | `--system-prompt-file <f>` | `--mcp-config <f> --strict-mcp-config` | `~/.claude/skills` |
+| `codex` | `-c developer_instructions="<text>"` | `-c model_instructions_file="<path>"` | `-c mcp_servers.<n>.<k>=…` | `~/.codex/skills` |
+| `omp` | `--append-system-prompt <f>` | `--system-prompt <f>` | writes `<cwd>/.omp/mcp.json` | `~/.agents/skills` |
+| `opencode` | env `OPENCODE_CONFIG_CONTENT` + `--agent bb-stack` | same as append | same as append (inline `mcp`) | `~/.agents/skills` |
+| `cursor-agent` | none (`context-only`) | unsupported (raises) | writes `<cwd>/.cursor/mcp.json` | `~/.agents/skills` |
+
+Backend-specific limits an operator must know:
+
+- **`omp` and `cursor-agent` write MCP configuration into the launch
+  directory.** Discovery reads `<cwd>/.omp/mcp.json` and `<cwd>/.cursor/mcp.json`
+  without walking up, so the file is created in the Engagement directory the
+  agent starts in. It is not a global MCP registration.
+- **`codex` append is command-line text injection.** The Prompt body is passed
+  literally through `-c developer_instructions=…`, so very large Prompts are
+  bounded by the OS argument-size limit. Replacement mode instead names a file
+  (`-c model_instructions_file=<path>`).
+- **`cursor-agent` cannot receive a replacement Prompt.** It has no Prompt
+  channel at all; the routed policy still reaches it only through the workspace
+  `AGENTS.md`/`CLAUDE.md`, and requesting replacement mode fails rather than
+  silently degrading.
+- **`opencode` receives both Prompt and MCP through `OPENCODE_CONFIG_CONTENT`**,
+  merged as an inline one-shot agent selected with `--agent bb-stack`.
+
+The `agent-evaluation` capability is currently offered only by `claude`:
+`bb-stack evaluation agent` appends Claude Code permission/tool/settings flags
+that no other backend accepts. Running it under any other backend fails with an
+explicit error naming the requested backend instead of producing a misleading
+result.
+
 ## Recon Search Sources
 
 Recon can optionally query Exa, Tavily, and Brave Search during the

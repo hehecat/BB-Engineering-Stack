@@ -8,6 +8,7 @@ import subprocess
 import tempfile
 import tomllib
 import unittest
+from dataclasses import replace
 from pathlib import Path
 from unittest.mock import patch
 
@@ -16,6 +17,7 @@ import yaml
 ROOT = Path(__file__).resolve().parents[2]
 os.environ["BB_STACK_ROOT"] = str(ROOT)
 
+from bb_stack.backends import BackendRegistry
 from bb_stack.capabilities import CapabilityRegistry
 from bb_stack.data import DataManager
 from bb_stack.errors import ValidationError
@@ -26,6 +28,17 @@ from bb_stack.runtime import RuntimeManager
 from bb_stack.skills import SkillRegistry
 from bb_stack.updates import UpdateManager
 from bb_stack.workspace import ROUTES
+
+
+def _redirected_skills_roots(roots: dict[str, Path]):
+    """Patch `BackendRegistry.get` so every backend's `skills_root` is *roots[name]*."""
+    original = BackendRegistry.get
+
+    def get(registry: BackendRegistry, name: str):
+        return replace(original(registry, name), skills_root=roots[name])
+
+    return patch.object(BackendRegistry, "get", get)
+
 
 
 class ContractTests(unittest.TestCase):
@@ -534,6 +547,80 @@ class ContractTests(unittest.TestCase):
         with self.assertRaisesRegex(StackError, "Skill directory conflict"):
             registry.install("ctf-web", agent="claude", force=False)
         self.assertTrue(marker.is_file())
+
+
+    def test_skill_install_agent_all_covers_every_declared_backend(self) -> None:
+        registry = SkillRegistry(self.paths)
+        declared = BackendRegistry(self.paths).names()
+        roots = {
+            name: Path(self.temporary.name) / "roots" / name for name in declared
+        }
+        with _redirected_skills_roots(roots):
+            results = registry.install("ctf-web", agent="all", include_optional=False)
+        self.assertEqual({entry["agent"] for entry in results}, set(declared))
+        expected = set(registry.selected("ctf-web", False))
+        for name in declared:
+            self.assertEqual(
+                {entry["name"] for entry in results if entry["agent"] == name},
+                expected,
+            )
+
+    def test_skill_install_deduplicates_shared_skills_root(self) -> None:
+        registry = SkillRegistry(self.paths)
+        declared = BackendRegistry(self.paths).names()
+        shared = Path(self.temporary.name) / "agents-skills"
+        sharing = {"omp", "opencode", "cursor-agent"}
+        self.assertTrue(sharing <= set(declared))
+        roots = {
+            name: shared if name in sharing else Path(self.temporary.name) / name
+            for name in declared
+        }
+        with _redirected_skills_roots(roots):
+            results = registry.install("ctf-web", agent="all", include_optional=False)
+
+        skill = registry.selected("ctf-web", False)[0]
+        selected = registry.selected("ctf-web", False)
+        # The three backends read the same directory, so it holds exactly one
+        # link per selected Skill -- not three copies.
+        self.assertEqual({path.name for path in shared.iterdir()}, set(selected))
+        self.assertEqual(len(list(shared.iterdir())), len(selected))
+        for name in selected:
+            self.assertTrue((shared / name).is_symlink())
+            self.assertEqual((shared / name).readlink(), registry.source(name))
+
+        shared_records = sorted(
+            (entry for entry in results if entry["name"] == skill and entry["agent"] in sharing),
+            key=lambda entry: entry["agent"],
+        )
+        self.assertEqual(len(shared_records), 3)
+        self.assertTrue(all(entry["shared"] for entry in shared_records))
+        states = [entry["state"] for entry in shared_records]
+        # Exactly one backend performed the write; the others report the same
+        # physical path as already managed rather than being silently dropped.
+        self.assertEqual(sorted(states), ["installed", "managed", "managed"])
+
+        # A backend with its own root is not flagged as shared.
+        claude = [entry for entry in results if entry["agent"] == "claude"]
+        self.assertTrue(claude)
+        self.assertFalse(any(entry["shared"] for entry in claude))
+
+    def test_skill_status_agent_all_spans_registry(self) -> None:
+        registry = SkillRegistry(self.paths)
+        declared = BackendRegistry(self.paths).names()
+        roots = {
+            name: Path(self.temporary.name) / "roots" / name for name in declared
+        }
+        with _redirected_skills_roots(roots):
+            status = registry.status("ctf-web", "all")
+        self.assertEqual({entry["agent"] for entry in status}, set(declared))
+        self.assertTrue(all(entry["state"] == "missing" for entry in status))
+
+    def test_skill_agent_rejects_undeclared_backend(self) -> None:
+        registry = SkillRegistry(self.paths)
+        with self.assertRaisesRegex(ValidationError, "unsupported Skill agent"):
+            registry.install("ctf-web", agent="not-a-backend")
+        with self.assertRaisesRegex(ValidationError, "unsupported Skill agent"):
+            registry.status("ctf-web", "both")
 
 
 if __name__ == "__main__":

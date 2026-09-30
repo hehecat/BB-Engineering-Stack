@@ -11,6 +11,7 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[2]
 os.environ["BB_STACK_ROOT"] = str(ROOT)
 
+from bb_stack.capabilities import CapabilityRegistry
 from bb_stack.engagement import (
     EngagementManager,
     infer_asset,
@@ -22,6 +23,23 @@ from bb_stack.paths import StackPaths
 from bb_stack.runtime import RuntimeManager
 from bb_stack.skills import SkillRegistry
 from bb_stack.validation import validate
+
+
+def _capabilities_ready():
+    """Clear the capability gate while keeping the real MCP render.
+
+    Installed tooling is an environment prerequisite, not the backend-injection
+    behaviour under test; `render_mcp` still runs against real provider reports.
+    """
+    real_doctor = CapabilityRegistry.doctor
+
+    def doctor(self, profile_name, artifact_root=None):
+        report = real_doctor(self, profile_name, artifact_root)
+        report["ready"] = True
+        report["missing_required"] = []
+        return report
+
+    return patch.object(CapabilityRegistry, "doctor", doctor)
 
 
 class LifecycleTests(unittest.TestCase):
@@ -288,6 +306,63 @@ class LifecycleTests(unittest.TestCase):
                 engagement=root,
                 platform=None,
                 claude_args=[],
+                dry_run=True,
+            )
+
+    def test_launch_injects_prompt_through_the_selected_backend(self) -> None:
+        root = self.manager.create(
+            "omp-launch",
+            "https://example.invalid",
+            workflow="ctf",
+            platform="standalone-ctf",
+        )
+        omp = str(self.paths.home / "omp-stub")
+        runtime = RuntimeManager(self.paths)
+        with (
+            patch.object(SkillRegistry, "status", return_value=[]),
+            _capabilities_ready(),
+            patch.dict(os.environ, {"OMP_BIN": omp}),
+        ):
+            result = runtime.launch(
+                "ctf-quick",
+                engagement=root,
+                platform=None,
+                backend_args=[],
+                backend="omp",
+                dry_run=True,
+            )
+        self.assertEqual(result["backend"], "omp")
+        self.assertEqual(result["command"][0], omp)
+        self.assertIn("--append-system-prompt", result["command"])
+        self.assertEqual(
+            result["injection"]["prompt"]["backend"], "omp"
+        )
+        self.assertEqual(
+            result["injection"]["prompt"]["flag"], "--append-system-prompt"
+        )
+        self.assertNotIn("--append-system-prompt-file", result["command"])
+
+    def test_launch_replacement_prompt_rejects_a_context_only_backend(self) -> None:
+        root = self.manager.create(
+            "cursor-launch",
+            "https://example.invalid",
+            workflow="ctf",
+            platform="standalone-ctf",
+        )
+        cursor = str(self.paths.home / "cursor-stub")
+        runtime = RuntimeManager(self.paths)
+        with (
+            patch.object(SkillRegistry, "status", return_value=[]),
+            _capabilities_ready(),
+            patch.dict(os.environ, {"CURSOR_AGENT_BIN": cursor}),
+            self.assertRaisesRegex(StackError, "cursor-agent"),
+        ):
+            runtime.launch(
+                "ctf-replacement",
+                engagement=root,
+                platform=None,
+                backend_args=[],
+                backend="cursor-agent",
                 dry_run=True,
             )
 

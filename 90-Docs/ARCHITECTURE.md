@@ -4,7 +4,7 @@
 
 | Layer | Owns | Must not own |
 | --- | --- | --- |
-| L0 Runtime | bootstrap, PATH, proxy, launch, deployment, recon pipeline execution (`bb-stack recon`, `bb-recon`, `recon.py`, `config/recon.yaml`) | targets, attack knowledge |
+| L0 Runtime | bootstrap, PATH, proxy, launch, deployment, recon pipeline execution (`bb-stack recon`, `bb-recon`, `recon.py`, `config/recon.yaml`), agent backend adapters (`config/backends.yaml`, `backends.py`) | targets, attack knowledge |
 | L1 Global Prompt | short personal execution behavior | platform policy, payloads |
 | L2 Workflow Profiles | workflow, platform, mode, Prompt composition | live state, secrets |
 | L3 Engagement State | scope, lifecycle, evidence references, recon state (`recon-state.schema.json`), handoff | shared tooling source |
@@ -43,6 +43,11 @@ contracts pass. It does not add attack knowledge or change workflow policy.
 - `04-L4-Skills/skills.yaml`: Skill inventory and source directory.
 - `05-L5-MCP-CLI/capabilities.yaml`: provider/capability mapping.
 - `00-L0-Runtime/config/upstreams.yaml`: verified update channels and pins.
+- `00-L0-Runtime/config/backends.yaml`: the source of truth for agent backends
+  (L0 config), listed alongside `upstreams.yaml` and `capabilities.yaml`. It
+  declares each CLI's Prompt and MCP injection mechanism, Skill root, and
+  capability matrix, so `runtime.launch()` holds no backend-specific flag names
+  and a new CLI usually needs registry data rather than code.
 - `00-L0-Runtime/config/recon.yaml`: recon stages, provider requirements, rate
   limits, and expansion providers.
 - `00-L0-Runtime/config/data-catalog.yaml`: data repositories, revisions,

@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from . import __version__
+from .backends import BackendRegistry
 from .browser import BrowserRuntimeManager
 from .capabilities import CapabilityRegistry
 from .configuration import ConfigurationManager
@@ -82,6 +83,18 @@ BUILTIN_CAPABILITY_PROFILE = "ctf-web"
 def _stack_manifest() -> dict[str, Any]:
     """`stack.yaml` for parser defaults; a malformed manifest degrades to `{}`."""
     return load_stack_manifest(source_root(), strict=False)
+
+
+def _backend_names() -> list[str]:
+    """Agent backends declared in `backends.yaml`, for argparse choices.
+
+    A parser must build even where the registry is unreadable (a bare checkout,
+    a downgraded tree); the built-in fallback keeps `claude` selectable.
+    """
+    try:
+        return BackendRegistry(StackPaths.discover()).names()
+    except (StackError, ValidationError):
+        return ["claude"]
 
 
 def _defaults(manifest: Mapping[str, Any]) -> Mapping[str, Any]:
@@ -168,6 +181,7 @@ def build_parser() -> argparse.ArgumentParser:
     manifest = _stack_manifest()
     capability_default = default_capability_profile(manifest)
     runtime_default = default_runtime_profile(manifest)
+    backend_choices = _backend_names()
     parser = argparse.ArgumentParser(
         prog="bb-stack",
         description="BB Engineering Stack L0-L5 control plane",
@@ -281,7 +295,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     workspace = commands.add_parser(
         "workspace",
-        help="initialize, inspect, or route the natural-language Claude workspace",
+        help="initialize, inspect, or route the natural-language agent workspace",
     )
     workspace_sub = workspace.add_subparsers(dest="workspace_command", required=True)
     workspace_init = workspace_sub.add_parser("init")
@@ -461,14 +475,22 @@ def build_parser() -> argparse.ArgumentParser:
     skills_install = skills_sub.add_parser("install")
     skills_install.add_argument("--profile", required=True, choices=CAPABILITY_PROFILES)
     skills_install.add_argument(
-        "--agent", choices=["claude", "codex", "both"], default="claude"
+        "--agent",
+        choices=[*backend_choices, "all"],
+        default="claude",
+        help="agent backend whose Skills directory receives the install, or 'all'",
     )
     skills_install.add_argument("--required-only", action="store_true")
     skills_install.add_argument("--force", action="store_true")
     skills_install.add_argument("--json", action="store_true")
     skills_status = skills_sub.add_parser("status")
     skills_status.add_argument("--profile", required=True, choices=CAPABILITY_PROFILES)
-    skills_status.add_argument("--agent", choices=["claude", "codex"], default="claude")
+    skills_status.add_argument(
+        "--agent",
+        choices=[*backend_choices, "all"],
+        default="claude",
+        help="agent backend to inspect, or 'all' for every declared backend",
+    )
     skills_status.add_argument("--json", action="store_true")
 
     mcp = commands.add_parser("mcp", help="render or probe MCP configuration")
@@ -493,6 +515,12 @@ def build_parser() -> argparse.ArgumentParser:
         choices=CAPABILITY_PROFILES,
     )
     doctor.add_argument("--engagement")
+    doctor.add_argument(
+        "--agent",
+        choices=[*backend_choices, "all"],
+        default="claude",
+        help="agent backend whose Skills directories are audited, or 'all'",
+    )
     doctor.add_argument("--strict", action="store_true")
     doctor.add_argument("--probe-mcp", action="store_true")
     doctor.add_argument("--json", action="store_true")
@@ -561,13 +589,20 @@ def build_parser() -> argparse.ArgumentParser:
     updates_rollback.add_argument("--json", action="store_true")
 
     launch = commands.add_parser(
-        "launch", help="render a profile and exec Claude Code in the work unit"
+        "launch", help="render a profile and exec the configured agent backend"
     )
     launch.add_argument("--profile", default=runtime_default)
     launch.add_argument("--engagement")
     launch.add_argument("--platform")
+    launch.add_argument(
+        "--backend",
+        choices=backend_choices,
+        default=None,
+        help="agent backend to launch (default: the registry's declared default)",
+    )
     launch.add_argument("--dry-run", action="store_true")
     launch.add_argument("--include-high-context-mcp", action="store_true")
+    launch.add_argument("--json", action="store_true", help="emit the plan as JSON")
     launch.add_argument("claude_args", nargs=argparse.REMAINDER)
     return parser
 
@@ -939,7 +974,7 @@ def command(args: argparse.Namespace, paths: StackPaths) -> int:
         l5 = CapabilityRegistry(paths)
         report = l5.doctor(args.profile, artifact_root)
         skill_registry = SkillRegistry(paths)
-        skill_status = skill_registry.status(args.profile, "claude")
+        skill_status = skill_registry.status(args.profile, args.agent)
         required_skills = set(skill_registry.profile(args.profile)["required"])
         missing_skills = sorted(
             item["name"]
@@ -1031,16 +1066,17 @@ def command(args: argparse.Namespace, paths: StackPaths) -> int:
         return 0
     if args.command == "launch":
         engagement = paths.engagement(args.engagement) if args.engagement else None
-        claude_args = args.claude_args
-        if claude_args and claude_args[0] == "--":
-            claude_args = claude_args[1:]
+        backend_args = args.claude_args
+        if backend_args and backend_args[0] == "--":
+            backend_args = backend_args[1:]
         result = RuntimeManager(paths).launch(
             args.profile,
             engagement=engagement,
             platform=args.platform,
-            claude_args=claude_args,
+            backend_args=backend_args,
             dry_run=args.dry_run,
             include_high_context_mcp=args.include_high_context_mcp,
+            backend=args.backend,
         )
         emit(result, True)
         return 0

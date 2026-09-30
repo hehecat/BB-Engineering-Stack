@@ -19,6 +19,7 @@ from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
+from .backends import BackendRegistry
 from .capabilities import CapabilityRegistry
 from .configuration import ConfigurationManager, load_machine_config
 from .data import DataManager
@@ -1323,10 +1324,15 @@ class RuntimeManager:
         *,
         engagement: Path | None,
         platform: str | None,
-        claude_args: list[str],
+        backend_args: list[str] | None = None,
         dry_run: bool,
         include_high_context_mcp: bool = False,
+        backend: str | None = None,
+        claude_args: list[str] | None = None,
     ) -> dict[str, Any]:
+        # `claude_args` is the deprecated spelling of `backend_args`: the extra
+        # arguments are forwarded verbatim to whichever agent backend runs.
+        extra_args = list(backend_args if backend_args is not None else claude_args or [])
         profile_registry = ProfileRegistry(self.paths)
         profile_definition = profile_registry.load(profile_name)
         protected = profile_definition["workflow"] in {"bug-bounty", "assessment"}
@@ -1361,11 +1367,12 @@ class RuntimeManager:
         render = profile_registry.render(
             profile_name, platform=platform, engagement=engagement
         )
+        agent = BackendRegistry(self.paths).selected(backend)
         skill_registry = SkillRegistry(self.paths)
         required_skills = set(skill_registry.profile(render.skill_profile)["required"])
         missing_skills = [
             item["name"]
-            for item in skill_registry.status(render.skill_profile, "claude")
+            for item in skill_registry.status(render.skill_profile, agent.name)
             if item["name"] in required_skills
             and item["state"] in {"missing", "conflict"}
         ]
@@ -1402,33 +1409,12 @@ class RuntimeManager:
             artifact_root=artifact_root,
             include_high_context=include_high_context_mcp,
         )
-        claude = os.environ.get("CLAUDE_BIN") or shutil.which(
-            "claude", path=self.paths.runtime_path()
-        )
-        if not claude:
-            raise CommandError("Claude Code CLI was not found")
-        command = [claude]
-        prompt_flag = (
-            "--system-prompt-file"
-            if render.prompt_mode == "replacement"
-            else "--append-system-prompt-file"
-        )
-        command.extend([prompt_flag, render.output_file])
-        if mcp["mcpServers"]:
-            command.extend(["--mcp-config", str(mcp_path), "--strict-mcp-config"])
-        command.extend(claude_args)
-        result = {
-            "schema_version": 1,
-            "profile": profile_name,
-            "prompt_mode": render.prompt_mode,
-            "cwd": str(cwd),
-            "command": command,
-            "mcp_servers": sorted(mcp["mcpServers"]),
-            "data": data,
-            "side_effects": side_effects,
-        }
-        if dry_run:
-            return result
+        binary = agent.binary(self.paths.runtime_path())
+        if not binary:
+            raise CommandError(
+                f"{agent.label} CLI was not found "
+                f"(agent backend {agent.name!r}; binary {agent.command!r})"
+            )
         env = self.paths.environment(artifact_root)
         env["PATH"] = self.paths.runtime_path()
         env["BB_SELECTED_SIDE_EFFECTS"] = ",".join(side_effects)
@@ -1436,6 +1422,35 @@ class RuntimeManager:
             env["BB_ENGAGEMENT_ROOT"] = str(engagement)
             env["BB_ENGAGEMENT_WORKFLOW"] = engagement_state["workflow"]
             env["BB_AUTHORIZATION_STATUS"] = engagement_state["authorization"]["status"]
+        command = [binary]
+        prompt_record = agent.apply_prompt(
+            prompt_mode=render.prompt_mode,
+            prompt_file=Path(render.output_file),
+            command=command,
+            env=env,
+        )
+        mcp_record = agent.apply_mcp(
+            servers=mcp["mcpServers"],
+            rendered_file=mcp_path,
+            command=command,
+            env=env,
+            work_dir=cwd,
+        )
+        command.extend(extra_args)
+        result = {
+            "schema_version": 1,
+            "profile": profile_name,
+            "backend": agent.name,
+            "prompt_mode": render.prompt_mode,
+            "cwd": str(cwd),
+            "command": command,
+            "injection": {"prompt": prompt_record, "mcp": mcp_record},
+            "mcp_servers": sorted(mcp["mcpServers"]),
+            "data": data,
+            "side_effects": side_effects,
+        }
+        if dry_run:
+            return result
         os.chdir(cwd)
         os.execvpe(command[0], command, env)
         raise AssertionError("os.execvpe returned unexpectedly")

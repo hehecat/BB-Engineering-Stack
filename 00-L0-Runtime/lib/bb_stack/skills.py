@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from .backends import BackendRegistry
 from .errors import StackError, ValidationError
 from .io import load_yaml, load_yaml_text
 from .paths import StackPaths
@@ -151,31 +152,87 @@ class SkillRegistry:
         force: bool = False,
     ) -> list[dict[str, str]]:
         self.validate_all()
-        if agent not in {"claude", "codex", "both"}:
-            raise ValidationError(f"unsupported Skill agent: {agent}")
-        destinations = []
-        if agent in {"claude", "both"}:
-            destinations.append(("claude", self.paths.claude_config_dir / "skills"))
-        if agent in {"codex", "both"}:
-            codex_home = Path(os.environ.get("CODEX_HOME", self.paths.home / ".codex"))
-            destinations.append(("codex", codex_home.expanduser().resolve() / "skills"))
-
+        targets = self._targets(agent)
+        shared = self._shared_roots(targets)
+        names = self.selected(profile_name, include_optional)
         results: list[dict[str, str]] = []
-        for agent_name, destination_root in destinations:
+        written: set[Path] = set()
+        for backend_name, destination_root in targets:
+            root = destination_root.resolve()
+            # Several backends read the same skill directory (omp, opencode and
+            # cursor-agent all use `~/.agents/skills`). The physical path is
+            # installed once; every backend is still reported, flagged so the
+            # operator can see which entry performed the write.
+            if root in written:
+                for name in names:
+                    source = self.source(name)
+                    destination = destination_root / name
+                    results.append(
+                        {
+                            "agent": backend_name,
+                            "name": name,
+                            "state": self._state(source, destination),
+                            "path": str(destination),
+                            "shared": True,
+                        }
+                    )
+                continue
+            written.add(root)
             destination_root.mkdir(parents=True, exist_ok=True)
-            for name in self.selected(profile_name, include_optional):
+            for name in names:
                 source = self.source(name)
                 destination = destination_root / name
                 state = self._install_one(source, destination, force=force)
                 results.append(
                     {
-                        "agent": agent_name,
+                        "agent": backend_name,
                         "name": name,
                         "state": state,
                         "path": str(destination),
+                        "shared": root in shared,
                     }
                 )
         return results
+
+    def _targets(self, agent: str) -> list[tuple[str, Path]]:
+        """Resolve *agent* to `(backend name, skills root)` pairs.
+
+        *agent* is `"all"` or any backend declared in `backends.yaml`; the
+        registry owns both the name set and each backend's `skills_root`, so a
+        new CLI never needs a code change here.
+        """
+        registry = BackendRegistry(self.paths)
+        declared = registry.names()
+        if agent == "all":
+            selected = declared
+        elif agent in declared:
+            selected = [agent]
+        else:
+            raise ValidationError(
+                f"unsupported Skill agent: {agent}; declared backends: "
+                f"{', '.join(declared)}"
+            )
+        return [(name, registry.get(name).skills_root) for name in selected]
+
+    @staticmethod
+    def _shared_roots(targets: list[tuple[str, Path]]) -> set[Path]:
+        counts: dict[Path, int] = {}
+        for _, root in targets:
+            resolved = root.resolve()
+            counts[resolved] = counts.get(resolved, 0) + 1
+        return {root for root, count in counts.items() if count > 1}
+
+    def _state(self, source: Path, destination: Path) -> str:
+        """Non-mutating status of *destination* against *source*."""
+        if destination.is_symlink() and destination.resolve() == source.resolve():
+            return "managed"
+        if destination.is_dir():
+            return (
+                "compatible-unmanaged"
+                if self.tree_digest(destination) == self.tree_digest(source)
+                else "conflict"
+            )
+        return "missing"
 
     def _install_one(self, source: Path, destination: Path, *, force: bool) -> str:
         if destination.is_symlink():
@@ -223,25 +280,20 @@ class SkillRegistry:
         return candidate
 
     def status(self, profile_name: str, agent: str) -> list[dict[str, str]]:
-        destination_root = (
-            self.paths.claude_config_dir / "skills"
-            if agent == "claude"
-            else Path(os.environ.get("CODEX_HOME", self.paths.home / ".codex"))
-            / "skills"
-        )
-        results = []
-        for name in self.selected(profile_name):
-            source = self.source(name)
-            destination = destination_root / name
-            if destination.is_symlink() and destination.resolve() == source.resolve():
-                state = "managed"
-            elif destination.is_dir():
-                state = (
-                    "compatible-unmanaged"
-                    if self.tree_digest(destination) == self.tree_digest(source)
-                    else "conflict"
+        targets = self._targets(agent)
+        shared = self._shared_roots(targets)
+        results: list[dict[str, str]] = []
+        for backend_name, destination_root in targets:
+            for name in self.selected(profile_name):
+                source = self.source(name)
+                destination = destination_root / name
+                results.append(
+                    {
+                        "agent": backend_name,
+                        "name": name,
+                        "state": self._state(source, destination),
+                        "path": str(destination),
+                        "shared": destination_root.resolve() in shared,
+                    }
                 )
-            else:
-                state = "missing"
-            results.append({"name": name, "state": state, "path": str(destination)})
         return results

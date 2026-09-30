@@ -1,0 +1,152 @@
+schema_version: 1
+
+# Agent backends this stack can drive.
+#
+# A backend declares HOW to inject the two things the stack owns -- the routed
+# Prompt and the per-profile MCP servers -- because every CLI exposes that
+# differently. There is no common mechanism to wrap:
+#
+#   flag-file    a dedicated flag naming a file on disk
+#   flag-text    a dedicated flag taking text or a file path
+#   config-text  a `-c key=value` style override carrying literal text
+#   config-file  a `-c key=value` style override naming a file
+#   config-table a `-c key.subkey=value` override per server entry
+#   project-file a file the CLI reads from the working directory
+#   env-config   an environment variable carrying inline config
+#   context-only the CLI has no channel; it only reads context files
+#   unsupported  the capability cannot be provided at all
+#
+# Styles name the mechanism, never the backend, so a new CLI usually needs
+# registry data rather than code. `capabilities` records what an operator
+# actually gets; a missing entry is reported, never silently skipped.
+
+default: claude
+
+paths:
+  claude:
+    base: claude_config
+    sub: skills
+  codex:
+    base: codex_home
+    sub: skills
+  agents:
+    base: user_agents
+    sub: skills
+
+backends:
+  claude:
+    label: Claude Code
+    command: claude
+    bin_env: CLAUDE_BIN
+    config_base: claude_config
+    skills_dir: claude
+    context_files: [CLAUDE.md, AGENTS.md]
+    headless: [-p]
+    prompt:
+      append:
+        style: flag-file
+        flag: --append-system-prompt-file
+      replace:
+        style: flag-file
+        flag: --system-prompt-file
+    mcp:
+      style: flag-file
+      flag: --mcp-config
+      strict_flag: --strict-mcp-config
+      format: mcpServers
+    capabilities: [prompt-replace, prompt-append, mcp-flag, skills, headless, agent-evaluation]
+
+  codex:
+    label: Codex CLI
+    command: codex
+    bin_env: CODEX_BIN
+    config_base: codex_home
+    skills_dir: codex
+    context_files: [AGENTS.md]
+    headless: [exec]
+    prompt:
+      append:
+        style: config-text
+        flag: -c
+        key: developer_instructions
+      replace:
+        style: config-file
+        flag: -c
+        key: model_instructions_file
+    mcp:
+      style: config-table
+      flag: -c
+      table: mcp_servers
+      format: mcpServers
+    capabilities: [prompt-append, mcp-table, skills, headless]
+
+  omp:
+    label: omp
+    command: omp
+    bin_env: OMP_BIN
+    config_base: omp_agent
+    skills_dir: agents
+    context_files: [AGENTS.md, CLAUDE.md]
+    headless: [-p]
+    prompt:
+      append:
+        style: flag-text
+        flag: --append-system-prompt
+      replace:
+        style: flag-text
+        flag: --system-prompt
+    mcp:
+      # omp has no MCP flag and no environment channel; discovery reads
+      # <cwd>/.omp/mcp.json without walking up, so the file must land in the
+      # directory the agent starts in.
+      style: project-file
+      path: .omp/mcp.json
+      format: mcpServers
+    capabilities: [prompt-replace, prompt-append, mcp-project-file, skills, headless]
+
+  opencode:
+    label: opencode
+    command: opencode
+    bin_env: OPENCODE_BIN
+    config_base: opencode_config
+    skills_dir: agents
+    context_files: [AGENTS.md, CLAUDE.md]
+    headless: [run]
+    prompt:
+      # No system-prompt flag exists; a one-shot agent definition is supplied
+      # through inline config and selected with --agent.
+      append:
+        style: env-config
+        env: OPENCODE_CONFIG_CONTENT
+        agent: bb-stack
+      replace:
+        style: env-config
+        env: OPENCODE_CONFIG_CONTENT
+        agent: bb-stack
+    mcp:
+      style: env-config
+      env: OPENCODE_CONFIG_CONTENT
+      key: mcp
+      format: opencode
+    capabilities: [prompt-replace, prompt-append, mcp-env-config, skills, headless]
+
+  cursor-agent:
+    label: Cursor Agent
+    command: cursor-agent
+    bin_env: CURSOR_AGENT_BIN
+    config_base: cursor_config
+    skills_dir: agents
+    context_files: [AGENTS.md, CLAUDE.md]
+    headless: [-p]
+    prompt:
+      # No prompt channel at all: the routed Prompt cannot be injected. The
+      # agent still reads AGENTS.md/CLAUDE.md, which the workspace supplies.
+      append:
+        style: context-only
+      replace:
+        style: unsupported
+    mcp:
+      style: project-file
+      path: .cursor/mcp.json
+      format: mcpServers
+    capabilities: [mcp-project-file, skills, headless]

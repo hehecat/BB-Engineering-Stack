@@ -31,8 +31,9 @@ class RuntimeInstallerTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory(prefix="bb-installers-")
         base = Path(self.temporary.name)
-        stack = base / "stack"
-        stack.mkdir()
+        # launch() resolves the agent backend registry, so the temporary root
+        # has to expose the real stack source tree rather than an empty dir.
+        stack = isolated_stack_source(ROOT, base / "stack")
         self.paths = StackPaths(
             stack,
             base / "home",

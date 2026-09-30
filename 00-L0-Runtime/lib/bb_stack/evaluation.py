@@ -12,6 +12,7 @@ from typing import Any
 from uuid import uuid4
 
 from . import __version__
+from .backends import BackendRegistry
 from .capabilities import CapabilityRegistry
 from .engagement import EngagementManager
 from .errors import CommandError, ValidationError
@@ -325,6 +326,7 @@ class EvaluationManager:
         timeout: int = 180,
         model: str | None = "sonnet",
         max_budget_usd: float = 1.0,
+        backend: str | None = None,
     ) -> dict[str, Any]:
         if timeout < 10 or timeout > 1800:
             raise ValidationError(
@@ -333,6 +335,17 @@ class EvaluationManager:
         if max_budget_usd <= 0 or max_budget_usd > 10:
             raise ValidationError(
                 "agent evaluation budget must be greater than 0 and at most 10 USD"
+            )
+        # Agent evaluation drives the Claude Code CLI directly: it appends
+        # --permission-mode/--tools/--settings isolation flags that no other
+        # backend accepts. The registry records which backends actually offer
+        # this capability; a backend that does not is named, never guessed at.
+        selected_backend = BackendRegistry(self.paths).selected(backend)
+        if not selected_backend.supports("agent-evaluation"):
+            raise CommandError(
+                f"agent evaluation requires the claude backend; "
+                f"current backend is '{selected_backend.name}'. "
+                "Run with --backend claude (or unset BB_AGENT_BACKEND) to evaluate agents."
             )
         definition = self.profile_registry.load(profile)
         capability_profile = str(definition["l5_profile"])
@@ -384,16 +397,11 @@ class EvaluationManager:
             profile,
             engagement=engagement,
             platform=None,
-            claude_args=[],
+            backend_args=[],
             dry_run=True,
         )
         command = list(launch["command"])
-        prompt_flag = (
-            "--system-prompt-file"
-            if launch["prompt_mode"] == "replacement"
-            else "--append-system-prompt-file"
-        )
-        prompt_path = Path(command[command.index(prompt_flag) + 1])
+        prompt_path = self._launch_prompt_path(launch)
         prompt_sha256 = hashlib.sha256(prompt_path.read_bytes()).hexdigest()
         contract_sha256 = self.contract_sha256(profile)
         command.extend(
@@ -724,6 +732,40 @@ class EvaluationManager:
             "root named by the active Prompt, not this evaluation subdirectory, and must "
             f"include its trailing slash.{behavior} After writing valid JSON, print exactly "
             "BB_AGENT_EVAL_DONE."
+        )
+
+    @staticmethod
+    def _launch_prompt_path(launch: dict[str, Any]) -> Path:
+        """Locate the rendered Prompt file behind a ``RuntimeManager.launch`` plan.
+
+        ``runtime.launch`` reports what the backend injected under
+        ``injection.prompt``, so evaluation reuses that record instead of
+        re-deriving the backend's prompt flag itself. Launch payloads produced
+        before that record existed only carry the raw command, so fall back to
+        the claude system-prompt flag rather than failing.
+        """
+        injection = launch.get("injection")
+        prompt_record = injection.get("prompt") if isinstance(injection, dict) else None
+        if isinstance(prompt_record, dict):
+            for key in ("file", "path", "prompt_file"):
+                value = prompt_record.get(key)
+                if value:
+                    return Path(str(value))
+            flag = prompt_record.get("flag")
+            command = list(launch.get("command") or [])
+            if flag and flag in command:
+                return Path(command[command.index(flag) + 1])
+        command = list(launch.get("command") or [])
+        legacy_flag = (
+            "--system-prompt-file"
+            if launch.get("prompt_mode") == "replacement"
+            else "--append-system-prompt-file"
+        )
+        if legacy_flag in command:
+            return Path(command[command.index(legacy_flag) + 1])
+        raise CommandError(
+            "agent evaluation could not find the rendered Prompt file in the "
+            "launch plan; expected launch['injection']['prompt'] to name it"
         )
 
     def _agent_isolation_settings(self) -> dict[str, Any]:

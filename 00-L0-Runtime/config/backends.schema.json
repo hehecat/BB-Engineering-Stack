@@ -1,0 +1,173 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:bb-engineering-stack:schema:backends:v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "default", "paths", "backends"],
+  "$defs": {
+    "name": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*(?:[-_][a-z0-9]+)*$"
+    },
+    "promptStyle": {
+      "enum": [
+        "flag-file",
+        "flag-text",
+        "config-text",
+        "config-file",
+        "env-config",
+        "context-only",
+        "unsupported"
+      ]
+    },
+    "mcpStyle": {
+      "enum": ["flag-file", "config-table", "project-file", "env-config", "unsupported"]
+    },
+    "injector": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["style"],
+      "properties": {
+        "style": {"$ref": "#/$defs/promptStyle"},
+        "flag": {"type": "string", "minLength": 1},
+        "key": {"type": "string", "minLength": 1},
+        "env": {"type": "string", "minLength": 1},
+        "agent": {"type": "string", "minLength": 1}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"style": {"enum": ["flag-file", "flag-text", "config-text", "config-file"]}}},
+          "then": {"required": ["flag"]}
+        },
+        {
+          "if": {"properties": {"style": {"const": "config-text"}}},
+          "then": {"required": ["key"]}
+        },
+        {
+          "if": {"properties": {"style": {"const": "config-file"}}},
+          "then": {"required": ["key"]}
+        },
+        {
+          "if": {"properties": {"style": {"const": "env-config"}}},
+          "then": {"required": ["env", "agent"]}
+        }
+      ]
+    },
+    "mcp": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["style"],
+      "properties": {
+        "style": {"$ref": "#/$defs/mcpStyle"},
+        "flag": {"type": "string", "minLength": 1},
+        "strict_flag": {"type": "string", "minLength": 1},
+        "path": {"type": "string", "minLength": 1},
+        "env": {"type": "string", "minLength": 1},
+        "key": {"type": "string", "minLength": 1},
+        "table": {"type": "string", "minLength": 1},
+        "format": {"enum": ["mcpServers", "opencode"]}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"style": {"const": "flag-file"}}},
+          "then": {"required": ["flag", "format"]}
+        },
+        {
+          "if": {"properties": {"style": {"const": "config-table"}}},
+          "then": {"required": ["flag", "table"]}
+        },
+        {
+          "if": {"properties": {"style": {"const": "project-file"}}},
+          "then": {"required": ["path", "format"]}
+        },
+        {
+          "if": {"properties": {"style": {"const": "env-config"}}},
+          "then": {"required": ["env", "key", "format"]}
+        }
+      ]
+    },
+    "backend": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "label",
+        "command",
+        "skills_dir",
+        "context_files",
+        "headless",
+        "prompt",
+        "mcp",
+        "capabilities"
+      ],
+      "properties": {
+        "label": {"type": "string", "minLength": 1},
+        "command": {"type": "string", "minLength": 1},
+        "bin_env": {"type": "string", "pattern": "^[A-Z][A-Z0-9_]*$"},
+        "config_base": {"$ref": "#/$defs/name"},
+        "skills_dir": {"$ref": "#/$defs/name"},
+        "context_files": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string", "pattern": "^[A-Za-z0-9._-]+\\.md$"}
+        },
+        "headless": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string", "minLength": 1}
+        },
+        "prompt": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["append", "replace"],
+          "properties": {
+            "append": {"$ref": "#/$defs/injector"},
+            "replace": {"$ref": "#/$defs/injector"}
+          }
+        },
+        "mcp": {"$ref": "#/$defs/mcp"},
+        "capabilities": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "prompt-replace",
+              "prompt-append",
+              "mcp-flag",
+              "mcp-table",
+              "mcp-project-file",
+              "mcp-env-config",
+              "skills",
+              "headless",
+              "agent-evaluation"
+            ]
+          }
+        }
+      }
+    }
+  },
+  "properties": {
+    "schema_version": {"const": 1},
+    "default": {"$ref": "#/$defs/name"},
+    "paths": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {"$ref": "#/$defs/name"},
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["base", "sub"],
+        "properties": {
+          "base": {"$ref": "#/$defs/name"},
+          "sub": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "backends": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {"$ref": "#/$defs/name"},
+      "additionalProperties": {"$ref": "#/$defs/backend"}
+    }
+  }
+}

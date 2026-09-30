@@ -21,10 +21,26 @@ from bb_stack.cli import (
     emit,
     main,
 )
+from bb_stack.capabilities import CapabilityRegistry
+from bb_stack.engagement import EngagementManager
 from bb_stack.errors import StackError, ValidationError
 from bb_stack.paths import StackPaths
 from bb_stack.profiles import ProfileRegistry
+from bb_stack.skills import SkillRegistry
 from test_support import isolated_stack_source
+
+
+def _capabilities_ready():
+    """Clear the capability gate while keeping the real MCP render."""
+    real_doctor = CapabilityRegistry.doctor
+
+    def doctor(self, profile_name, artifact_root=None):
+        report = real_doctor(self, profile_name, artifact_root)
+        report["ready"] = True
+        report["missing_required"] = []
+        return report
+
+    return patch.object(CapabilityRegistry, "doctor", doctor)
 
 
 class CliTests(unittest.TestCase):
@@ -324,6 +340,40 @@ class CliTests(unittest.TestCase):
                 patch("bb_stack.cli.runtime_versions", return_value=detected)
             )
             yield
+
+    def test_launch_dispatches_the_selected_backend(self) -> None:
+        engagements = EngagementManager(self.paths)
+        root = engagements.create(
+            "cli-omp",
+            "https://example.invalid",
+            workflow="ctf",
+            platform="standalone-ctf",
+        )
+        omp = str(self.paths.home / "omp-stub")
+        output = StringIO()
+        with (
+            patch.object(SkillRegistry, "status", return_value=[]),
+            _capabilities_ready(),
+            patch.dict(os.environ, {"OMP_BIN": omp}),
+            redirect_stdout(output),
+        ):
+            args = self.parser.parse_args(
+                [
+                    "launch",
+                    "--profile",
+                    "ctf-quick",
+                    "--engagement",
+                    str(root),
+                    "--backend",
+                    "omp",
+                    "--dry-run",
+                ]
+            )
+            self.assertEqual(command(args, self.paths), 0)
+        report = json.loads(output.getvalue())
+        self.assertEqual(report["backend"], "omp")
+        self.assertEqual(report["command"][0], omp)
+        self.assertIn("--append-system-prompt", report["command"])
 
     def test_parser_profile_defaults_come_from_the_stack_manifest(self) -> None:
         source = isolated_stack_source(
