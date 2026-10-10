@@ -27,6 +27,7 @@ from bb_stack.errors import StackError, ValidationError
 from bb_stack.paths import StackPaths
 from bb_stack.profiles import ProfileRegistry
 from bb_stack.skills import SkillRegistry
+from bb_stack.traffic import FlowRecord, store_for
 from test_support import isolated_stack_source
 
 
@@ -92,6 +93,7 @@ class CliTests(unittest.TestCase):
             ["keysmith", "status"],
             ["update", "--profile", "minimal", "--check"],
             ["updates", "check"],
+            ["traffic", "search", "fixture"],
             ["launch", "--dry-run"],
         )
         for arguments in cases:
@@ -311,6 +313,128 @@ class CliTests(unittest.TestCase):
         manager.install_named_tools.assert_called_once_with(
             ["waybackurls", "gau"], dry_run=True
         )
+
+    def _recorded_engagement(self, slug: str) -> tuple[Path, list[int]]:
+        """One engagement holding two recorded flows that differ only by object."""
+        root = EngagementManager(self.paths).create(
+            slug, "https://example.invalid", workflow="ctf", platform="standalone-ctf"
+        )
+        store = store_for(self.paths, slug)
+        first = store.record(
+            FlowRecord(
+                method="GET",
+                host="api.example.invalid",
+                path="/v1/orders/41",
+                client="browser",
+                source="proxy",
+                response_status=200,
+                response_headers={
+                    "Content-Type": "application/json",
+                    "Set-Cookie": "session=owner-a",
+                },
+                response_body=b'{"owner":"41","marker":"zebra-token"}',
+            )
+        )
+        second = store.record(
+            FlowRecord(
+                method="GET",
+                host="api.example.invalid",
+                path="/v1/orders/99",
+                client="agent",
+                source="proxy",
+                response_status=403,
+                response_headers={"Content-Type": "application/json"},
+                response_body=b'{"error":"forbidden"}',
+            )
+        )
+        store.close()
+        return root, [first, second]
+
+    def test_traffic_search_filters_by_text_and_emits_json(self) -> None:
+        _, (first, _) = self._recorded_engagement("traffic-search")
+        output = StringIO()
+        with redirect_stdout(output):
+            args = self.parser.parse_args(
+                ["traffic", "search", "traffic-search", "--text", "zebra", "--json"]
+            )
+            self.assertEqual(command(args, self.paths), 0)
+        rows = json.loads(output.getvalue())
+        self.assertEqual([row["id"] for row in rows], [first])
+        self.assertEqual(rows[0]["url"], "GET api.example.invalid/v1/orders/41")
+        self.assertEqual(rows[0]["status"], 200)
+        self.assertEqual(rows[0]["client"], "browser")
+
+    def test_traffic_read_hosts_stats_and_diff_dispatch(self) -> None:
+        _, (first, second) = self._recorded_engagement("traffic-query")
+
+        output = StringIO()
+        with redirect_stdout(output):
+            args = self.parser.parse_args(
+                ["traffic", "read", "traffic-query", str(first), "--json"]
+            )
+            self.assertEqual(command(args, self.paths), 0)
+        flow = json.loads(output.getvalue())
+        self.assertEqual(flow["response"]["status"], 200)
+        self.assertIn("zebra-token", flow["response"]["body"])
+
+        output = StringIO()
+        with redirect_stdout(output):
+            args = self.parser.parse_args(["traffic", "hosts", "traffic-query", "--json"])
+            self.assertEqual(command(args, self.paths), 0)
+        hosts = json.loads(output.getvalue())
+        self.assertEqual([row["host"] for row in hosts], ["api.example.invalid"])
+        self.assertEqual(hosts[0]["flows"], 2)
+
+        output = StringIO()
+        with redirect_stdout(output):
+            args = self.parser.parse_args(["traffic", "stats", "traffic-query", "--json"])
+            self.assertEqual(command(args, self.paths), 0)
+        stats = json.loads(output.getvalue())
+        self.assertEqual(stats["flows"], 2)
+        self.assertEqual(stats["by_client"], {"agent": 1, "browser": 1})
+
+        output = StringIO()
+        with redirect_stdout(output):
+            args = self.parser.parse_args(
+                [
+                    "traffic",
+                    "diff",
+                    "traffic-query",
+                    str(first),
+                    str(second),
+                    "--json",
+                ]
+            )
+            self.assertEqual(command(args, self.paths), 0)
+        difference = json.loads(output.getvalue())
+        self.assertFalse(difference["identical"])
+        self.assertEqual(
+            difference["changed"]["res:set-cookie"],
+            {"first": "session=owner-a", "second": None},
+        )
+
+    def test_traffic_reports_a_missing_store_actionably(self) -> None:
+        root = EngagementManager(self.paths).create(
+            "traffic-empty",
+            "https://example.invalid",
+            workflow="ctf",
+            platform="standalone-ctf",
+        )
+        with self.assertRaisesRegex(ValidationError, "no traffic recorded") as caught:
+            self.run_command(["traffic", "stats", "traffic-empty"])
+        self.assertIn("bb-traffic --engagement traffic-empty", str(caught.exception))
+        # A read-only command must not conjure an empty store.
+        self.assertFalse((root / "traffic" / "flows.db").exists())
+
+    def test_engagement_new_creates_an_ignored_traffic_directory(self) -> None:
+        root = EngagementManager(self.paths).create(
+            "traffic-layout", "https://example.invalid", workflow="lab"
+        )
+        self.assertTrue((root / "traffic").is_dir())
+        ignore = (root / "traffic" / ".gitignore").read_text(encoding="utf-8")
+        self.assertIn("*\n", ignore)
+        self.assertIn("!.gitignore\n", ignore)
+        self.assertFalse((root / "traffic" / "flows.db").exists())
 
     @contextmanager
     def pinned_validate(self, detected: dict[str, str | None]):

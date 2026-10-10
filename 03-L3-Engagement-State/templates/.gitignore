@@ -5,6 +5,7 @@
 *.cookie
 cookies.txt
 secrets/
+traffic/
 deliverables/*.tar
 deliverables/*.tar.gz
 deliverables/*.zip

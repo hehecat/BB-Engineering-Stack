@@ -274,7 +274,7 @@ class EngagementManager:
         }[workflow]
 
     def _make_directories(self, root: Path, workflow: str) -> None:
-        common = ["notes", "artifacts", "scripts", "reports", "deliverables"]
+        common = ["notes", "artifacts", "scripts", "reports", "deliverables", "traffic"]
         specific = {
             "bug-bounty": ["recon/findings", "recon/js", "h1-packages", "lab"],
             "assessment": ["artifacts/evidence"],
@@ -303,6 +303,16 @@ class EngagementManager:
         (root / ".gitignore").write_text(
             (self.templates / ".gitignore").read_text(encoding="utf-8")
             + ".bb-stack/\n",
+            encoding="utf-8",
+        )
+        # Captured HTTP traffic carries cookies, tokens, and session
+        # identifiers, so the store is never committed. The nested ignore keeps
+        # the directory itself present in the tree.
+        (root / "traffic" / ".gitignore").write_text(
+            "# Captured HTTP traffic carries cookies, tokens, and session\n"
+            "# identifiers. Never commit it; this file keeps traffic/ present.\n"
+            "*\n"
+            "!.gitignore\n",
             encoding="utf-8",
         )
         boundary_rule = (

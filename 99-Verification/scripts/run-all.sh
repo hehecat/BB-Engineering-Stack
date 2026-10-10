@@ -28,6 +28,8 @@ doctor_if_installed() {
 "$PYTHON" "$ROOT/99-Verification/scripts/test_agents.py"
 "$PYTHON" "$ROOT/99-Verification/scripts/test_cli.py"
 "$PYTHON" "$ROOT/99-Verification/scripts/test_recon.py"
+"$PYTHON" "$ROOT/99-Verification/scripts/test_traffic.py"
+"$PYTHON" "$ROOT/99-Verification/scripts/test_traffic_mcp.py"
 "$PYTHON" "$ROOT/99-Verification/scripts/test_search.py"
 "$PYTHON" "$ROOT/99-Verification/scripts/test_lifecycle.py"
 "$PYTHON" "$ROOT/99-Verification/scripts/test_mail_otp.py"

@@ -1,0 +1,138 @@
+#!/usr/bin/env sh
+# bb-traffic - run the mitmproxy-based traffic recorder for one engagement.
+#
+#   bb-traffic --engagement <slug> [mitmdump args...]
+#
+# Everything that goes through the proxy is written to
+# <engagement>/traffic/flows.db by the bb_stack.traffic_proxy addon, and is read
+# back with `bb-stack traffic ...`. Arguments bb-traffic does not recognise are
+# passed to mitmdump unchanged (for example `-p 8899`).
+set -eu
+SCRIPT=$0
+while [ -L "$SCRIPT" ]; do
+  LINK=$(readlink "$SCRIPT")
+  case "$LINK" in
+    /*) SCRIPT=$LINK ;;
+    *) SCRIPT=$(dirname -- "$SCRIPT")/$LINK ;;
+  esac
+done
+ROOT=${BB_STACK_ROOT:-"$(CDPATH= cd -- "$(dirname -- "$SCRIPT")/../.." && pwd -P)"}
+LIB="$ROOT/00-L0-Runtime/lib"
+if [ ! -d "$LIB/bb_stack" ]; then
+  printf '%s\n' "bb-traffic: $ROOT is not a stack source tree" >&2
+  exit 2
+fi
+# Prepend the source tree in both branches: an inherited PYTHONPATH entry must
+# never shadow the stack's own code, not even the venv's editable install.
+export PYTHONPATH="$LIB${PYTHONPATH:+:$PYTHONPATH}"
+PYTHON="$ROOT/.runtime/venv/bin/python"
+if [ ! -x "$PYTHON" ]; then
+  PYTHON=${PYTHON3:-python3}
+fi
+ADDON="$LIB/bb_stack/traffic_proxy.py"
+
+usage() {
+  cat <<'EOF'
+usage: bb-traffic --engagement <slug> [--db <flows.db>] [mitmdump args...]
+
+  --engagement <slug>  engagement whose traffic store receives the flows
+                       (defaults to $BB_ENGAGEMENT; required unless $BB_TRAFFIC_DB)
+  --db <path>          store file to write
+                       (default <engagement>/traffic/flows.db)
+  -h, --help           this text
+
+The first argument bb-traffic does not recognise, and everything after it, goes
+to mitmdump, e.g.
+  bb-traffic --engagement acme -p 8899 --set termlog_verbosity=warn
+EOF
+}
+
+ENGAGEMENT=${BB_ENGAGEMENT:-}
+DB=${BB_TRAFFIC_DB:-}
+while [ $# -gt 0 ]; do
+  case $1 in
+    --engagement)
+      if [ $# -lt 2 ]; then
+        printf '%s\n' "bb-traffic: --engagement needs an engagement slug" >&2
+        exit 2
+      fi
+      ENGAGEMENT=$2
+      shift 2
+      ;;
+    --engagement=*)
+      ENGAGEMENT=${1#*=}
+      shift
+      ;;
+    --db)
+      if [ $# -lt 2 ]; then
+        printf '%s\n' "bb-traffic: --db needs a store path" >&2
+        exit 2
+      fi
+      DB=$2
+      shift 2
+      ;;
+    --db=*)
+      DB=${1#*=}
+      shift
+      ;;
+    -h | --help)
+      usage
+      exit 0
+      ;;
+    --)
+      shift
+      break
+      ;;
+    *)
+      break
+      ;;
+  esac
+done
+if [ -z "$ENGAGEMENT" ] && [ -z "$DB" ]; then
+  printf '%s\n' "bb-traffic: --engagement <slug> (or \$BB_TRAFFIC_DB) is required" >&2
+  usage >&2
+  exit 2
+fi
+if [ -z "$DB" ]; then
+  # Resolve through StackPaths rather than guessing <work_root>/engagements:
+  # the work root is configurable, and an unknown slug must fail loudly here
+  # instead of quietly recording nothing.
+  DB=$("$PYTHON" -c 'import sys
+from bb_stack.paths import StackPaths
+try:
+    print(StackPaths.discover().engagement(sys.argv[1]) / "traffic" / "flows.db")
+except Exception as error:
+    sys.exit(f"bb-traffic: {error}")' "$ENGAGEMENT") || {
+    printf '%s\n' "bb-traffic: cannot resolve engagement '$ENGAGEMENT'" >&2
+    printf '%s\n' "  create it first: bb-stack new $ENGAGEMENT <target>" >&2
+    exit 2
+  }
+fi
+if [ -x "$ROOT/.runtime/bin/mitmdump" ]; then
+  MITMDUMP="$ROOT/.runtime/bin/mitmdump"
+elif command -v mitmdump > /dev/null 2>&1; then
+  MITMDUMP=$(command -v mitmdump)
+else
+  cat >&2 <<'EOF'
+bb-traffic: mitmdump (mitmproxy) is not installed.
+  install it with: bb-stack tool install mitmproxy
+EOF
+  exit 2
+fi
+export BB_STACK_ROOT="$ROOT"
+export BB_TRAFFIC_DB="$DB"
+if [ -n "$ENGAGEMENT" ]; then
+  export BB_ENGAGEMENT="$ENGAGEMENT"
+  printf '%s\n' "bb-traffic: recording engagement '$ENGAGEMENT' to $DB" >&2
+else
+  printf '%s\n' "bb-traffic: recording to $DB" >&2
+fi
+printf '%s\n' \
+  "bb-traffic: proxy listens on mitmdump's default (pass -p <port> to change);" \
+  "HTTPS clients must trust $HOME/.mitmproxy/mitmproxy-ca-cert.pem" >&2
+if [ -n "$ENGAGEMENT" ]; then
+  exec "$MITMDUMP" -s "$ADDON" \
+    --set "bb_traffic_db=$DB" \
+    --set "bb_traffic_engagement=$ENGAGEMENT" "$@"
+fi
+exec "$MITMDUMP" -s "$ADDON" --set "bb_traffic_db=$DB" "$@"

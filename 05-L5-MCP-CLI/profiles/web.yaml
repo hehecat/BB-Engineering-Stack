@@ -35,3 +35,4 @@ optional:
   - proxy.http
   - otp.mail
   - delivery.file-share
+  - traffic.history

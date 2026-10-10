@@ -32,6 +32,7 @@ from .runtime import RuntimeManager
 from .self_update import SelfUpdateManager
 from .skills import SkillRegistry
 from .status import StackStatus
+from .traffic import READ_BYTES_DEFAULT, TrafficStore, store_for
 from .updates import UpdateManager
 from .validation import check_minimum_runtime, runtime_versions, validate
 from .workspace import ROUTES, WorkspaceManager
@@ -169,6 +170,23 @@ def _validate_stack_defaults(paths: StackPaths, stack: Mapping[str, Any]) -> Non
             "defaults.capability_profiles must select defaults.profile "
             f"{profile!r} exactly once; found {matches}"
         )
+
+
+def _traffic_store(paths: StackPaths, slug: str) -> TrafficStore:
+    """Open an Engagement's record of captured HTTP traffic.
+
+    The store is only read here, so a missing database is an operator error
+    rather than something to create: an empty store would answer every query
+    with "nothing captured" and hide an unstarted recorder.
+    """
+    store_path = paths.engagement(slug) / "traffic" / "flows.db"
+    if not store_path.is_file():
+        raise ValidationError(
+            f"no traffic recorded yet for engagement {slug!r}; start the recording "
+            "proxy with: bb-traffic --engagement "
+            f"{slug} (or $BB_STACK_ROOT/00-L0-Runtime/bin/bb-traffic --engagement {slug})"
+        )
+    return store_for(paths, slug)
 
 
 def emit(value: Any, json_output: bool = False) -> None:
@@ -603,6 +621,40 @@ def build_parser() -> argparse.ArgumentParser:
     updates_rollback = updates_sub.add_parser("rollback")
     updates_rollback.add_argument("name")
     updates_rollback.add_argument("--json", action="store_true")
+
+    traffic = commands.add_parser(
+        "traffic", help="search the HTTP traffic recorded for one engagement"
+    )
+    traffic_sub = traffic.add_subparsers(dest="traffic_command", required=True)
+    traffic_search = traffic_sub.add_parser("search")
+    traffic_search.add_argument("engagement")
+    traffic_search.add_argument("--host")
+    traffic_search.add_argument("--path", help="substring of the request path")
+    traffic_search.add_argument("--method")
+    traffic_search.add_argument("--status", type=int)
+    traffic_search.add_argument("--client")
+    traffic_search.add_argument(
+        "--text", help="full-text query over request and response bodies"
+    )
+    traffic_search.add_argument("--since")
+    traffic_search.add_argument("--until")
+    traffic_search.add_argument("--limit", type=int, default=50)
+    traffic_search.add_argument("--json", action="store_true")
+    traffic_read = traffic_sub.add_parser("read")
+    traffic_read.add_argument("engagement")
+    traffic_read.add_argument("id", type=int)
+    traffic_read.add_argument("--max-bytes", type=int, default=READ_BYTES_DEFAULT)
+    traffic_read.add_argument("--raw", action="store_true")
+    traffic_read.add_argument("--json", action="store_true")
+    for action in ("hosts", "stats"):
+        traffic_action = traffic_sub.add_parser(action)
+        traffic_action.add_argument("engagement")
+        traffic_action.add_argument("--json", action="store_true")
+    traffic_diff = traffic_sub.add_parser("diff")
+    traffic_diff.add_argument("engagement")
+    traffic_diff.add_argument("first", type=int)
+    traffic_diff.add_argument("second", type=int)
+    traffic_diff.add_argument("--json", action="store_true")
 
     launch = commands.add_parser(
         "launch", help="render a profile and exec the configured agent backend"
@@ -1125,6 +1177,35 @@ def command(args: argparse.Namespace, paths: StackPaths) -> int:
             emit(manager.promote(args.name), args.json)
         else:
             emit(manager.rollback(args.name), args.json)
+        return 0
+    if args.command == "traffic":
+        with _traffic_store(paths, args.engagement) as store:
+            if args.traffic_command == "search":
+                rows = store.search(
+                    host=args.host,
+                    path_contains=args.path,
+                    method=args.method,
+                    status=args.status,
+                    client=args.client,
+                    text=args.text,
+                    since=args.since,
+                    until=args.until,
+                    limit=args.limit,
+                )
+                emit([{**asdict(row), "url": row.url} for row in rows], args.json)
+            elif args.traffic_command == "read":
+                emit(
+                    store.read(args.id, max_bytes=args.max_bytes, raw=args.raw),
+                    args.json,
+                )
+            elif args.traffic_command == "hosts":
+                emit(store.hosts(), args.json)
+            elif args.traffic_command == "stats":
+                emit(store.stats(), args.json)
+            elif args.traffic_command == "diff":
+                emit(store.diff(args.first, args.second), args.json)
+            else:
+                raise StackError(f"unhandled traffic subcommand: {args.traffic_command}")
         return 0
     if args.command == "launch":
         engagement = paths.engagement(args.engagement) if args.engagement else None

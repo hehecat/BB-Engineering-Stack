@@ -91,6 +91,10 @@
       "required": ["kind", "locator", "placement", "side_effects"],
       "properties": {
         "kind": {"enum": ["cli", "runtime", "mcp", "service", "data"]},
+        "bundled": {
+          "type": "boolean",
+          "description": "Ships in this repository and has no upstream update channel, so it is exempt from the upstreams.yaml provider check. Only meaningful for `kind: mcp`."
+        },
         "locator": {"$ref": "#/$defs/locator"},
         "placement": {
           "enum": ["main", "bounded-worker", "shared-main", "subagent-inline", "mcp-runtime", "runtime"]

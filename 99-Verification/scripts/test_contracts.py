@@ -394,7 +394,7 @@ class ContractTests(unittest.TestCase):
         skill_count = len(SkillRegistry(self.paths).manifest()["skills"])
         self.assertEqual(summary["skills"], skill_count)
         mcp_count = sum(
-            provider["kind"] == "mcp"
+            provider["kind"] == "mcp" and not provider.get("bundled")
             for provider in CapabilityRegistry(self.paths)
             .registry()["providers"]
             .values()

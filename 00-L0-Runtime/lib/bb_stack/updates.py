@@ -168,8 +168,14 @@ class UpdateManager:
                         "Keysmith upstream revision differs from stack.yaml"
                     )
 
+        # A provider that ships in this repository has no upstream package to
+        # pin, so it carries `bundled: true` and is excluded from the
+        # provider/component equality check; only externally sourced providers
+        # need an update channel in upstreams.yaml.
         registered_mcp = {
-            name for name, provider in capabilities.items() if provider["kind"] == "mcp"
+            name
+            for name, provider in capabilities.items()
+            if provider["kind"] == "mcp" and not provider.get("bundled")
         }
         if mcp_providers != registered_mcp:
             missing = sorted(registered_mcp - mcp_providers)

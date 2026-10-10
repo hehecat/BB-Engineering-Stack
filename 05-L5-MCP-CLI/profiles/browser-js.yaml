@@ -9,3 +9,4 @@ optional:
   - runtime.python
   - analysis.javascript-extended
   - proxy.http
+  - traffic.history

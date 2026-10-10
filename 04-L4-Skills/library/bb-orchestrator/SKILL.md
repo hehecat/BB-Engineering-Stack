@@ -76,6 +76,13 @@ accepts it as an authorization boundary; read, write, upload, and business
 operations reached through that boundary are impact evidence, not automatic
 separate findings.
 
+Before ranking or opening a lead, read what was already captured: list the hosts
+in the engagement traffic store, search the captured flows for the endpoint,
+header, and parameter in question, and diff the identities you already replayed.
+A hidden parameter, an ignored endpoint, or a cross-identity delta found there
+costs no new traffic. Open a fresh probe only when the capture lacks the request,
+or when the probe proves what the capture cannot.
+
 ## Delegate Execution
 
 `04-L4-Skills/agents.yaml` declares which role may be handed a lead. Inspect it

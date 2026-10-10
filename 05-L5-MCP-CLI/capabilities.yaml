@@ -256,6 +256,21 @@ providers:
         - --screenshot-format=webp
         - --screenshot-max-width=1600
 
+  traffic-store:
+    kind: mcp
+    bundled: true
+    locator:
+      type: path
+      value: "${BB_STACK_ROOT}/05-L5-MCP-CLI/lib/traffic_mcp.py"
+      interpreter: "${BB_STACK_ROOT}/.runtime/venv/bin/python"
+    placement: shared-main
+    side_effects: [local-read]
+    mcp:
+      name: traffic
+      transport: stdio
+      command: "${BB_STACK_ROOT}/.runtime/venv/bin/python"
+      args: ["${BB_STACK_ROOT}/05-L5-MCP-CLI/lib/traffic_mcp.py"]
+
   webcrack:
     kind: cli
     locator:
@@ -562,6 +577,7 @@ capabilities:
   source.audit: {strategy: any, providers: [semgrep, trufflehog]}
   browser.stateful: {strategy: any, providers: [playwright-mcp]}
   browser.devtools: {strategy: any, providers: [chrome-devtools-mcp, chrome-devtools-cli]}
+  traffic.history: {strategy: any, providers: [traffic-store]}
   analysis.javascript: {strategy: any, providers: [webcrack]}
   analysis.javascript-extended: {strategy: any, providers: [anastasis-mcp]}
   osint.correlation: {strategy: any, providers: [osint-mcp]}
