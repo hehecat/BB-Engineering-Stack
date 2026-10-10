@@ -12,6 +12,7 @@ from typing import Any
 
 from . import __version__
 from .backends import BackendRegistry
+from .agents import AgentRoster
 from .browser import BrowserRuntimeManager
 from .capabilities import CapabilityRegistry
 from .configuration import ConfigurationManager
@@ -466,6 +467,21 @@ def build_parser() -> argparse.ArgumentParser:
     migrate.add_argument("--yes", action="store_true")
     migrate.add_argument("--json", action="store_true")
 
+    agents = commands.add_parser("agents", help="inspect the delegation roster")
+    agents_sub = agents.add_subparsers(dest="agents_command", required=True)
+    agents_list = agents_sub.add_parser("list")
+    agents_list.add_argument("--json", action="store_true")
+    agents_show = agents_sub.add_parser("show")
+    agents_show.add_argument("role")
+    agents_show.add_argument("--json", action="store_true")
+    agents_segment = agents_sub.add_parser("segment")
+    agents_segment.add_argument("--role", action="append", default=[])
+    agents_segment.add_argument("--json", action="store_true")
+    agents_plan = agents_sub.add_parser("plan")
+    agents_plan.add_argument("--file", required=True, type=Path)
+    agents_plan.add_argument("--depth", type=int, default=0)
+    agents_plan.add_argument("--json", action="store_true")
+
     skills = commands.add_parser("skills", help="validate and install versioned Skills")
     skills_sub = skills.add_subparsers(dest="skills_command", required=True)
     skills_list = skills_sub.add_parser("list")
@@ -615,6 +631,7 @@ def command(args: argparse.Namespace, paths: StackPaths) -> int:
         stack = load_yaml(paths.root / "stack.yaml")
         validate(stack, paths.root / "schema" / "stack.schema.json", "stack manifest")
         _validate_stack_defaults(paths, stack)
+        AgentRoster(paths).validate_all()
         version = paths.version
         if version is not None and version != __version__:
             raise ValidationError(
@@ -918,6 +935,51 @@ def command(args: argparse.Namespace, paths: StackPaths) -> int:
             args.names, dry_run=args.dry_run
         )
         emit(result, args.json)
+        return 0
+    if args.command == "agents":
+        roster = AgentRoster(paths)
+        if args.agents_command == "list":
+            emit(
+                [
+                    {
+                        "name": name,
+                        "skill": roster.get(name).skill,
+                        "capabilities": sorted(roster.get(name).capabilities),
+                        "writes": list(roster.get(name).writes),
+                        "max_turns": roster.get(name).max_turns,
+                        "description": roster.get(name).description.strip(),
+                    }
+                    for name in roster.validate_all()
+                ],
+                args.json,
+            )
+        elif args.agents_command == "show":
+            agent = roster.get(args.role)
+            emit(
+                {
+                    "name": agent.name,
+                    "skill": agent.skill,
+                    "capabilities": sorted(agent.capabilities),
+                    "writes": list(agent.writes),
+                    "max_turns": agent.max_turns,
+                    "description": agent.description.strip(),
+                },
+                args.json,
+            )
+        elif args.agents_command == "segment":
+            emit(roster.system_segment(args.role or None), args.json)
+        elif args.agents_command == "plan":
+            plan_path = args.file.expanduser().resolve()
+            if not plan_path.is_file():
+                raise ValidationError(f"delegation plan file not found: {plan_path}")
+            requests = json.loads(plan_path.read_text(encoding="utf-8"))
+            if not isinstance(requests, list):
+                raise ValidationError(
+                    f"delegation plan file must hold a JSON array: {plan_path}"
+                )
+            emit(roster.plan(requests, depth=args.depth), args.json)
+        else:
+            raise StackError(f"unhandled agents subcommand: {args.agents_command}")
         return 0
     if args.command == "skills":
         registry = SkillRegistry(paths)

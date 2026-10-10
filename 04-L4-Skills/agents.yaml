@@ -1,0 +1,116 @@
+schema_version: 1
+
+# Delegation roster.
+#
+# The host harness already spawns subagents (Claude Code's Task tool, omp's
+# task tool, ...), so this file does not implement an agent loop. It declares
+# the *domain* half of a delegation that those harnesses cannot know: which
+# role may be handed a lead, what it is allowed to touch, where it may write,
+# and what it must hand back.
+#
+# The split mirrors what norma (the SDK under ARTEX) calls a subagent
+# Definition -- `description` for routing, a prompt, a tool subset, and a
+# permission mode -- plus two things a shared-filesystem harness needs and a
+# process-isolated Go SDK does not: an explicit `writes` set, and a result
+# contract, so parallel workers cannot collide and the orchestrator does not
+# pull raw execution logs back into its own context.
+
+defaults:
+  # norma bounds fan-out with Config.MaxParallel (default 4) and a recursion
+  # depth guard (default 3). Two levels is enough here: orchestrator -> role.
+  max_parallel: 4
+  max_depth: 2
+  # Every delegated unit must land this file; the orchestrator reads the file,
+  # not the transcript.
+  result_file: result.json
+
+agents:
+  recon-runner:
+    description: >-
+      Run reconnaissance for a written-Scope target and report coverage plus
+      ranked candidate assets. Use when the queued lead is "we do not know the
+      surface yet", not when a specific endpoint needs proving.
+    skill: bb-recon
+    capabilities: [recon.pipeline, recon.subdomains, recon.resolve, recon.permutations, recon.organization, recon.javascript, recon.parameters, data.wordlists.recon, data.wordlists.dns, data.json, http.raw, runtime.python]
+    writes: [recon/]
+    max_turns: 60
+
+  web-prover:
+    description: >-
+      Prove or refute one concrete server-side web hypothesis against an
+      in-scope endpoint: auth boundary, IDOR, injection, business logic, cache,
+      request smuggling. Use when the lead already names a request to change.
+    skill: bb-orchestrator
+    capabilities: [http.raw, web.probe, web.fuzz, web.templates, web.sqli-assist, web.xss-assist, web.crawl, browser.stateful, oob.callback, data.payloads.web, data.wordlists.web, data.json, tls.inspect, proxy.http, runtime.python]
+    writes: [artifacts/web/]
+    max_turns: 60
+
+  browser-analyst:
+    description: >-
+      Analyze client-side JavaScript: request signing, crypto, wasm, source
+      maps, and the call chain behind a browser-only boundary. Use when the
+      proof requires reconstructing client logic rather than replaying a request.
+    skill: browser-js-orchestrator
+    capabilities: [browser.stateful, browser.devtools, analysis.javascript, analysis.javascript-extended, web.probe, http.raw, data.json, runtime.python]
+    writes: [artifacts/browser/]
+    max_turns: 60
+
+  network-scanner:
+    description: >-
+      Assess an authorized network range or Active Directory estate: host and
+      service discovery, protocol weaknesses, credential exposure paths. Use
+      when the Scope is an address range or an internal domain, not a website.
+    skill: security-orchestrator
+    capabilities: [network.scan, tls.inspect, http.raw, osint.correlation, oob.callback, proxy.http, data.wordlists.credentials, data.wordlists.usernames, data.wordlists.llm, data.json, runtime.python]
+    writes: [artifacts/network/]
+    max_turns: 60
+
+  mobile-analyst:
+    description: >-
+      Assess an authorized Android or iOS application: static structure,
+      dynamic instrumentation, storage, crypto, and IPC boundaries. Use when
+      the artifact is an APK, IPA, or a device-backed app.
+    skill: security-orchestrator
+    capabilities: [android.static, android.dynamic, android.device, ios.static, ios.device, mobile.dynamic, native.static, native.decompile, data.json, runtime.python]
+    writes: [artifacts/mobile/]
+    max_turns: 60
+
+  native-analyst:
+    description: >-
+      Reverse a native component: ELF/Mach-O triage, decompilation,
+      protection analysis, and algorithm reconstruction. Use when the proof
+      depends on binary internals rather than protocol behaviour.
+    skill: native-reverse-engineering
+    capabilities: [native.triage, native.static, native.decompile, native.protections, native.debug, native.emulate, data.json, runtime.python]
+    writes: [artifacts/native/]
+    max_turns: 60
+
+  source-auditor:
+    description: >-
+      Audit source, IaC, containers, and dependency supply chain for
+      reachable defects. Use when the artifact is a repository or image rather
+      than a live service.
+    skill: security-orchestrator
+    capabilities: [source.audit, source.iac, source.sca, container.audit, data.json, runtime.python]
+    writes: [artifacts/source/]
+    max_turns: 60
+
+  cloud-auditor:
+    description: >-
+      Audit an authorized cloud account: identity policy, exposed object
+      storage, network exposure, and posture drift. Use when the Scope names a
+      tenant or account rather than a host.
+    skill: security-orchestrator
+    capabilities: [cloud.cli, cloud.posture, http.raw, data.json, runtime.python]
+    writes: [artifacts/cloud/]
+    max_turns: 60
+
+  evidence-writer:
+    description: >-
+      Turn accepted findings into the requested deliverable: report, writeup,
+      or operator handoff. Execution-free -- it reads evidence and writes
+      prose, so it never needs a testing capability. Use during SHIP.
+    skill: report-writing
+    capabilities: [data.json]
+    writes: [reports/, deliverables/, h1-packages/]
+    max_turns: 40

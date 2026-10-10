@@ -76,6 +76,38 @@ accepts it as an authorization boundary; read, write, upload, and business
 operations reached through that boundary are impact evidence, not automatic
 separate findings.
 
+## Delegate Execution
+
+`04-L4-Skills/agents.yaml` declares which role may be handed a lead. Inspect it
+with `bb-stack agents list`, and plan a batch with `bb-stack agents plan --file
+<requests.json>`; that command refuses a batch whose slices would write into one
+another, so run it before spawning rather than discovering a collision later.
+
+Delegate when a unit is independent and self-contained: recon for an unmapped
+target, one concrete request to prove or refute, one artifact to reverse. Keep
+the lead when the next step depends on what you just learned, or when the work
+is a single request you can issue yourself.
+
+Each delegated unit gets its own role, its own output directory, and exactly:
+
+1. The role and the one unit of work, stated so it needs no context from you.
+2. The in-scope target and the authorization basis you already recorded.
+3. The write set the plan assigned, and nothing outside it.
+4. The acceptance condition: what a passing result looks like.
+5. The return contract: write `result.json` with `conclusion`, `claim_basis`
+   (`observed` or `inferred`), `evidence_paths`, and `blocked_by`.
+
+Workers return a conclusion and the path to it, not their transcript. Read the
+conclusion, open evidence files only when the conclusion is load-bearing for the
+next decision, and never pull a worker's raw execution log into your own context.
+
+A delegated worker does not delegate again. When a unit turns out to need two
+different specialisms, finish it, then plan a separate batch for the second.
+
+Synthesize from the returned conclusions: state what was proven, what was
+refuted, and what remains open. A worker reporting success does not raise proof
+level on its own; the claim still needs the observation that supports it.
+
 ## Checkpoint And Continue
 
 Use `hypotheses.md` for leads and `notes/findings-live.md` for findings. Store

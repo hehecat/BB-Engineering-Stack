@@ -25,6 +25,7 @@ doctor_if_installed() {
 
 "$PYTHON" -m py_compile "$ROOT"/00-L0-Runtime/lib/bb_stack/*.py
 "$PYTHON" "$ROOT/99-Verification/scripts/test_contracts.py"
+"$PYTHON" "$ROOT/99-Verification/scripts/test_agents.py"
 "$PYTHON" "$ROOT/99-Verification/scripts/test_cli.py"
 "$PYTHON" "$ROOT/99-Verification/scripts/test_recon.py"
 "$PYTHON" "$ROOT/99-Verification/scripts/test_search.py"

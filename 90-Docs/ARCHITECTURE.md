@@ -41,6 +41,11 @@ contracts pass. It does not add attack knowledge or change workflow policy.
 - `03-L3-Engagement-State/schema/recon-state.schema.json`: canonical recon
   state, coverage, leads, and accepted gaps of a work unit.
 - `04-L4-Skills/skills.yaml`: Skill inventory and source directory.
+- `04-L4-Skills/agents.yaml`: the delegation roster. It declares which role may
+  receive a lead, which L5 capabilities and write roots that role owns, and its
+  turn budget, so a parallel fan-out cannot collide on the shared filesystem the
+  host harness gives every subagent. `bb-stack validate` cross-checks every
+  declared Skill and capability against the L4 and L5 registries.
 - `05-L5-MCP-CLI/capabilities.yaml`: provider/capability mapping.
 - `00-L0-Runtime/config/upstreams.yaml`: verified update channels and pins.
 - `00-L0-Runtime/config/backends.yaml`: the source of truth for agent backends

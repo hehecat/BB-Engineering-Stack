@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:bb-engineering-stack:schema:agents:v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "defaults", "agents"],
+  "$defs": {
+    "name": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+    },
+    "capability": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*(?:\\.[a-z0-9-]+)+$"
+    },
+    "writePath": {
+      "type": "string",
+      "minLength": 1,
+      "not": {"pattern": "^(?:/|[A-Za-z]:[\\\\/]|\\.{1,2}(?:/|$))"},
+      "description": "Engagement-relative directory the role may write."
+    },
+    "agent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["description", "skill", "capabilities", "writes", "max_turns"],
+      "properties": {
+        "description": {
+          "type": "string",
+          "minLength": 20,
+          "description": "Shown to the orchestrator when it picks a role; must state when NOT to use the role."
+        },
+        "skill": {
+          "type": "string",
+          "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+          "description": "L4 Skill the role loads."
+        },
+        "capabilities": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/capability"},
+          "description": "Exact L5 capabilities the role may use; validated against the capability registry."
+        },
+        "writes": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/writePath"},
+          "description": "Directories this role may create or modify inside the engagement."
+        },
+        "max_turns": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000
+        }
+      }
+    }
+  },
+  "properties": {
+    "schema_version": {"const": 1},
+    "defaults": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["max_parallel", "max_depth", "result_file"],
+      "properties": {
+        "max_parallel": {"type": "integer", "minimum": 1, "maximum": 16},
+        "max_depth": {"type": "integer", "minimum": 1, "maximum": 4},
+        "result_file": {"type": "string", "pattern": "^[A-Za-z0-9._-]+\\.json$"}
+      }
+    },
+    "agents": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {"$ref": "#/$defs/name"},
+      "additionalProperties": {"$ref": "#/$defs/agent"}
+    }
+  }
+}
