@@ -11,6 +11,7 @@ claude
 
 Describe a new target, artifact, or continuation in natural language. The
 project router creates or resumes the Engagement and loads its Prompt and state.
+When you are not sure which command fits the situation, run `bb-stack guide`.
 Use the commands below only for explicit control or strict reproduction.
 
 ```bash

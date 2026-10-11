@@ -24,9 +24,9 @@ before choosing work.
 
 ## Coverage Drives Convergence
 
-Before choosing the next lead, read the coverage rollup (`bb-stack coverage <SLUG>`,
-plus `bb-stack graph summary <SLUG>` when relationships matter) rather than opening a
-blind probe. Push the assets that move a gate: `untouched` (never touched) and
+Before choosing the next lead, read the coverage rollup (`bb-stack coverage <SLUG>`)
+rather than opening a blind probe; run `bb-stack guide` for the related graph and
+inventory commands. Push the assets that move a gate: `untouched` (never touched) and
 `unresolved` entries (a lead exists but never closed). Add `unmatched` hosts -- traffic
 you exercised but the inventory never listed -- to the asset inventory; they are
 discoveries, not noise. `accepted_gaps` is a recorded decision to stop, not coverage
@@ -96,10 +96,11 @@ or when the probe proves what the capture cannot.
 
 ## Delegate Execution
 
-`04-L4-Skills/agents.yaml` declares which role may be handed a lead. Inspect it
-with `bb-stack agents list`, and plan a batch with `bb-stack agents plan --file
-<requests.json>`; that command refuses a batch whose slices would write into one
-another, so run it before spawning rather than discovering a collision later.
+`04-L4-Skills/agents.yaml` declares which role may be handed a lead; run
+`bb-stack guide` to find the roster command, then plan a batch with
+`bb-stack agents plan --file <requests.json>`; that command refuses a batch whose
+slices would write into one another, so run it before spawning rather than
+discovering a collision later.
 
 Delegate when a unit is independent and self-contained: recon for an unmapped
 target, one concrete request to prove or refute, one artifact to reverse. Keep

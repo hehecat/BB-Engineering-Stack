@@ -36,6 +36,10 @@ update, and migration requests are stack operations, not Engagements. Inspect
 status, make and verify the machine-local change, then report it. Personal
 integrations remain optional.
 
+Capabilities change over time. When you need to know which command fits the
+situation, run `bb-stack guide` and follow its mapping; do not guess command
+names, and keep no command list here so this router cannot drift from the guide.
+
 For a Stack version update, run `bb-stack update --check`, then
 `bb-stack update`. If the old installation has no saved Bootstrap Profile, run
 `bb-stack update --profile minimal` once. Use plural `bb-stack updates` only

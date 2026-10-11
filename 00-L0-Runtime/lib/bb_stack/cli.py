@@ -181,6 +181,51 @@ def _validate_stack_defaults(paths: StackPaths, stack: Mapping[str, Any]) -> Non
         )
 
 
+GUIDE_CONFIG = Path("00-L0-Runtime") / "config" / "guide.yaml"
+GUIDE_SCHEMA = Path("00-L0-Runtime") / "config" / "guide.schema.json"
+
+
+def load_guide(paths: StackPaths) -> dict[str, Any]:
+    """The situation -> command map rendered by `bb-stack guide`.
+
+    The data lives in `guide.yaml` so the command surface is described in one
+    place; a malformed guide is an operator error, not something to paper over
+    with a built-in fallback that would drift from the file.
+    """
+    guide = load_yaml(paths.root / GUIDE_CONFIG)
+    validate(guide, paths.root / GUIDE_SCHEMA, "command guide")
+    return guide
+
+
+def _guide_document(guide: Mapping[str, Any], section: str | None) -> dict[str, Any]:
+    """The guide, narrowed to one section title when one was requested."""
+    sections = list(guide["sections"])
+    if section is not None:
+        matches = [item for item in sections if item["title"] == section]
+        if not matches:
+            titles = ", ".join(repr(item["title"]) for item in sections)
+            raise ValidationError(
+                f"no guide section {section!r}; available sections: {titles} "
+                "(run `bb-stack guide` to see every section)"
+            )
+        sections = matches
+    return {"schema_version": guide["schema_version"], "sections": sections}
+
+
+def _format_guide(document: Mapping[str, Any]) -> str:
+    """One line per entry: the command, then the situation it answers."""
+    lines: list[str] = []
+    for section in document["sections"]:
+        if lines:
+            lines.append("")
+        lines.append(section["title"])
+        lines.extend(
+            f"  {entry['command']} — {entry['when']}"
+            for entry in section["entries"]
+        )
+    return "\n".join(lines)
+
+
 def _traffic_store(paths: StackPaths, slug: str) -> TrafficStore:
     """Open an Engagement's record of captured HTTP traffic.
 
@@ -390,6 +435,16 @@ def build_parser() -> argparse.ArgumentParser:
 
     paths = commands.add_parser("paths", help="show resolved source/runtime/work paths")
     paths.add_argument("--json", action="store_true")
+
+    guide = commands.add_parser(
+        "guide", help="map a situation to the command that handles it"
+    )
+    guide.add_argument(
+        "--section",
+        metavar="TITLE",
+        help="print only the section with this exact title",
+    )
+    guide.add_argument("--json", action="store_true")
 
     validate_cmd = commands.add_parser("validate", help="validate all stack contracts")
     validate_cmd.add_argument("--json", action="store_true")
@@ -966,6 +1021,10 @@ def build_parser() -> argparse.ArgumentParser:
 def command(args: argparse.Namespace, paths: StackPaths) -> int:
     if args.command == "paths":
         emit(RuntimeManager(paths).runtime_status()["paths"], args.json)
+        return 0
+    if args.command == "guide":
+        document = _guide_document(load_guide(paths), args.section)
+        emit(document if args.json else _format_guide(document), args.json)
         return 0
     if args.command == "validate":
         stack = load_yaml(paths.root / "stack.yaml")

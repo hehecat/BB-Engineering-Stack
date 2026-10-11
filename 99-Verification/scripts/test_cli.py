@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+import shlex
 import sys
 import tempfile
 import unittest
@@ -21,6 +22,7 @@ from bb_stack.cli import (
     command,
     default_capability_profile,
     emit,
+    load_guide,
     main,
 )
 from bb_stack.agents import AgentRoster
@@ -45,6 +47,42 @@ def _capabilities_ready():
         return report
 
     return patch.object(CapabilityRegistry, "doctor", doctor)
+
+
+def _guide_entries(document: dict[str, Any]):
+    """Every (section title, entry) pair in the guide, in file order."""
+    for section in document["sections"]:
+        for entry in section["entries"]:
+            yield section["title"], entry
+
+
+def _command_path(command: str) -> list[str]:
+    """Leading command words of `command`, ignoring the program and arguments.
+
+    `bb-stack graph search <slug> --kind <kind>` has the command path
+    `["graph", "search"]`: the walk stops at the first placeholder or flag, so
+    a positional argument is never mistaken for a command word.
+    """
+    path: list[str] = []
+    for token in shlex.split(command)[1:]:
+        if token.startswith("-") or token.startswith("<"):
+            break
+        path.append(token)
+    return path
+
+
+def _parser_knows(parser: Any, path: list[str]) -> bool:
+    """Whether argparse reaches the last command word in `path`.
+
+    `--help` exits before argparse validates positionals or required flags, so
+    this probes the command tree alone and needs no real arguments.
+    """
+    with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
+        try:
+            parser.parse_args([*path, "--help"])
+        except SystemExit as status:
+            return status.code == 0
+    return False
 
 
 class CliTests(unittest.TestCase):
@@ -74,6 +112,8 @@ class CliTests(unittest.TestCase):
     def test_parser_accepts_every_command_family(self) -> None:
         cases = (
             ["paths", "--json"],
+            ["guide"],
+            ["guide", "--json"],
             ["validate", "--json"],
             ["configure", "--show"],
             ["portable", "export", "/tmp/portable.yaml"],
@@ -1133,6 +1173,114 @@ class CliTests(unittest.TestCase):
             parser.return_value.parse_args.return_value = parsed
             self.assertEqual(main(), 2)
         self.assertIn("KeyError", stderr.getvalue())
+
+
+class CommandGuideTests(unittest.TestCase):
+    """`bb-stack guide` is the single command map; it must not drift.
+
+    The guide is data, so nothing in the CLI breaks when it names a command
+    that was renamed or deleted. These tests walk every entry through the real
+    argparse tree in both directions: entries must name real commands, and the
+    commands agents need most must stay covered.
+    """
+
+    def setUp(self) -> None:
+        self.temporary = tempfile.TemporaryDirectory(prefix="bb-guide-")
+        base = Path(self.temporary.name)
+        self.paths = StackPaths(
+            ROOT,
+            base / "home",
+            base / "work",
+            base / "config",
+            base / "home" / ".claude",
+        )
+        self.parser = build_parser()
+        self.guide = load_guide(self.paths)
+
+    def tearDown(self) -> None:
+        self.temporary.cleanup()
+
+    def run_guide(self, arguments: list[str]) -> str:
+        args = self.parser.parse_args(arguments)
+        output = StringIO()
+        with redirect_stdout(output):
+            self.assertEqual(command(args, self.paths), 0)
+        return output.getvalue()
+
+    def test_every_entry_names_a_command_the_cli_really_has(self) -> None:
+        for title, entry in _guide_entries(self.guide):
+            with self.subTest(section=title, command=entry["command"]):
+                binary = shlex.split(entry["command"])[0]
+                path = _command_path(entry["command"])
+                if binary == "bb-stack":
+                    self.assertTrue(path, "an entry must name a command, not a flag")
+                    self.assertTrue(
+                        _parser_knows(self.parser, path),
+                        f"the guide lists `{entry['command']}` but `bb-stack "
+                        f"{' '.join(path)}` does not exist",
+                    )
+                else:
+                    # `bb-traffic` is a wrapper outside the `bb-stack` parser;
+                    # the script shipped in the source tree is its contract.
+                    wrapper = ROOT / "00-L0-Runtime" / "bin" / binary
+                    self.assertTrue(wrapper.is_file(), f"missing wrapper {wrapper}")
+
+    def test_the_guide_covers_the_command_families_agents_need(self) -> None:
+        commands = [entry["command"] for _, entry in _guide_entries(self.guide)]
+        families = (
+            "bb-stack workspace route",
+            "bb-stack graph build",
+            "bb-stack graph summary",
+            "bb-stack graph search",
+            "bb-stack graph node",
+            "bb-stack graph neighbors",
+            "bb-stack graph stats",
+            "bb-stack coverage",
+            "bb-stack agents suggest",
+            "bb-stack agents list",
+            "bb-stack agents show",
+            "bb-stack agents plan",
+            "bb-traffic --engagement",
+            "bb-stack traffic search",
+            "bb-stack traffic read",
+            "bb-stack traffic hosts",
+            "bb-stack traffic stats",
+            "bb-stack traffic diff",
+            "bb-stack policy show",
+            "bb-stack policy check",
+            "bb-stack engagement authorize",
+            "bb-stack engagement validate",
+            "bb-stack doctor",
+            "bb-stack data status",
+            "bb-stack data ensure",
+            "bb-stack skills install",
+        )
+        for family in families:
+            with self.subTest(family=family):
+                self.assertTrue(
+                    any(command.startswith(family) for command in commands),
+                    f"no guide entry covers `{family}`",
+                )
+
+    def test_guide_groups_by_situation_and_filters_one_section(self) -> None:
+        text = self.run_guide(["guide"])
+        first, second = self.guide["sections"][0], self.guide["sections"][1]
+        self.assertIn(first["title"], text)
+        self.assertIn(second["title"], text)
+        for entry in first["entries"]:
+            self.assertIn(entry["command"], text)
+            self.assertIn(entry["when"], text)
+        filtered = self.run_guide(["guide", "--section", first["title"]])
+        self.assertIn(first["title"], filtered)
+        self.assertNotIn(second["title"], filtered)
+
+    def test_guide_json_is_the_document_and_a_bad_section_is_actionable(self) -> None:
+        self.assertEqual(json.loads(self.run_guide(["guide", "--json"])), self.guide)
+        with self.assertRaises(ValidationError) as caught:
+            self.run_guide(["guide", "--section", "no-such-section"])
+        message = str(caught.exception)
+        self.assertIn("no-such-section", message)
+        self.assertIn(self.guide["sections"][0]["title"], message)
 
 
 class ManifestResolutionTests(unittest.TestCase):

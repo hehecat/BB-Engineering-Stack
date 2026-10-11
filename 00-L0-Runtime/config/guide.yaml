@@ -1,0 +1,98 @@
+schema_version: 1
+
+# Situation -> command map, rendered by `bb-stack guide`.
+#
+# This file, not a prompt or a router, is the single place where the command
+# surface is described. `99-Verification/scripts/test_cli.py` walks every
+# `command` below through the real argparse tree, so an entry naming a command
+# that does not exist (or a command deleted from the CLI) fails the tests
+# instead of silently misleading an agent. Adding a command therefore means
+# adding the situation it answers here.
+#
+# Sections group by the operator's question -- orientation, progress,
+# delegation, traffic, permission, environment -- never by the command tree.
+# `command` uses `<placeholders>` for arguments; there is no real slug, role,
+# or target in this file.
+
+sections:
+  - title: "Orientation -- see the whole engagement before acting"
+    entries:
+      - when: "A new request must be routed to a workflow and engagement before any work starts."
+        command: "bb-stack workspace route --kind <kind> --target <target>"
+      - when: "You do not know which engagement slug a named target belongs to."
+        command: "bb-stack engagement list --json"
+      - when: "You do not know where to start and need the shape of an engagement at a glance."
+        command: "bb-stack graph summary <slug>"
+      - when: "The graph has never been built, or recon, traffic, or notes changed since the last build."
+        command: "bb-stack graph build <slug>"
+      - when: "You need node and edge counts to judge whether the graph is complete."
+        command: "bb-stack graph stats <slug>"
+      - when: "You need to know which assets nobody has touched yet."
+        command: "bb-stack coverage <slug>"
+      - when: "A handoff or CI gate must fail while coverage thresholds are unmet."
+        command: "bb-stack coverage <slug> --gate --min-evidenced-ratio 0.8 --max-untouched 5"
+
+  - title: "Progress -- choose the next action"
+    entries:
+      - when: "You want the next targets ranked by what coverage still misses."
+        command: "bb-stack agents suggest <slug>"
+      - when: "You know part of an asset name and need the node behind it."
+        command: "bb-stack graph search <slug> --kind <kind> --label <text>"
+      - when: "You need one node's stored attributes in full."
+        command: "bb-stack graph node <slug> <kind> <key>"
+      - when: "You need to expand everything a node connects to."
+        command: "bb-stack graph neighbors <slug> <node-id> --depth 2"
+      - when: "Long-running work must record its state before the task switches."
+        command: "bb-stack engagement checkpoint <slug>"
+
+  - title: "Delegation -- hand work to sub-agents"
+    entries:
+      - when: "You need the roles this stack can delegate to."
+        command: "bb-stack agents list"
+      - when: "You need one role's remit and limits before handing it work."
+        command: "bb-stack agents show <role>"
+      - when: "A delegation plan must be checked against role and depth limits."
+        command: "bb-stack agents plan --file <plan.json>"
+      - when: "You need delegation requests for one role instead of bare targets."
+        command: "bb-stack agents suggest <slug> --agent <role> --limit 4"
+      - when: "The roster must be split into delegable segments."
+        command: "bb-stack agents segment --role <role>"
+
+  - title: "Traffic -- the HTTP the engagement actually sent"
+    entries:
+      - when: "Nothing has been recorded yet; start the recording proxy before touching the target."
+        command: "bb-traffic --engagement <slug>"
+      - when: "You need recorded flows matching a host, path, method, status, or body text."
+        command: "bb-stack traffic search <slug> --host <host> --text <query>"
+      - when: "You need one recorded request and response in full."
+        command: "bb-stack traffic read <slug> <flow-id>"
+      - when: "You need every host the engagement actually contacted."
+        command: "bb-stack traffic hosts <slug>"
+      - when: "You need flow counts, methods, and the status distribution."
+        command: "bb-stack traffic stats <slug>"
+      - when: "Two responses to the same action must be compared, for example a signed and an unsigned one."
+        command: "bb-stack traffic diff <slug> <first-id> <second-id>"
+      - when: "Every recorded host must exist in the declared inventory."
+        command: "bb-stack coverage <slug> --require-no-unmatched"
+
+  - title: "Permission -- check what the engagement allows"
+    entries:
+      - when: "You need the tool policy this engagement's profile enforces."
+        command: "bb-stack policy show <slug>"
+      - when: "One tool call must be checked before you make it."
+        command: "bb-stack policy check <slug> --tool <tool> --arg key=value"
+      - when: "Active traffic needs a recorded authorization basis."
+        command: "bb-stack engagement authorize <slug> --status user-asserted --source <source>"
+      - when: "Recorded authorization, scope, and state must agree before you act."
+        command: "bb-stack engagement validate <slug>"
+
+  - title: "Environment -- the machine, data, and Skills"
+    entries:
+      - when: "Something is failing and you do not know which layer is at fault."
+        command: "bb-stack doctor"
+      - when: "You need to know whether the pinned wordlists and payload bundles are installed."
+        command: "bb-stack data status"
+      - when: "The profile's data bundles are missing and must be installed."
+        command: "bb-stack data ensure"
+      - when: "An agent backend is missing the Skills the profile requires."
+        command: "bb-stack skills install --profile <profile>"
