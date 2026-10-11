@@ -578,6 +578,28 @@ class EngagementManager:
         )
 
     @staticmethod
+    def _sync_status_checkpoint(root: Path, timestamp: str) -> None:
+        """Refresh only the ``Last checkpoint:`` header line in STATUS.md.
+
+        Deliberately narrow: the rest of the file is agent-owned prose, so a
+        checkpoint must not drag the control snapshots (and a possibly older
+        `next_action`) over a freshly hand-written body. A missing target line
+        is left untouched rather than created.
+        """
+        status_path = root / "STATUS.md"
+        status = status_path.read_text(encoding="utf-8")
+        updated = re.sub(
+            r"^Last checkpoint: .+$",
+            lambda _: f"Last checkpoint: {timestamp}",
+            status,
+            count=1,
+            flags=re.MULTILINE,
+        )
+        if updated == status:
+            return
+        atomic_write(status_path, updated)
+
+    @staticmethod
     def _sync_control_snapshots(root: Path, state: dict[str, Any]) -> None:
         status_path = root / "STATUS.md"
         status = status_path.read_text(encoding="utf-8")
@@ -693,6 +715,9 @@ class EngagementManager:
             flags=re.MULTILINE,
         )
         atomic_write(handoff_path, handoff)
+        EngagementManager._sync_status_checkpoint(
+            root, state["timestamps"]["updated_at"]
+        )
 
     @contextmanager
     def _state_lock(self, slug: str) -> Iterator[None]:
@@ -914,6 +939,7 @@ class EngagementManager:
             state["timestamps"]["updated_at"] = timestamp
             state["checkpoint"]["updated_at"] = timestamp
             dump_yaml(root / "engagement.yaml", state)
+            self._sync_status_checkpoint(root, timestamp)
             return state
 
     def migrate_legacy(

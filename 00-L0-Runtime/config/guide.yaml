@@ -9,7 +9,7 @@ schema_version: 1
 # instead of silently misleading an agent. Adding a command therefore means
 # adding the situation it answers here.
 #
-# Sections group by the operator's question -- orientation, progress,
+# Sections group by the operator's question -- orientation, progress, state,
 # delegation, traffic, permission, environment -- never by the command tree.
 # `command` uses `<placeholders>` for arguments; there is no real slug, role,
 # or target in this file.
@@ -19,8 +19,6 @@ sections:
     entries:
       - when: "A new request must be routed to a workflow and engagement before any work starts."
         command: "bb-stack workspace route --kind <kind> --target <target>"
-      - when: "You do not know which engagement slug a named target belongs to."
-        command: "bb-stack engagement list --json"
       - when: "You do not know where to start and need the shape of an engagement at a glance."
         command: "bb-stack graph summary <slug>"
       - when: "The graph has never been built, or recon, traffic, or notes changed since the last build."
@@ -42,8 +40,27 @@ sections:
         command: "bb-stack graph node <slug> <kind> <key>"
       - when: "You need to expand everything a node connects to."
         command: "bb-stack graph neighbors <slug> <node-id> --depth 2"
-      - when: "Long-running work must record its state before the task switches."
+
+  - title: "Engagement state -- record where it stands and whether you may act"
+    entries:
+      - when: "You do not know which engagement slug a named target belongs to, or need every engagement's lifecycle at a glance."
+        command: "bb-stack engagement list --json"
+      - when: "An engagement's recorded authorization, scope revision, slug, and control files must be checked for agreement before you act."
+        command: "bb-stack engagement validate <slug>"
+      - when: "Active traffic needs an authorization basis that is not yet recorded on the engagement."
+        command: "bb-stack engagement authorize <slug> --status user-asserted --source <source>"
+      - when: "Long-running work must record its progress before the task switches or the session ends; this stamps the checkpoint time without rewriting the handoff prose."
         command: "bb-stack engagement checkpoint <slug>"
+      - when: "You are deliberately pausing work you can resume later, such as switching machine or coming back after another task."
+        command: "bb-stack engagement pause <slug> --reason <reason>"
+      - when: "An external prerequisite is missing -- credentials, a third party, an unavailable target -- so you cannot continue and must record why."
+        command: "bb-stack engagement block <slug> --reason <reason>"
+      - when: "A paused or blocked engagement is ready to become active again; protected workflows must already carry an authorization basis."
+        command: "bb-stack engagement resume <slug>"
+      - when: "The engagement is finished and work must stop; record why before closing."
+        command: "bb-stack engagement close <slug> --reason <reason>"
+      - when: "A closed engagement must become active again because a new request arrived."
+        command: "bb-stack engagement reopen <slug>"
 
   - title: "Delegation -- hand work to sub-agents"
     entries:
@@ -81,10 +98,6 @@ sections:
         command: "bb-stack policy show <slug>"
       - when: "One tool call must be checked before you make it."
         command: "bb-stack policy check <slug> --tool <tool> --arg key=value"
-      - when: "Active traffic needs a recorded authorization basis."
-        command: "bb-stack engagement authorize <slug> --status user-asserted --source <source>"
-      - when: "Recorded authorization, scope, and state must agree before you act."
-        command: "bb-stack engagement validate <slug>"
 
   - title: "Environment -- the machine, data, and Skills"
     entries:

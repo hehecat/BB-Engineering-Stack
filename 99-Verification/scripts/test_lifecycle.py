@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import tempfile
 import unittest
 from pathlib import Path
@@ -462,6 +463,77 @@ class LifecycleTests(unittest.TestCase):
         dump_yaml(root / "engagement.yaml", state)
         listed = self.manager.list()
         self.assertTrue(any("error" in item for item in listed))
+
+    def test_checkpoint_aligns_status_header_without_rewriting_agent_prose(self) -> None:
+        root = self.manager.create(
+            "checkpoint-sync", "example.invalid", workflow="assessment"
+        )
+        status_path = root / "STATUS.md"
+        status = status_path.read_text(encoding="utf-8")
+        self.assertIn("Last checkpoint: ", status)
+        # Simulate the drift a hand-maintained header accumulates.
+        status = re.sub(
+            r"^Last checkpoint: .+$",
+            "Last checkpoint: 2000-01-01T00:00:00Z",
+            status,
+            count=1,
+            flags=re.MULTILINE,
+        )
+        handwritten = (
+            "Hand-written next step: confirm the ingress rule with the operator."
+        )
+        status = re.sub(
+            r"^## Exact Next Action\n\n.+$",
+            f"## Exact Next Action\n\n{handwritten}",
+            status,
+            count=1,
+            flags=re.MULTILINE,
+        )
+        status_path.write_text(status, encoding="utf-8")
+
+        state = self.manager.checkpoint(root)
+
+        stored = load_yaml(root / "engagement.yaml")
+        self.assertEqual(
+            state["checkpoint"]["updated_at"], stored["checkpoint"]["updated_at"]
+        )
+        text = status_path.read_text(encoding="utf-8")
+        self.assertIn(f"Last checkpoint: {stored['checkpoint']['updated_at']}", text)
+        self.assertNotIn("2000-01-01T00:00:00Z", text)
+        # The narrow sync must not overwrite an agent's own next-action text.
+        self.assertIn(f"## Exact Next Action\n\n{handwritten}", text)
+        self.assertNotIn(
+            f"## Exact Next Action\n\n{stored['current']['next_action']}.",
+            text,
+        )
+
+        # A missing header line is left absent rather than invented.
+        stripped = re.sub(
+            r"^Last checkpoint: .+\n",
+            "",
+            text,
+            count=1,
+            flags=re.MULTILINE,
+        )
+        status_path.write_text(stripped, encoding="utf-8")
+        self.manager.checkpoint(root)
+        self.assertNotIn("Last checkpoint", status_path.read_text(encoding="utf-8"))
+
+    def test_transition_still_syncs_control_snapshot_fields(self) -> None:
+        root = self.manager.create(
+            "transition-sync", "example.invalid", workflow="assessment"
+        )
+        self.manager.authorize(root, status="user-asserted", source="operator statement")
+        self.assertIn(
+            "| Authorization | user-asserted |",
+            (root / "STATUS.md").read_text(encoding="utf-8"),
+        )
+        state = self.manager.transition(root, "paused", "operator checkpoint")
+        text = (root / "STATUS.md").read_text(encoding="utf-8")
+        self.assertIn("| Lifecycle | paused |", text)
+        self.assertIn("| Authorization | user-asserted |", text)
+        self.assertIn(f"| Scope revision | {state['scope']['revision']} |", text)
+        self.assertIn(f"Last checkpoint: {state['timestamps']['updated_at']}", text)
 
     def test_validation_detects_missing_control_and_sensitive_files(self) -> None:
         root = self.manager.create(
