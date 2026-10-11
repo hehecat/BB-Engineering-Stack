@@ -19,19 +19,25 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 os.environ["BB_STACK_ROOT"] = str(ROOT)
 
+from bb_stack.policy import DEFAULT_MODE, ToolPolicy  # noqa: E402
 from bb_stack.traffic import FlowRecord, TrafficStore  # noqa: E402
 
 SERVER = ROOT / "05-L5-MCP-CLI" / "lib" / "traffic_mcp.py"
+
+sys.path.insert(0, str(SERVER.parent))
+import traffic_mcp  # noqa: E402
 
 
 class _Session:
     """A live server subprocess speaking JSON-RPC on stdio."""
 
-    def __init__(self, db: Path):
+    def __init__(self, db: Path, env_extra: dict | None = None):
         env = dict(os.environ)
         env["BB_STACK_ROOT"] = str(ROOT)
         env["BB_TRAFFIC_DB"] = str(db)
         env.pop("BB_ENGAGEMENT", None)
+        if env_extra:
+            env.update(env_extra)
         self.process = subprocess.Popen(
             [sys.executable, str(SERVER)],
             stdin=subprocess.PIPE,
@@ -262,6 +268,183 @@ class TrafficMcpConfigTests(unittest.TestCase):
                 self.assertEqual(stats["flows"], 0)
             finally:
                 session.close()
+
+
+class _StubServer:
+    """Stands in for TrafficServer when driving `_handle` in-process."""
+
+    def __init__(self, policy: ToolPolicy):
+        self.policy = policy
+        self.calls: list[tuple[str, dict]] = []
+
+    def call(self, name: str, arguments: dict) -> dict:
+        self.calls.append((name, arguments))
+        return {"tool": name, "arguments": arguments}
+
+
+def _call(server: _StubServer, name: str, arguments: dict) -> dict:
+    return traffic_mcp._handle(
+        server,
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {"name": name, "arguments": arguments},
+        },
+    )
+
+
+class TrafficMcpPolicyGateTests(unittest.TestCase):
+    """The `tools/call` policy gate, exercised through the real dispatcher."""
+
+    def test_deny_rule_stops_the_tool_and_reports_isError(self) -> None:
+        policy = ToolPolicy.from_mapping(
+            {
+                "deny": [
+                    {
+                        "tool": "read_flow",
+                        "when": {"arg_equals": {"id": 1}},
+                        "message": "flow 1 is out of bounds",
+                    }
+                ]
+            }
+        )
+        server = _StubServer(policy)
+        result = _call(server, "read_flow", {"id": 1})["result"]
+        self.assertTrue(result["isError"])
+        text = result["content"][0]["text"]
+        self.assertIn("out of bounds", text)
+        self.assertIn("deny-rule", text)
+        self.assertEqual(server.calls, [])  # the handler never ran
+
+    def test_ask_without_channel_is_denied_fail_closed(self) -> None:
+        # No policy rule decides, and the tool is not read-only, so the pipeline
+        # reaches the ask phase -- which must fail closed with no channel.
+        server = _StubServer(ToolPolicy(mode=DEFAULT_MODE, read_only=()))
+        result = _call(server, "read_flow", {"id": 1})["result"]
+        self.assertTrue(result["isError"])
+        text = result["content"][0]["text"]
+        self.assertIn("no interactive channel", text)
+        self.assertIn("fail-closed", text)
+        self.assertEqual(server.calls, [])
+
+    def test_updated_input_rewrites_and_is_reported(self) -> None:
+        policy = ToolPolicy.from_mapping(
+            {
+                "allow": [
+                    {
+                        "tool": "read_flow",
+                        "when": {"arg_equals": {"id": 4}},
+                        "updated_input": {"max_bytes": 8},
+                    }
+                ]
+            }
+        )
+        server = _StubServer(policy)
+        result = _call(server, "read_flow", {"id": 4, "max_bytes": 4096})["result"]
+        self.assertFalse(result["isError"])
+        self.assertEqual(server.calls, [("read_flow", {"id": 4, "max_bytes": 8})])
+        payload = json.loads(result["content"][0]["text"])
+        self.assertEqual(payload["policy"]["effective_arguments"], {"id": 4, "max_bytes": 8})
+
+    def test_read_only_tool_passes_the_default_posture(self) -> None:
+        server = _StubServer(traffic_mcp._augment_read_only(ToolPolicy.default()))
+        result = _call(server, "list_traffic_hosts", {})["result"]
+        self.assertFalse(result["isError"])
+        self.assertEqual(server.calls, [("list_traffic_hosts", {})])
+
+    def test_policy_evaluation_failure_fails_closed(self) -> None:
+        class _Boom(ToolPolicy):
+            def evaluate(self, *args, **kwargs):
+                raise RuntimeError("boom")
+
+        server = _StubServer(_Boom())
+        result = _call(server, "read_flow", {"id": 1})["result"]
+        self.assertTrue(result["isError"])
+        self.assertIn("fail-closed", result["content"][0]["text"])
+        self.assertEqual(server.calls, [])
+
+
+class TrafficMcpPolicyFileTests(unittest.TestCase):
+    """The policy is picked up from `<engagement>/policy.yaml` over stdio."""
+
+    def setUp(self) -> None:
+        self.temporary = tempfile.TemporaryDirectory(prefix="bb-traffic-policy-")
+        base = Path(self.temporary.name)
+        self.db = base / "traffic" / "flows.db"
+        with TrafficStore(self.db) as store:
+            store.record(
+                _record("alice", "sid=alice", "/admin/users", 200, b"alice private profile")
+            )
+            store.record(
+                _record(
+                    "browser",
+                    "sid=browser",
+                    "/static/app.js",
+                    200,
+                    b"const TOKEN='leakedapi';",
+                    host="cdn.example.com",
+                )
+            )
+            store.record(_record("alice", "sid=alice", "/health", 500, b"internal error trace"))
+        self.work = base / "work"
+        self.slug = "traffic-policy-fixture"
+        self.engagement = self.work / "engagements" / self.slug
+        self.engagement.mkdir(parents=True)
+        (self.engagement / "engagement.yaml").write_text(
+            f"schema_version: 1\nslug: {self.slug}\n", encoding="utf-8"
+        )
+        self.session: _Session | None = None
+
+    def tearDown(self) -> None:
+        if self.session is not None:
+            self.session.close()
+        self.temporary.cleanup()
+
+    def _open(self, policy_text: str) -> _Session:
+        (self.engagement / "policy.yaml").write_text(policy_text, encoding="utf-8")
+        self.session = _Session(
+            self.db,
+            env_extra={"BB_WORK_ROOT": str(self.work), "BB_ENGAGEMENT": self.slug},
+        )
+        self.session.request("initialize", {"protocolVersion": "2024-11-05"})
+        self.session.notify("notifications/initialized")
+        return self.session
+
+    def test_deny_and_rewrite_apply_end_to_end(self) -> None:
+        session = self._open(
+            "deny:\n"
+            "  - tool: read_flow\n"
+            "    when: {arg_equals: {id: 1}}\n"
+            '    message: "flow 1 is out of bounds"\n'
+            "allow:\n"
+            "  - tool: read_flow\n"
+            "    when: {arg_equals: {id: 2}}\n"
+            "    updated_input: {max_bytes: 8}\n"
+        )
+        # The denied flow is never read: its body cannot appear in the error.
+        denied = session.call_tool("read_flow", {"id": 1})
+        self.assertTrue(denied["result"]["isError"])
+        self.assertIn("out of bounds", _text(denied))
+        self.assertNotIn("alice private profile", _text(denied))
+
+        # The allow rule rewrote the arguments, and says so.
+        rewritten = _payload(session.call_tool("read_flow", {"id": 2, "max_bytes": 4096}))
+        self.assertEqual(rewritten["flow"]["response"]["body"], "const TO")
+        self.assertTrue(rewritten["flow"]["response"]["body_truncated"])
+        self.assertEqual(rewritten["policy"]["effective_arguments"], {"id": 2, "max_bytes": 8})
+
+        # A flow the policy does not name reads in full, unannotated.
+        untouched = _payload(session.call_tool("read_flow", {"id": 3}))
+        self.assertEqual(untouched["flow"]["response"]["body"], "internal error trace")
+        self.assertNotIn("policy", untouched)
+
+    def test_broken_policy_file_fails_closed(self) -> None:
+        session = self._open("mode: nope\n")
+        refused = session.call_tool("read_flow", {"id": 3})
+        self.assertTrue(refused["result"]["isError"])
+        self.assertIn("fail-closed", _text(refused))
+        self.assertNotIn("internal error trace", _text(refused))
 
 
 if __name__ == "__main__":

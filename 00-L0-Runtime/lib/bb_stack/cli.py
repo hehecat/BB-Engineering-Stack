@@ -16,15 +16,24 @@ from .agents import AgentRoster
 from .browser import BrowserRuntimeManager
 from .capabilities import CapabilityRegistry
 from .configuration import ConfigurationManager
+from .coverage import assess
 from .data import DataManager
 from .engagement import EngagementManager
 from .errors import StackError, ValidationError
 from .evaluation import EvaluationManager
 from .filecodebox import add_filecodebox_subcommands, run_filecodebox_command
+from .graph import (
+    NODE_KINDS,
+    SOURCE_NAMES,
+    GraphStore,
+    build as build_graph,
+    graph_for,
+)
 from .io import load_yaml
 from .keysmith import KeysmithAdapter
 from .mail_otp import add_mail_subcommands, run_mail_command
 from .paths import StackPaths, load_stack_manifest, source_root
+from .policy import ToolPolicy, policy_for
 from .portable import PortableManager
 from .profiles import ProfileRegistry
 from .recon import BASELINE_STAGE_IDS, ReconManager
@@ -187,6 +196,102 @@ def _traffic_store(paths: StackPaths, slug: str) -> TrafficStore:
             f"{slug} (or $BB_STACK_ROOT/00-L0-Runtime/bin/bb-traffic --engagement {slug})"
         )
     return store_for(paths, slug)
+
+
+def _graph_store(paths: StackPaths, slug: str) -> GraphStore:
+    """Open an engagement's derived knowledge graph.
+
+    Read commands never build: an empty or absent graph would answer every query
+    with "nothing imported" and hide an unbuilt index, so a missing database is
+    an operator error that points at `graph build`.
+    """
+    store_path = paths.engagement(slug) / "graph" / "nodes.db"
+    if not store_path.is_file():
+        raise ValidationError(
+            f"no graph built yet for engagement {slug!r}; build it with: "
+            f"bb-stack graph build {slug}"
+        )
+    return graph_for(paths, slug)
+
+
+def _format_coverage(report: Mapping[str, Any]) -> str:
+    """Least-covered-first ranking, one line per asset, then the totals."""
+    totals = report["totals"]
+    lines = [
+        f"{report['engagement']}: {totals['assets']} inventoried assets, "
+        f"{totals['traffic_hosts']} hosts seen in traffic"
+    ]
+    rows = [
+        (
+            entry["coverage"],
+            entry["host"],
+            entry["status"] or "-",
+            entry["evidence"],
+        )
+        for entry in report["by_asset"]
+    ]
+    # Hosts seen only in traffic belong in the ranking: nothing has been
+    # concluded about them and they are not in the inventory.
+    rows.extend(
+        (
+            "unmatched",
+            entry["host"],
+            "-",
+            {"flows": entry["flows"], "leads": 0, "findings": 0},
+        )
+        for entry in report["unmatched"]
+    )
+    for coverage, host, status, evidence in rows:
+        # Counts are split because their sum is ambiguous: an `untouched` asset
+        # can still carry a lead that named it but never closed, and that is
+        # exactly the asset worth opening next.
+        lines.append(
+            f"{coverage:<10} {host:<40} status={status:<12} "
+            f"flows={evidence['flows']} leads={evidence['leads']} "
+            f"findings={evidence['findings']}"
+        )
+    lines.append(
+        f"uncovered {totals['uncovered']}/{totals['assets']} "
+        f"ratio={totals['ratio']:.3f} "
+        f"evidenced_ratio={totals['evidenced_ratio']:.3f}"
+    )
+    return "\n".join(lines)
+
+
+def _rule_summary(rule: Any) -> dict[str, Any]:
+    return {
+        "tool": rule.tool,
+        "conditions": [
+            {"kind": condition.kind, "key": condition.key, "value": condition.value}
+            for condition in rule.conditions
+        ],
+        "message": rule.message,
+        "updated_input": dict(rule.updated_input) if rule.updated_input else None,
+    }
+
+
+def _policy_description(policy: ToolPolicy) -> dict[str, Any]:
+    """The policy in force, with where it came from."""
+    return {
+        "mode": policy.mode,
+        "source": policy.source or "built-in default",
+        "deny": [_rule_summary(rule) for rule in policy.deny],
+        "allow": [_rule_summary(rule) for rule in policy.allow],
+        "read_only": list(policy.read_only),
+    }
+
+
+def _tool_arguments(pairs: list[str]) -> dict[str, str]:
+    """`--arg KEY=VALUE` pairs; values stay strings, later pairs win."""
+    arguments: dict[str, str] = {}
+    for pair in pairs:
+        key, separator, value = pair.partition("=")
+        if not separator or not key:
+            raise ValidationError(
+                f"--arg expects KEY=VALUE, got {pair!r} (for example --arg path=/admin)"
+            )
+        arguments[key] = value
+    return arguments
 
 
 def emit(value: Any, json_output: bool = False) -> None:
@@ -655,6 +760,77 @@ def build_parser() -> argparse.ArgumentParser:
     traffic_diff.add_argument("first", type=int)
     traffic_diff.add_argument("second", type=int)
     traffic_diff.add_argument("--json", action="store_true")
+
+    graph = commands.add_parser(
+        "graph", help="build and query one engagement's derived knowledge graph"
+    )
+    graph_sub = graph.add_subparsers(dest="graph_command", required=True)
+    graph_build = graph_sub.add_parser("build")
+    graph_build.add_argument("engagement")
+    graph_build.add_argument(
+        "--source",
+        action="append",
+        choices=SOURCE_NAMES,
+        help="import only this source (repeatable; default: every source)",
+    )
+    graph_build.add_argument("--json", action="store_true")
+    graph_summary = graph_sub.add_parser("summary")
+    graph_summary.add_argument("engagement")
+    graph_summary.add_argument(
+        "--top", type=int, default=20, help="heaviest nodes to list per kind"
+    )
+    graph_summary.add_argument("--json", action="store_true")
+    graph_search = graph_sub.add_parser("search")
+    graph_search.add_argument("engagement")
+    graph_search.add_argument("--kind", choices=NODE_KINDS)
+    graph_search.add_argument("--label", help="substring of the node label")
+    graph_search.add_argument("--key", help="exact node key")
+    graph_search.add_argument("--limit", type=int, default=50)
+    graph_search.add_argument("--json", action="store_true")
+    graph_node = graph_sub.add_parser("node")
+    graph_node.add_argument("engagement")
+    graph_node.add_argument("kind", choices=NODE_KINDS)
+    graph_node.add_argument("key")
+    graph_node.add_argument("--json", action="store_true")
+    graph_neighbors = graph_sub.add_parser("neighbors")
+    graph_neighbors.add_argument("engagement")
+    graph_neighbors.add_argument("node_id", type=int)
+    graph_neighbors.add_argument("--depth", type=int, default=1)
+    graph_neighbors.add_argument(
+        "--direction", choices=["both", "out", "in"], default="both"
+    )
+    graph_neighbors.add_argument(
+        "--kind", action="append", default=[], choices=NODE_KINDS
+    )
+    graph_neighbors.add_argument("--json", action="store_true")
+    graph_stats = graph_sub.add_parser("stats")
+    graph_stats.add_argument("engagement")
+    graph_stats.add_argument("--json", action="store_true")
+
+    coverage = commands.add_parser(
+        "coverage", help="rank asset coverage and show what remains uncovered"
+    )
+    coverage.add_argument("engagement")
+    coverage.add_argument("--json", action="store_true")
+
+    policy = commands.add_parser(
+        "policy", help="inspect the engagement tool policy or dry-run one call"
+    )
+    policy_sub = policy.add_subparsers(dest="policy_command", required=True)
+    policy_show = policy_sub.add_parser("show")
+    policy_show.add_argument("engagement")
+    policy_show.add_argument("--json", action="store_true")
+    policy_check = policy_sub.add_parser("check")
+    policy_check.add_argument("engagement")
+    policy_check.add_argument("--tool", required=True)
+    policy_check.add_argument(
+        "--arg",
+        action="append",
+        default=[],
+        metavar="KEY=VALUE",
+        help="tool argument, repeatable; the value is passed as a string",
+    )
+    policy_check.add_argument("--json", action="store_true")
 
     launch = commands.add_parser(
         "launch", help="render a profile and exec the configured agent backend"
@@ -1207,6 +1383,81 @@ def command(args: argparse.Namespace, paths: StackPaths) -> int:
             else:
                 raise StackError(f"unhandled traffic subcommand: {args.traffic_command}")
         return 0
+    if args.command == "graph":
+        if args.graph_command == "build":
+            emit(
+                build_graph(paths, args.engagement, source=args.source),
+                args.json,
+            )
+            return 0
+        with _graph_store(paths, args.engagement) as store:
+            if args.graph_command == "summary":
+                emit(store.summary(top=args.top), args.json)
+            elif args.graph_command == "search":
+                emit(
+                    store.search(
+                        kind=args.kind,
+                        label_contains=args.label,
+                        key=args.key,
+                        limit=args.limit,
+                    ),
+                    args.json,
+                )
+            elif args.graph_command == "node":
+                node = store.node(args.kind, args.key)
+                if node is None:
+                    raise ValidationError(
+                        f"no {args.kind} node with key {args.key!r} in engagement "
+                        f"{args.engagement!r}; run `bb-stack graph search "
+                        f"{args.engagement}` to list what the graph holds"
+                    )
+                emit(node, args.json)
+            elif args.graph_command == "neighbors":
+                emit(
+                    store.neighbors(
+                        args.node_id,
+                        kinds=args.kind,
+                        direction=args.direction,
+                        depth=args.depth,
+                    ),
+                    args.json,
+                )
+            elif args.graph_command == "stats":
+                emit(store.stats(), args.json)
+            else:
+                raise StackError(f"unhandled graph subcommand: {args.graph_command}")
+        return 0
+    if args.command == "coverage":
+        report = assess(paths, args.engagement)
+        if not report["sources"]["inventory"]:
+            raise ValidationError(
+                f"no asset inventory found for engagement {args.engagement!r}: "
+                "write a markdown table with a `Host` column to "
+                f"{paths.engagement(args.engagement) / 'notes' / 'asset-inventory.md'}, "
+                f"then re-run `bb-stack coverage {args.engagement}`"
+            )
+        emit(report if args.json else _format_coverage(report), args.json)
+        return 0
+    if args.command == "policy":
+        policy = policy_for(paths, args.engagement)
+        if args.policy_command == "show":
+            emit(_policy_description(policy), args.json)
+            return 0
+        if args.policy_command == "check":
+            arguments = _tool_arguments(args.arg)
+            decision = policy.evaluate(args.tool, arguments)
+            result: dict[str, Any] = {
+                "tool": args.tool,
+                "arguments": arguments,
+                "behavior": decision.behavior,
+                "reason": decision.reason,
+                "message": decision.message,
+            }
+            if decision.updated_input is not None:
+                result["updated_input"] = decision.updated_input
+            emit(result, args.json)
+            return 0
+        raise StackError(f"unhandled policy subcommand: {args.policy_command}")
     if args.command == "launch":
         engagement = paths.engagement(args.engagement) if args.engagement else None
         backend_args = args.claude_args

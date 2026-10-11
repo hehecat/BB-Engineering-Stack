@@ -44,8 +44,15 @@ _L0_LIB = _STACK_ROOT / "00-L0-Runtime" / "lib"
 if str(_L0_LIB) not in sys.path:
     sys.path.insert(0, str(_L0_LIB))
 
-from bb_stack.errors import StackError  # noqa: E402
+from bb_stack.errors import StackError, ValidationError  # noqa: E402
 from bb_stack.paths import StackPaths  # noqa: E402
+from bb_stack.policy import (  # noqa: E402
+    ASK,
+    DEFAULT_MODE,
+    Decision,
+    ToolPolicy,
+    policy_for,
+)
 from bb_stack.traffic import (  # noqa: E402
     READ_BYTES_DEFAULT,
     TrafficStore,
@@ -70,8 +77,9 @@ _WORKFLOW_HINT = (
 class TrafficServer:
     """Owns the store handle and dispatches JSON-RPC requests."""
 
-    def __init__(self, db_path: Path):
+    def __init__(self, db_path: Path, *, policy: ToolPolicy | None = None):
         self.db_path = db_path
+        self.policy = policy if policy is not None else ToolPolicy.default()
         self._store: TrafficStore | None = None
 
     # -- store -----------------------------------------------------------
@@ -322,6 +330,61 @@ TOOLS: list[dict[str, Any]] = [
 
 TOOL_NAMES = {tool["name"] for tool in TOOLS}
 
+# Every tool this server exposes only *reads* engagement state -- the recorder
+# owns the store, not us. They all join the policy's read-only set so the
+# shipped posture ("read-only passes, everything else asks") stays usable: the
+# policy's generic read-only patterns (`list_hosts`, `search`, ...) do not match
+# this server's names on their own.
+READ_ONLY_TOOLS: tuple[str, ...] = tuple(tool["name"] for tool in TOOLS)
+
+
+def _augment_read_only(base: ToolPolicy) -> ToolPolicy:
+    """*base* with this server's read-only tools folded in (defaults kept)."""
+    return ToolPolicy(
+        mode=base.mode,
+        deny=base.deny,
+        allow=base.allow,
+        read_only=base.read_only
+        + tuple(name for name in READ_ONLY_TOOLS if name not in base.read_only),
+        source=base.source,
+    )
+
+
+def _resolve_policy() -> ToolPolicy:
+    """The engagement policy, with the failure modes the spec pins down.
+
+    * No engagement to resolve (or no ``policy.yaml``) -- the shipped default.
+    * A ``policy.yaml`` that cannot be read or parsed -- fail closed: deny
+      every call rather than let a broken rule set silently open the server.
+
+    Neither path may take the server down; both log one line to stderr.
+    """
+    slug = os.environ.get("BB_ENGAGEMENT", "").strip() or None
+    try:
+        base = policy_for(StackPaths.discover(), slug)
+    except ValidationError as error:
+        # The file exists but could not be read or parsed. A broken rule set
+        # must never silently open the server: deny everything.
+        return _fail_closed(str(error))
+    except StackError as error:
+        print(f"bb-traffic-mcp: no engagement policy ({error}); using defaults", file=sys.stderr)
+        base = ToolPolicy.default()
+    except Exception as error:  # noqa: BLE001 - unknown trouble also fails closed
+        return _fail_closed(str(error))
+    return _augment_read_only(base)
+
+
+def _fail_closed(detail: str) -> ToolPolicy:
+    print(
+        f"bb-traffic-mcp: policy unreadable ({detail}); denying every call "
+        "(fail-closed)",
+        file=sys.stderr,
+    )
+    # No read-only augmentation on purpose: fail-closed means *nothing* runs.
+    return ToolPolicy(
+        mode=DEFAULT_MODE, deny=(), allow=(), read_only=(), source="fail-closed"
+    )
+
 
 def _resolve_db_path() -> Path:
     explicit = os.environ.get("BB_TRAFFIC_DB", "").strip()
@@ -352,6 +415,31 @@ def _error(message: str) -> dict[str, Any]:
     }
 
 
+def _policy_denial(name: str, decision: Decision) -> str:
+    """The `isError` text for a call the policy refused."""
+    if decision.behavior == ASK:
+        return (
+            f"policy asks to confirm {name!r} and this stdio server has no "
+            "interactive channel; denied (fail-closed)"
+        )
+    reason = decision.reason or decision.behavior
+    detail = decision.message or f"tool {name!r} denied by engagement policy"
+    if reason == "fail-closed":
+        return (
+            f"policy asked to confirm {name!r} but no interactive channel "
+            f"exists; denied (fail-closed): {detail}"
+        )
+    return f"policy denied {name!r} [{reason}]: {detail}"
+
+
+def _annotated(payload: Any, decision: Decision) -> Any:
+    """*payload* with the rewrite that produced it recorded under `policy`."""
+    note = {"effective_arguments": decision.updated_input, "reason": decision.reason}
+    if isinstance(payload, dict):
+        return {**payload, "policy": note}
+    return {"policy": note, "result": payload}
+
+
 def _handle(server: TrafficServer, request: dict[str, Any]) -> dict[str, Any]:
     method = request.get("method")
     if method == "initialize":
@@ -378,12 +466,30 @@ def _handle(server: TrafficServer, request: dict[str, Any]) -> dict[str, Any]:
             return {"result": _error("tools/call arguments must be an object")}
         if name not in TOOL_NAMES:
             return {"result": _error(f"unknown tool: {name}")}
+        # Policy gate runs before the handler; an exception here must not crash
+        # the server, so it fails closed with the reason on stderr.
         try:
-            payload = server.call(name, arguments)
+            decision = server.policy.evaluate(name, arguments)
+        except Exception as error:  # noqa: BLE001 - policy trouble fails closed
+            print(f"bb-traffic-mcp: policy failed for {name!r}: {error}", file=sys.stderr)
+            return {
+                "result": _error(
+                    f"policy evaluation failed for {name!r}: {error}; denied (fail-closed)"
+                )
+            }
+        if not decision.allowed:
+            return {"result": _error(_policy_denial(name, decision))}
+        # An allow rule may rewrite the arguments (the rewrite is surfaced in
+        # the result under `policy`, never applied silently).
+        effective = decision.updated_input if decision.updated_input is not None else arguments
+        try:
+            payload = server.call(name, effective)
         except _ToolError as error:
             return {"result": _error(str(error))}
         except StackError as error:
             return {"result": _error(f"{error.__class__.__name__}: {error}")}
+        if decision.updated_input is not None:
+            payload = _annotated(payload, decision)
         return {"result": _content(payload)}
     raise _MethodNotFound(method or "")
 
@@ -403,7 +509,7 @@ def _respond(request: dict[str, Any], outcome: dict[str, Any], *, error: bool = 
 
 def main() -> int:
     db_path = _resolve_db_path()
-    server = TrafficServer(db_path)
+    server = TrafficServer(db_path, policy=_resolve_policy())
     try:
         for line in sys.stdin:
             line = line.strip()

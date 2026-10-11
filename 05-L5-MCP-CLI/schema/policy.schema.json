@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:bb-engineering-stack:schema:l5-policy:v1",
+  "title": "Engagement tool-call policy (<engagement>/policy.yaml)",
+  "description": "Shape accepted by bb_stack.policy.ToolPolicy.from_mapping. Every key is optional; an absent file means the shipped default posture.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "mode": {
+      "description": "Phase-2 short-circuit. bypass allows everything, read-only denies every non-read-only tool, default falls through.",
+      "enum": ["read-only", "default", "bypass"]
+    },
+    "read_only": {
+      "description": "Extra read-only tool patterns; the shipped defaults are kept and these are appended.",
+      "type": "array",
+      "items": {"type": "string", "minLength": 1}
+    },
+    "deny": {
+      "description": "Evaluated first; first match wins and no mode or allow rule can override it.",
+      "type": "array",
+      "items": {"$ref": "#/$defs/rule"}
+    },
+    "allow": {
+      "description": "Evaluated after deny; first match wins.",
+      "type": "array",
+      "items": {"$ref": "#/$defs/rule"}
+    }
+  },
+  "$defs": {
+    "rule": {
+      "description": "A tool-name string, or a mapping with an optional tool/when/message/updated_input.",
+      "oneOf": [
+        {"type": "string", "minLength": 1, "pattern": "\\S"},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "tool": {
+              "description": "Tool-name pattern; defaults to '*' when omitted.",
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S"
+            },
+            "when": {"$ref": "#/$defs/when"},
+            "message": {"type": "string"},
+            "updated_input": {
+              "description": "Argument rewrite applied when the rule matches; a null value deletes the key.",
+              "type": "object"
+            }
+          }
+        }
+      ]
+    },
+    "when": {
+      "description": "Argument conditions; all present conditions are ANDed.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "arg_equals": {
+          "description": "argument name -> value: arguments[name] == value",
+          "type": "object",
+          "additionalProperties": true
+        },
+        "arg_contains": {
+          "description": "argument name -> substring: substring is in str(arguments[name])",
+          "type": "object",
+          "additionalProperties": true
+        },
+        "arg_in": {
+          "description": "argument name -> list: arguments[name] is a member of the list",
+          "type": "object",
+          "additionalProperties": {"type": "array"}
+        },
+        "arg_present": {
+          "description": "argument names that must be present with a non-empty value",
+          "type": "array",
+          "items": {"type": "string", "minLength": 1}
+        }
+      }
+    }
+  }
+}

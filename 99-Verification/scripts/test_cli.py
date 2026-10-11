@@ -8,6 +8,7 @@ import unittest
 from contextlib import ExitStack, contextmanager, redirect_stderr, redirect_stdout
 from io import StringIO
 from pathlib import Path
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -94,6 +95,10 @@ class CliTests(unittest.TestCase):
             ["update", "--profile", "minimal", "--check"],
             ["updates", "check"],
             ["traffic", "search", "fixture"],
+            ["graph", "summary", "fixture"],
+            ["coverage", "fixture"],
+            ["policy", "show", "fixture"],
+            ["policy", "check", "fixture", "--tool", "search"],
             ["launch", "--dry-run"],
         )
         for arguments in cases:
@@ -435,6 +440,234 @@ class CliTests(unittest.TestCase):
         self.assertIn("*\n", ignore)
         self.assertIn("!.gitignore\n", ignore)
         self.assertFalse((root / "traffic" / "flows.db").exists())
+
+    def test_engagement_new_creates_an_ignored_graph_directory(self) -> None:
+        root = EngagementManager(self.paths).create(
+            "graph-layout", "https://example.invalid", workflow="lab"
+        )
+        self.assertTrue((root / "graph").is_dir())
+        ignore = (root / "graph" / ".gitignore").read_text(encoding="utf-8")
+        self.assertIn("*\n", ignore)
+        self.assertIn("!.gitignore\n", ignore)
+        self.assertFalse((root / "graph" / "nodes.db").exists())
+
+    # -- graph / coverage / policy ---------------------------------------
+
+    def _surveyed_engagement(self, slug: str) -> tuple[Path, str]:
+        """One engagement with an inventory, notes text, and one concluded lead.
+
+        The inventory's `Notes` cell holds a token that reaches the graph as node
+        attributes, so a summary that leaks node content is detectable.
+        """
+        token = "zebra-inventory-note"
+        root = EngagementManager(self.paths).create(
+            slug, "https://example.invalid", workflow="ctf", platform="standalone-ctf"
+        )
+        (root / "notes" / "asset-inventory.md").write_text(
+            "# Asset Inventory\n\n"
+            "| Host | Status | Notes |\n"
+            "| --- | --- | --- |\n"
+            f"| api.example.invalid | 200 | {token} |\n"
+            "| legacy.example.invalid | 502 |  |\n",
+            encoding="utf-8",
+        )
+        (root / "hypotheses.md").write_text(
+            "# Hypotheses\n\n"
+            "| ID | Surface | State |\n"
+            "| --- | --- | --- |\n"
+            "| H-1 | api.example.invalid | validated |\n",
+            encoding="utf-8",
+        )
+        return root, token
+
+    def _command_json(self, arguments: list[str]) -> Any:
+        output = StringIO()
+        with redirect_stdout(output):
+            args = self.parser.parse_args(arguments)
+            self.assertEqual(command(args, self.paths), 0)
+        return json.loads(output.getvalue())
+
+    def _command_text(self, arguments: list[str]) -> str:
+        output = StringIO()
+        with redirect_stdout(output):
+            args = self.parser.parse_args(arguments)
+            self.assertEqual(command(args, self.paths), 0)
+        return output.getvalue().rstrip("\n")
+
+    def test_graph_build_and_summary_keep_node_content_out(self) -> None:
+        root, token = self._surveyed_engagement("graph-build")
+
+        restricted = self._command_json(
+            ["graph", "build", "graph-build", "--source", "asset-inventory", "--json"]
+        )
+        # `--source` restricts the import to the named importer.
+        self.assertEqual(list(restricted["sources"]), ["asset-inventory"])
+        self.assertEqual(restricted["nodes"]["asset"], 2)
+
+        built = self._command_json(["graph", "build", "graph-build", "--json"])
+        self.assertIn("hypotheses", built["sources"])
+        self.assertTrue((root / "graph" / "nodes.db").is_file())
+
+        summary = self._command_json(["graph", "summary", "graph-build", "--top", "2", "--json"])
+        self.assertEqual(summary["kinds"]["asset"], 2)
+        self.assertGreaterEqual(summary["totals"]["nodes"], 2)
+        self.assertNotIn(token, json.dumps(summary))
+        self.assertEqual(
+            [node["key"] for node in summary["top"]["asset"]][0], "api.example.invalid"
+        )
+
+        # The token really is in the store: the omission above is the summary's
+        # doing, not a fixture that never carried it.
+        node = self._command_json(
+            ["graph", "node", "graph-build", "asset", "api.example.invalid", "--json"]
+        )
+        self.assertEqual(node["attrs"]["notes"], token)
+        self.assertTrue(node["edges"])
+
+        stats = self._command_json(["graph", "stats", "graph-build", "--json"])
+        self.assertEqual(stats["engagement"], "graph-build")
+        self.assertTrue(stats["path"].endswith("graph/nodes.db"))
+        self.assertIsNotNone(stats["built_at"])
+
+        found = self._command_json(
+            ["graph", "search", "graph-build", "--kind", "asset", "--label", "legacy", "--json"]
+        )
+        self.assertEqual([row["key"] for row in found], ["legacy.example.invalid"])
+
+    def test_coverage_ranks_uncovered_assets_and_prints_the_total(self) -> None:
+        self._surveyed_engagement("coverage-rank")
+
+        text = self._command_text(["coverage", "coverage-rank"])
+        lines = text.splitlines()
+        # Least covered first, each line carrying host, status, and the split
+        # evidence counts (their sum alone cannot distinguish "a lead named it"
+        # from "a finding closed it").
+        self.assertIn("untouched  legacy.example.invalid", text)
+        self.assertIn("status=502", text)
+        self.assertIn("flows=0 leads=0 findings=0", text)
+        self.assertIn("concluded  api.example.invalid", text)
+        self.assertIn("leads=1", text)
+        self.assertLess(
+            text.index("legacy.example.invalid"), text.index("api.example.invalid")
+        )
+        self.assertEqual(
+            lines[-1], "uncovered 1/2 ratio=0.500 evidenced_ratio=0.500"
+        )
+
+        report = self._command_json(["coverage", "coverage-rank", "--json"])
+        self.assertEqual(report["totals"]["assets"], 2)
+        self.assertEqual(report["totals"]["uncovered"], 1)
+        self.assertEqual(report["totals"]["concluded"], 1)
+        self.assertEqual(report["totals"]["ratio"], 0.5)
+        self.assertEqual(
+            [entry["host"] for entry in report["by_asset"]],
+            ["legacy.example.invalid", "api.example.invalid"],
+        )
+
+    def test_graph_query_reports_an_unbuilt_graph_actionably(self) -> None:
+        root = EngagementManager(self.paths).create(
+            "graph-empty", "https://example.invalid", workflow="lab"
+        )
+        with self.assertRaisesRegex(ValidationError, "no graph built yet") as caught:
+            self.run_command(["graph", "summary", "graph-empty"])
+        self.assertIn("bb-stack graph build graph-empty", str(caught.exception))
+        # A read command must not conjure an empty store.
+        self.assertFalse((root / "graph" / "nodes.db").exists())
+
+    def test_coverage_reports_a_missing_inventory_actionably(self) -> None:
+        EngagementManager(self.paths).create(
+            "coverage-empty", "https://example.invalid", workflow="ctf",
+            platform="standalone-ctf",
+        )
+        with self.assertRaisesRegex(
+            ValidationError, "no asset inventory found"
+        ) as caught:
+            self.run_command(["coverage", "coverage-empty"])
+        self.assertIn("asset-inventory.md", str(caught.exception))
+
+    def test_policy_check_allows_read_only_and_denies_unruled_tools(self) -> None:
+        EngagementManager(self.paths).create(
+            "policy-default", "https://example.invalid", workflow="lab"
+        )
+
+        shown = self._command_json(["policy", "show", "policy-default", "--json"])
+        self.assertEqual(shown["mode"], "default")
+        self.assertEqual(shown["source"], "built-in default")
+        # The shipped read-only set describes shapes, not one server's names.
+        self.assertIn("search_*", shown["read_only"])
+
+        allowed = self._command_json(
+            [
+                "policy", "check", "policy-default",
+                "--tool", "search_traffic", "--arg", "text=admin", "--json",
+            ]
+        )
+        self.assertEqual(allowed["behavior"], "allow")
+        self.assertEqual(allowed["reason"], "read-only")
+        self.assertEqual(allowed["arguments"], {"text": "admin"})
+
+        # No confirmation handler is wired into the CLI, so an unruled write is
+        # reported as the fail-closed deny it is -- not an error.
+        denied = self._command_json(
+            ["policy", "check", "policy-default", "--tool", "shell_exec", "--json"]
+        )
+        self.assertEqual(denied["behavior"], "deny")
+        self.assertEqual(denied["reason"], "fail-closed")
+        self.assertIn("no confirmation handler", denied["message"])
+
+    def test_policy_check_applies_engagement_rules_to_parsed_arguments(self) -> None:
+        root = EngagementManager(self.paths).create(
+            "policy-rules", "https://example.invalid", workflow="lab"
+        )
+        policy_file = root / "policy.yaml"
+        policy_file.write_text(
+            "mode: default\n"
+            "deny:\n"
+            "  - tool: 'env(...)'\n"
+            "    message: environment dumps are denied\n"
+            "allow:\n"
+            "  - tool: shell\n"
+            "    when:\n"
+            "      arg_present: [command]\n",
+            encoding="utf-8",
+        )
+
+        shown = self._command_json(["policy", "show", "policy-rules", "--json"])
+        self.assertEqual(shown["source"], str(policy_file))
+        self.assertEqual([rule["tool"] for rule in shown["deny"]], ["env(...)"])
+
+        denied = self._command_json(
+            ["policy", "check", "policy-rules", "--tool", "env_dump", "--json"]
+        )
+        self.assertEqual(denied["behavior"], "deny")
+        self.assertEqual(denied["reason"], "deny-rule")
+        self.assertEqual(denied["message"], "environment dumps are denied")
+
+        allowed = self._command_json(
+            [
+                "policy", "check", "policy-rules",
+                "--tool", "shell", "--arg", "command=id", "--json",
+            ]
+        )
+        self.assertEqual(allowed["behavior"], "allow")
+        self.assertEqual(allowed["reason"], "allow-rule")
+
+        # Same tool without the gating argument matches no rule, so it stays
+        # fail-closed: the flag is what feeds `evaluate`, not the CLI.
+        ungated = self._command_json(
+            ["policy", "check", "policy-rules", "--tool", "shell", "--json"]
+        )
+        self.assertEqual(ungated["behavior"], "deny")
+        self.assertEqual(ungated["reason"], "fail-closed")
+
+    def test_policy_check_rejects_a_malformed_argument(self) -> None:
+        EngagementManager(self.paths).create(
+            "policy-args", "https://example.invalid", workflow="lab"
+        )
+        with self.assertRaisesRegex(ValidationError, "expects KEY=VALUE"):
+            self.run_command(
+                ["policy", "check", "policy-args", "--tool", "search", "--arg", "query"]
+            )
 
     @contextmanager
     def pinned_validate(self, detected: dict[str, str | None]):

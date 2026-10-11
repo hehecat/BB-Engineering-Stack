@@ -274,7 +274,15 @@ class EngagementManager:
         }[workflow]
 
     def _make_directories(self, root: Path, workflow: str) -> None:
-        common = ["notes", "artifacts", "scripts", "reports", "deliverables", "traffic"]
+        common = [
+            "notes",
+            "artifacts",
+            "scripts",
+            "reports",
+            "deliverables",
+            "traffic",
+            "graph",
+        ]
         specific = {
             "bug-bounty": ["recon/findings", "recon/js", "h1-packages", "lab"],
             "assessment": ["artifacts/evidence"],
@@ -311,6 +319,16 @@ class EngagementManager:
         (root / "traffic" / ".gitignore").write_text(
             "# Captured HTTP traffic carries cookies, tokens, and session\n"
             "# identifiers. Never commit it; this file keeps traffic/ present.\n"
+            "*\n"
+            "!.gitignore\n",
+            encoding="utf-8",
+        )
+        # The knowledge graph is a derived index of the artifacts above, and its
+        # node labels quote the notes verbatim, so it is never committed either.
+        (root / "graph" / ".gitignore").write_text(
+            "# Derived knowledge graph, rebuilt from notes/, recon/, and\n"
+            "# traffic/ by `bb-stack graph build`. Never commit it; this file\n"
+            "# keeps graph/ present in the tree.\n"
             "*\n"
             "!.gitignore\n",
             encoding="utf-8",
