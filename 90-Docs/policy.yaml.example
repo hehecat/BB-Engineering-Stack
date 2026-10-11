@@ -1,0 +1,76 @@
+# Engagement tool-call policy -- OPTIONAL.
+#
+# Copy this file to <engagement>/policy.yaml, i.e.
+#   $BB_WORK_ROOT/engagements/<slug>/policy.yaml
+# for it to take effect. `bb_stack.policy.ToolPolicy.from_engagement` only
+# looks at that exact filename; an engagement without it simply uses the
+# shipped defaults (`ToolPolicy.default()`, `from_mapping` absent).
+#
+# Missing file == the shipped default posture, which is NEVER "allow
+# everything": the DEFAULT_READ_ONLY_TOOLS globs auto-pass, DEFAULT_DENY and
+# DEFAULT_ALLOW are both empty, and every other tool goes to interactive
+# confirmation.
+#
+# FAIL-CLOSED: when a call reaches confirmation (pipeline phase 4) and there is
+# no interactive channel -- no `can_use_tool` callback, the callback raises, or
+# the answer is not an explicit allow -- the call is DENIED
+# (`Decision.reason == "fail-closed"`). So "ask" behaves like "deny" in a
+# headless / non-interactive run; it is not a silent permit.
+#
+# Every key below is real and validated by `ToolPolicy.from_mapping`: only
+# `mode`, `read_only`, `deny`, and `allow` are accepted at the top level.
+
+# mode: -- one of `read-only`, `default`, `bypass` (`ToolPolicy.MODES`).
+#   default   (the shipped default): run `deny` rules, then `allow` rules and
+#             the read-only auto-pass, then ask. Everything below applies.
+#   read-only: short-circuit. `deny` rules still win first, then EVERY
+#             non-read-only tool is denied outright; `allow` rules are never
+#             consulted. Locks a session to read-only tools.
+#   bypass:    short-circuit. `deny` rules still win first, then EVERY tool is
+#             allowed with no confirmation. Intended only for sandboxed,
+#             offline lab work.
+# Left commented out so this copy keeps the `default` behaviour.
+#mode: default
+
+# read_only: -- extra tool-name patterns treated as read-only. These are
+# APPENDED to the shipped DEFAULT_READ_ONLY_TOOLS (`read_*`, `*_read`,
+# `list_*`, `*_list`, `*_hosts`, `search_*`, `*_search`, `diff_*`, `*_diff`,
+# `stats`, `*_stats`, `get_*`); they never replace the defaults. In `default`
+# mode (and in `read-only` mode) a tool matching one of these runs without
+# confirmation, so only list names whose tools cannot mutate state.
+read_only:
+  - "mcp__recon__lookup_asset"
+  - "mcp__recon__resolve_*"
+
+# deny: -- absolute. Evaluated FIRST, first match wins, and neither `mode` nor
+# any `allow` rule can override a match. Each entry is either a bare tool-name
+# pattern (string form) or a mapping {tool, when, message, updated_input}.
+deny:
+  # Mapping form. `tool` defaults to "*" when omitted. `when` conditions are
+  # ANDed; `message` is surfaced on the denial `Decision`.
+  - tool: "mcp__recon__fetch_url"
+    when:
+      # arg_contains: `key -> substring`, true when substring is in str(arguments[key]).
+      arg_contains: {url: "/redirect?to=http"}
+      # Other condition kinds (ANDed with the one above):
+      #   arg_equals:  {key: value}      arguments[key] == value
+      #   arg_in:      {key: [v1, v2]}   arguments[key] is a member of the list
+      #   arg_present: [key, ...]        key exists with a non-empty value
+    message: "declines open-redirect bait in fetch_url; ask the operator instead"
+  # String form: a bare tool-name pattern. `"Name(...)"` matches `Name` and any
+  # name starting with `Name`; `"*"` matches everything.
+  - "mcp__recon__delete_asset"
+
+# allow: -- evaluated after `deny`, first match wins. Use it to pre-authorize a
+# call that would otherwise be asked, and/or to sanitize its arguments.
+allow:
+  # updated_input rewrites the arguments handed to the handler when the rule
+  # matches: a null value DELETES that key, any other value sets it. Here a
+  # caller-supplied override switch is stripped so the handler keeps its own
+  # (safe) default instead of the operator-hardcoded value.
+  - tool: "mcp__labexec__run_command"
+    updated_input: {force: null}
+    message: "run_command allowed, but the 'force' override is removed"
+  # Plain conditional pre-approval, no rewrite.
+  - tool: "mcp__recon__read_flow"
+    when: {arg_present: [id]}

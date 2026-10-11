@@ -4,6 +4,17 @@
 scope, current IDs, and next action. Markdown owns written scope, working notes,
 findings, and recovery context.
 
+The directory holds that durable state: `engagement.yaml` for machine state,
+`notes/` for the Markdown records above, and the evidence trees under
+`artifacts/` and `recon/`. `policy.yaml` is OPTIONAL — start from
+`90-Docs/policy.yaml.example` and copy it in as `<engagement>/policy.yaml`;
+with the file absent the shipped default posture applies (read-only tools pass,
+everything else is asked, and ask fails closed when there is no interactive
+channel). It is consumed by the MCP layer, which intercepts tool calls through
+`bb_stack.policy` (`ToolPolicy.from_engagement` / `policy_for`), and it sits
+alongside — it does not replace — the host harness's own permission presets,
+so a call must clear both gates.
+
 Newly discovered adjacent assets remain `candidate` entries until a written
 authorization source promotes them through a Scope revision. Bug Bounty Scope
 records the current production action budget. Hypotheses record planned side

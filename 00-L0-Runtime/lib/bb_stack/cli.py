@@ -294,6 +294,29 @@ def _format_coverage_gate(result: Mapping[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def _suggest_targets(result: Mapping[str, Any]) -> str:
+    """Candidate targets, then the explicit refusal to guess a role.
+
+    The ranking is objective -- coverage state, evidence volume, host order --
+    so the operator reads *what to open next*; the closing line states plainly
+    that no role was inferred, because coverage carries no domain information.
+    """
+    lines = [
+        f"{result['engagement']}: {len(result['candidates'])} candidate target(s) "
+        f"of {result['available']} available, max_parallel={result['max_parallel']}"
+    ]
+    for candidate in result["candidates"]:
+        lines.append(
+            f"  priority={candidate['priority']} {candidate['coverage']:<10} "
+            f"{candidate['host']}  ({candidate['reason']})"
+        )
+    lines.append(
+        "no role inferred; coverage carries no domain information -- re-run with "
+        "`--agent NAME` to emit requests you can hand to `agents plan --file`"
+    )
+    return "\n".join(lines)
+
+
 def _require_coverage_inventory(
     paths: StackPaths, slug: str, report: Mapping[str, Any]
 ) -> None:
@@ -654,6 +677,17 @@ def build_parser() -> argparse.ArgumentParser:
     agents_plan.add_argument("--file", required=True, type=Path)
     agents_plan.add_argument("--depth", type=int, default=0)
     agents_plan.add_argument("--json", action="store_true")
+    agents_suggest = agents_sub.add_parser(
+        "suggest", help="rank candidate targets from engagement coverage"
+    )
+    agents_suggest.add_argument("engagement")
+    agents_suggest.add_argument(
+        "--agent",
+        default=None,
+        help="a declared role; emit requests for it instead of bare targets",
+    )
+    agents_suggest.add_argument("--limit", type=int, default=4)
+    agents_suggest.add_argument("--json", action="store_true")
 
     skills = commands.add_parser("skills", help="validate and install versioned Skills")
     skills_sub = skills.add_subparsers(dest="skills_command", required=True)
@@ -1284,6 +1318,26 @@ def command(args: argparse.Namespace, paths: StackPaths) -> int:
                     f"delegation plan file must hold a JSON array: {plan_path}"
                 )
             emit(roster.plan(requests, depth=args.depth), args.json)
+        elif args.agents_command == "suggest":
+            result = roster.suggest(
+                paths, args.engagement, agent=args.agent, limit=args.limit
+            )
+            # Coverage is what makes a suggestion; without an inventory there is
+            # nothing to rank, so reuse `coverage`'s actionable error.
+            _require_coverage_inventory(paths, args.engagement, result)
+            if args.agent is None:
+                emit(result if args.json else _suggest_targets(result), args.json)
+            else:
+                # stdout stays a bare JSON array so it can be redirected straight
+                # into `agents plan --file`; the reminder goes to stderr.
+                print(json.dumps(result["requests"], indent=2, ensure_ascii=True))
+                print(
+                    f"{len(result['requests'])} request(s) for role "
+                    f"{args.agent!r}; max_parallel={result['max_parallel']}. "
+                    "Redirect this array to a file and run: "
+                    "bb-stack agents plan --file <path>",
+                    file=sys.stderr,
+                )
         else:
             raise StackError(f"unhandled agents subcommand: {args.agents_command}")
         return 0

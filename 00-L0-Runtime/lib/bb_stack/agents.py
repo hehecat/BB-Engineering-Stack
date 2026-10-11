@@ -23,6 +23,7 @@ from pathlib import PurePosixPath
 from typing import Any
 
 from .capabilities import CapabilityRegistry
+from .coverage import assess
 from .errors import ValidationError
 from .io import load_yaml
 from .paths import StackPaths
@@ -53,6 +54,16 @@ def _covers(parent: str, child: str) -> bool:
     base = PurePosixPath(parent.rstrip("/"))
     other = PurePosixPath(child.rstrip("/"))
     return other == base or base in other.parents
+
+
+# One objective sentence per coverage state. These name what was and was not
+# observed; they deliberately name no role, because coverage carries no domain
+# information and picking a role is the caller's decision.
+_SUGGEST_HINTS = {
+    "untouched": "no flows captured and no terminal conclusion recorded",
+    "touched": "flows captured but no finding and no terminal lead recorded",
+    "unmatched": "traffic captured for a host that is absent from the inventory",
+}
 
 
 class AgentRoster:
@@ -218,3 +229,128 @@ class AgentRoster:
                         f"{package['writes']!r} overlaps {other['id']} "
                         f"{other['writes']!r}"
                     )
+
+    def suggest(
+        self,
+        paths: StackPaths,
+        slug: str,
+        *,
+        agent: str | None = None,
+        limit: int = 4,
+    ) -> dict[str, Any]:
+        """Rank candidate work items for one engagement, from coverage alone.
+
+        The candidates are the ``unresolved`` entries (assets with no traffic
+        and no conclusion, and assets with traffic but no closed lead) plus any
+        ``unmatched`` traffic hosts -- traffic the inventory never listed, which
+        is a self-discovered asset. Ordering is deterministic: ``untouched``
+        first, then the least-evidenced, then host order; a host never appears
+        twice.
+
+        What coverage *cannot* supply is a role. It records what was observed,
+        not what kind of asset this is, so with no ``agent`` this returns
+        targets only -- each with an objective ``hint`` and no role -- and says
+        so explicitly (``role_assigned: False``). Pass ``agent`` to get one
+        request per candidate that ``plan()`` accepts verbatim. This method
+        never runs ``plan()``'s write-set check: candidate production and batch
+        validation stay separate.
+        """
+        if isinstance(limit, bool) or not isinstance(limit, int):
+            raise ValidationError(f"limit must be a positive integer, got {limit!r}")
+        if limit < 1:
+            raise ValidationError(f"limit must be at least 1, got {limit!r}")
+
+        report = assess(paths, slug)
+        evidence = {
+            entry["host"]: sum(entry["evidence"].values())
+            for entry in report["by_asset"]
+        }
+
+        found: list[tuple[str, str, str, int]] = []
+        seen: set[str] = set()
+        for entry in report["unresolved"]:
+            host = entry["host"]
+            if host in seen:
+                continue
+            seen.add(host)
+            found.append(
+                (host, entry["coverage"], entry["reason"], evidence.get(host, 0))
+            )
+        for entry in report["unmatched"]:
+            host = entry["host"]
+            if host in seen:
+                continue
+            seen.add(host)
+            found.append(
+                (
+                    host,
+                    "unmatched",
+                    "traffic observed for a host that is absent from the inventory",
+                    entry["flows"],
+                )
+            )
+
+        found.sort(
+            key=lambda item: (0 if item[1] == "untouched" else 1, item[3], item[0])
+        )
+        candidates = [
+            {
+                "host": host,
+                "coverage": coverage,
+                "reason": reason,
+                "priority": index + 1,
+                "hint": _SUGGEST_HINTS[coverage],
+            }
+            for index, (host, coverage, reason, _) in enumerate(found[:limit])
+        ]
+
+        defaults = self.defaults()
+        result: dict[str, Any] = {
+            "schema_version": 1,
+            "engagement": slug,
+            "max_parallel": defaults["max_parallel"],
+            "role_assigned": agent is not None,
+            "available": len(found),
+            "sources": report["sources"],
+            "candidates": candidates,
+        }
+        if agent is None:
+            result["note"] = (
+                "coverage carries no domain information, so no role is inferred; "
+                "the caller decides the role. Re-run with an agent name to emit "
+                "requests ready for the plan file."
+            )
+            return result
+
+        role = self.get(agent)
+        requests: list[dict[str, str]] = []
+        for candidate in candidates:
+            slice_id = candidate["host"]
+            directory = role.output_dir(slice_id)
+            result_path = f"{directory}/{defaults['result_file']}"
+            requests.append(
+                {
+                    "id": slice_id,
+                    "agent": role.name,
+                    "task": (
+                        f"One candidate asset for engagement {slug!r}: "
+                        f"{candidate['host']} (coverage={candidate['coverage']}). "
+                        f"{candidate['hint']}. Decide whether it is in scope and "
+                        f"reach a recorded conclusion. Write only under "
+                        f"{directory}/ and leave {result_path} with the "
+                        f"conclusion (status, evidence, next action)."
+                    ),
+                    "writes": directory,
+                    "result": result_path,
+                }
+            )
+        result.update(
+            {
+                "agent": role.name,
+                "skill": role.skill,
+                "result_file": defaults["result_file"],
+                "writes": list(role.writes),
+                "requests": requests,
+            }
+        )
+        return result

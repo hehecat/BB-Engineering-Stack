@@ -23,6 +23,7 @@ from bb_stack.cli import (
     emit,
     main,
 )
+from bb_stack.agents import AgentRoster
 from bb_stack.capabilities import CapabilityRegistry
 from bb_stack.engagement import EngagementManager
 from bb_stack.errors import StackError, ValidationError
@@ -697,6 +698,110 @@ class CliTests(unittest.TestCase):
         text = self._command_text(["coverage", "coverage-plain"])
         self.assertNotIn("coverage gate:", text)
         self.assertIn("uncovered 1/2 ratio=0.500 evidenced_ratio=0.500", text)
+
+    # -- agents suggest --------------------------------------------------
+
+    def _suggestable_engagement(self, slug: str) -> str:
+        """One untouched asset plus a traffic-only host, no concluded lead."""
+        EngagementManager(self.paths).create(
+            slug,
+            "https://example.invalid",
+            workflow="ctf",
+            platform="standalone-ctf",
+        )
+        root = self.paths.engagements_root / slug
+        (root / "notes" / "asset-inventory.md").write_text(
+            "# Asset Inventory\n\n"
+            "| Host | Status | Notes |\n"
+            "| --- | --- | --- |\n"
+            "| legacy.example.invalid | 502 | |\n",
+            encoding="utf-8",
+        )
+        with store_for(self.paths, slug) as store:
+            store.record(
+                FlowRecord(
+                    method="GET",
+                    host="drift.example.invalid",
+                    path="/",
+                    response_status=200,
+                    response_headers={"Content-Type": "text/html"},
+                    response_body=b"ok",
+                )
+            )
+        return slug
+
+    def test_agents_suggest_lists_targets_without_inventing_a_role(self) -> None:
+        slug = self._suggestable_engagement("suggest-targets")
+        text = self._command_text(["agents", "suggest", slug])
+
+        self.assertIn("priority=1", text)
+        self.assertIn("untouched", text)
+        self.assertIn("legacy.example.invalid", text)
+        self.assertIn("drift.example.invalid", text)
+        # The closing line must state the refusal, and offer the next step.
+        self.assertIn("no role inferred", text)
+        self.assertIn("--agent NAME", text)
+        # No declared role name may leak into a suggestion built without one.
+        roster = AgentRoster(self.paths)
+        for name in roster.names():
+            self.assertNotIn(name, text)
+
+    def test_agents_suggest_json_without_a_role_marks_it_unassigned(self) -> None:
+        slug = self._suggestable_engagement("suggest-json")
+        result = self._command_json(["agents", "suggest", slug, "--json"])
+
+        self.assertFalse(result["role_assigned"])
+        self.assertEqual(result["max_parallel"], 4)
+        self.assertEqual(
+            [candidate["host"] for candidate in result["candidates"]],
+            ["legacy.example.invalid", "drift.example.invalid"],
+        )
+        self.assertEqual(
+            [candidate["coverage"] for candidate in result["candidates"]],
+            ["untouched", "unmatched"],
+        )
+
+    def test_agents_suggest_with_agent_emits_a_plannable_array(self) -> None:
+        slug = self._suggestable_engagement("suggest-agent")
+        stdout = StringIO()
+        stderr = StringIO()
+        with redirect_stdout(stdout), redirect_stderr(stderr):
+            args = self.parser.parse_args(
+                ["agents", "suggest", slug, "--agent", "web-prover"]
+            )
+            self.assertEqual(command(args, self.paths), 0)
+
+        requests = json.loads(stdout.getvalue())
+        self.assertIsInstance(requests, list)
+        self.assertEqual([request["agent"] for request in requests], ["web-prover"] * 2)
+        self.assertIn("agents plan --file", stderr.getvalue())
+
+        # The array redirects straight into `agents plan --file`.
+        plan_file = Path(self.temporary.name) / "requests.json"
+        plan_file.write_text(json.dumps(requests), encoding="utf-8")
+        plan = self._command_json(
+            ["agents", "plan", "--file", str(plan_file), "--json"]
+        )
+        self.assertEqual(len(plan["packages"]), 2)
+
+    def test_agents_suggest_rejects_a_limit_below_one(self) -> None:
+        slug = self._suggestable_engagement("suggest-limit")
+        code, message = self._run_main(["agents", "suggest", slug, "--limit", "0"])
+        self.assertEqual(code, 2)
+        self.assertIn("limit", message)
+
+    def test_agents_suggest_names_the_missing_inventory(self) -> None:
+        EngagementManager(self.paths).create(
+            "suggest-empty",
+            "https://example.invalid",
+            workflow="ctf",
+            platform="standalone-ctf",
+        )
+        with self.assertRaisesRegex(
+            ValidationError, "no asset inventory found"
+        ) as caught:
+            self.run_command(["agents", "suggest", "suggest-empty"])
+        self.assertIn("asset-inventory.md", str(caught.exception))
 
     def test_policy_check_allows_read_only_and_denies_unruled_tools(self) -> None:
         EngagementManager(self.paths).create(

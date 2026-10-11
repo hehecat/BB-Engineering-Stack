@@ -17,6 +17,10 @@ our servers are ours to gate, so interception lives here, at the MCP layer.
 - `policy.yaml` lives at `<engagement>/policy.yaml`. A read command of the driver
   is `bb-stack policy show <SLUG>`; a dry run of one call is
   `bb-stack policy check <SLUG> --tool <NAME> [--arg KEY=VALUE]`.
+- Start from `90-Docs/policy.yaml.example` (commented, every key validated by
+  `ToolPolicy.from_mapping`); copy it in and delete what you do not use. It is
+  deliberately not under `03-L3-Engagement-State/templates/`, which holds only
+  files the runtime itself copies.
 
 ## Evaluation: Four Phases, Order Is Semantics
 

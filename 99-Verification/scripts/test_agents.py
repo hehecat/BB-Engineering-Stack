@@ -9,10 +9,12 @@ let through.
 
 from __future__ import annotations
 
+import json
 import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
 os.environ["BB_STACK_ROOT"] = str(ROOT)
@@ -20,6 +22,7 @@ os.environ["BB_STACK_ROOT"] = str(ROOT)
 from bb_stack.agents import AgentRoster
 from bb_stack.errors import ValidationError
 from bb_stack.paths import StackPaths
+from bb_stack.traffic import FlowRecord, store_for
 
 
 def _roster_document(agents: str, *, max_parallel: int = 4, max_depth: int = 2) -> str:
@@ -193,6 +196,171 @@ class AgentRosterTests(unittest.TestCase):
         self.assertIn("`web-prover`", segment)
         self.assertIn("`evidence-writer`", segment)
         self.assertNotIn("`recon-runner`", segment)
+
+    # -- suggest ---------------------------------------------------------
+
+    def _engagement(self, slug: str) -> Path:
+        root = self.paths.engagements_root / slug
+        root.mkdir(parents=True, exist_ok=True)
+        (root / "engagement.yaml").write_text(
+            f"schema_version: 1\nslug: {slug}\n", encoding="utf-8"
+        )
+        return root
+
+    def _inventory(self, slug: str, rows: list[tuple[str, str]]) -> Path:
+        root = self._engagement(slug)
+        notes = root / "notes"
+        notes.mkdir(parents=True, exist_ok=True)
+        text = "# Asset Inventory\n\n| Host | Status | Notes |\n| --- | --- | --- |\n"
+        for host, status in rows:
+            text += f"| {host} | {status} | |\n"
+        (notes / "asset-inventory.md").write_text(text, encoding="utf-8")
+        return root
+
+    def _lead(self, slug: str, host: str, state: str) -> None:
+        (self.paths.engagements_root / slug / "hypotheses.md").write_text(
+            "# Hypotheses\n\n"
+            "| ID | State | Scope | Class | Surface | Signal |\n"
+            "| --- | --- | --- | --- | --- | --- |\n"
+            f"| H-1 | {state} | in-scope | auth | {host} | signal |\n",
+            encoding="utf-8",
+        )
+
+    def _flow(self, slug: str, host: str) -> None:
+        with store_for(self.paths, slug) as store:
+            store.record(
+                FlowRecord(
+                    method="GET",
+                    host=host,
+                    path="/",
+                    response_status=200,
+                    response_headers={"Content-Type": "text/html"},
+                    response_body=b"ok",
+                )
+            )
+
+    def _suggestion_fixture(self, slug: str = "suggest-fixture") -> str:
+        """One untouched host, one touched host, and one unmatched traffic host.
+
+        `zzz` is untouched with zero evidence; `aaa` is touched by a flow and an
+        open (non-terminal) lead, so it carries two evidence points; `drift`
+        appeared only in traffic, so it is unmatched with one flow.
+        """
+        self._inventory(
+            slug,
+            [("zzz.example.invalid", "502"), ("aaa.example.invalid", "200")],
+        )
+        self._lead(slug, "aaa.example.invalid", "open")
+        self._flow(slug, "aaa.example.invalid")
+        self._flow(slug, "drift.example.invalid")
+        return slug
+
+    def test_suggest_ranks_untouched_then_least_evidenced(self) -> None:
+        slug = self._suggestion_fixture()
+        result = AgentRoster(self.paths).suggest(self.paths, slug)
+
+        self.assertFalse(result["role_assigned"])
+        self.assertEqual(result["max_parallel"], 4)
+        self.assertEqual(
+            [candidate["host"] for candidate in result["candidates"]],
+            [
+                "zzz.example.invalid",
+                "drift.example.invalid",
+                "aaa.example.invalid",
+            ],
+        )
+        self.assertEqual(
+            [candidate["priority"] for candidate in result["candidates"]], [1, 2, 3]
+        )
+        self.assertEqual(
+            [candidate["coverage"] for candidate in result["candidates"]],
+            ["untouched", "unmatched", "touched"],
+        )
+        for candidate in result["candidates"]:
+            self.assertTrue(candidate["reason"])
+            self.assertTrue(candidate["hint"])
+
+    def test_suggest_dedupes_a_host_seen_in_both_sources(self) -> None:
+        """`unresolved` and `unmatched` are disjoint in practice, not by luck."""
+        host = "dup.example.invalid"
+        report = {
+            "by_asset": [
+                {
+                    "host": host,
+                    "status": None,
+                    "coverage": "untouched",
+                    "evidence": {"flows": 0, "findings": 0, "leads": 0},
+                    "source": "inventory",
+                }
+            ],
+            "unresolved": [
+                {
+                    "host": host,
+                    "coverage": "untouched",
+                    "reason": "no traffic observed and no conclusion recorded",
+                }
+            ],
+            "unmatched": [{"host": host, "flows": 2}],
+            "sources": {"inventory": True, "traffic": True},
+        }
+        with patch("bb_stack.agents.assess", return_value=report):
+            result = AgentRoster(self.paths).suggest(self.paths, "dup-fixture")
+        self.assertEqual(
+            [candidate["host"] for candidate in result["candidates"]], [host]
+        )
+
+    def test_suggest_limit_caps_and_rejects_below_one(self) -> None:
+        slug = self._suggestion_fixture("suggest-limit")
+        roster = AgentRoster(self.paths)
+
+        capped = roster.suggest(self.paths, slug, limit=2)
+        self.assertEqual(
+            [candidate["host"] for candidate in capped["candidates"]],
+            ["zzz.example.invalid", "drift.example.invalid"],
+        )
+        self.assertEqual(capped["available"], 3)
+
+        with self.assertRaisesRegex(ValidationError, "limit"):
+            roster.suggest(self.paths, slug, limit=0)
+
+    def test_suggest_never_names_a_declared_role_without_an_agent(self) -> None:
+        """Picking a role is the caller's decision, not a guess from coverage."""
+        slug = self._suggestion_fixture("suggest-roles")
+        roster = AgentRoster(self.paths)
+        result = roster.suggest(self.paths, slug)
+
+        text = json.dumps(result)
+        for name in roster.names():
+            self.assertNotIn(name, text)
+        self.assertFalse(result["role_assigned"])
+        self.assertIn("role", result["note"])
+
+    def test_suggest_requests_pass_plan_verbatim_and_unknown_role_is_refused(
+        self,
+    ) -> None:
+        slug = self._suggestion_fixture("suggest-plan")
+        roster = AgentRoster(self.paths)
+
+        result = roster.suggest(self.paths, slug, agent="web-prover")
+        self.assertTrue(result["role_assigned"])
+        self.assertEqual(result["agent"], "web-prover")
+        self.assertEqual(result["writes"], ["artifacts/web/"])
+        self.assertEqual(result["result_file"], "result.json")
+
+        requests = result["requests"]
+        self.assertEqual(len(requests), 3)
+        for request in requests:
+            self.assertEqual(request["agent"], "web-prover")
+            self.assertTrue(request["task"])
+            self.assertTrue(request["writes"].startswith("artifacts/web/"))
+            self.assertTrue(request["result"].endswith("/result.json"))
+
+        # Unchanged, extra keys and all, the batch must satisfy `plan()`.
+        plan = roster.plan(requests)
+        self.assertEqual(len(plan["packages"]), len(requests))
+
+        with self.assertRaisesRegex(ValidationError, "unknown delegation role"):
+            roster.suggest(self.paths, slug, agent="nope")
 
 
 if __name__ == "__main__":
