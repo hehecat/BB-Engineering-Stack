@@ -44,6 +44,11 @@ Ratios in ``totals``:
 
 ``by_asset`` is sorted least-covered first: ``untouched`` before ``touched``
 before ``concluded``, then by ascending evidence volume, then by host.
+
+``gate`` turns those numbers into a verdict, but only against thresholds the
+operator declares. There is deliberately no built-in convergence standard: with
+no threshold supplied the gate fails and says so, because "covered enough" is a
+decision the engagement owner makes, not one the code guesses.
 """
 
 from __future__ import annotations
@@ -68,6 +73,15 @@ STATE_FILE = Path("recon") / "state.json"
 
 # A lead only counts as a conclusion once it is settled.
 TERMINAL_LEAD_STATES = {"validated", "killed"}
+
+# The convergence criteria a gate may declare. Nothing here is a default:
+# `gate` rejects unknown names so a typo cannot silently drop a threshold.
+GATE_PARAMETERS = (
+    "min_evidenced_ratio",
+    "max_untouched",
+    "max_unresolved_leads",
+    "require_no_unmatched",
+)
 
 # Ordering for "least covered first".
 _COVERAGE_ORDER = {"untouched": 0, "touched": 1, "concluded": 2}
@@ -392,4 +406,160 @@ def assess(paths: StackPaths, slug: str) -> dict[str, Any]:
             "leads": bool(leads),
             "state": bool(gaps),
         },
+    }
+
+
+def _gate_ratio(value: Any, name: str) -> float:
+    """A declared ratio threshold, rejected unless it lies in ``[0, 1]``."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValidationError(
+            f"{name} must be a number in [0,1], got {value!r}"
+        )
+    number = float(value)
+    if not 0.0 <= number <= 1.0:
+        raise ValidationError(f"{name} must be in [0,1], got {value!r}")
+    return number
+
+
+def _gate_count(value: Any, name: str) -> int:
+    """A declared count threshold, rejected unless it is non-negative."""
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValidationError(
+            f"{name} must be a non-negative integer, got {value!r}"
+        )
+    if value < 0:
+        raise ValidationError(f"{name} must be non-negative, got {value!r}")
+    return value
+
+
+def gate(
+    paths: StackPaths,
+    slug: str,
+    *,
+    min_evidenced_ratio: float | None = None,
+    max_untouched: int | None = None,
+    max_unresolved_leads: int | None = None,
+    require_no_unmatched: bool = False,
+    **unknown: Any,
+) -> dict[str, Any]:
+    """Decide whether ``assess`` meets the convergence criteria the operator set.
+
+    Every criterion is opt-in and inclusive at its boundary (``actual ==
+    threshold`` passes). The criteria and what they compare, verbatim:
+
+    - ``min_evidenced_ratio`` (ratio in ``[0, 1]``) -- ``totals.evidenced_ratio
+      >= threshold``.
+    - ``max_untouched`` (non-negative count) -- ``totals.untouched <= threshold``.
+    - ``max_unresolved_leads`` (non-negative count) -- ``len(unresolved) <=
+      threshold`` (everything not concluded, whether or not it saw traffic).
+    - ``require_no_unmatched`` -- ``len(unmatched) == 0``, i.e. no host seen only
+      in traffic is missing from the inventory.
+
+    No threshold is required and none is assumed: called without criteria the
+    gate returns ``passed=False`` with ``checks == []`` and a ``reason`` saying
+    why, so a missing convergence standard can never read as a pass. Unknown
+    parameter names and out-of-range values raise ``ValidationError``.
+    """
+    if unknown:
+        names = ", ".join(sorted(unknown))
+        raise ValidationError(
+            f"unknown gate parameter(s): {names}; known: "
+            + ", ".join(GATE_PARAMETERS)
+        )
+
+    report = assess(paths, slug)
+    totals = report["totals"]
+    checks: list[dict[str, Any]] = []
+
+    if min_evidenced_ratio is not None:
+        threshold = _gate_ratio(min_evidenced_ratio, "min_evidenced_ratio")
+        actual = totals["evidenced_ratio"]
+        passed = actual >= threshold
+        checks.append(
+            {
+                "name": "min_evidenced_ratio",
+                "threshold": threshold,
+                "actual": actual,
+                "passed": passed,
+                "why": (
+                    f"evidenced_ratio {actual:.3f} is at or above {threshold:.3f}"
+                    if passed
+                    else f"evidenced_ratio {actual:.3f} is below {threshold:.3f}"
+                ),
+            }
+        )
+
+    if max_untouched is not None:
+        threshold = _gate_count(max_untouched, "max_untouched")
+        actual = totals["untouched"]
+        passed = actual <= threshold
+        checks.append(
+            {
+                "name": "max_untouched",
+                "threshold": threshold,
+                "actual": actual,
+                "passed": passed,
+                "why": (
+                    f"untouched {actual} is at most {threshold}"
+                    if passed
+                    else f"untouched {actual} exceeds {threshold}"
+                ),
+            }
+        )
+
+    if max_unresolved_leads is not None:
+        threshold = _gate_count(max_unresolved_leads, "max_unresolved_leads")
+        actual = len(report["unresolved"])
+        passed = actual <= threshold
+        checks.append(
+            {
+                "name": "max_unresolved_leads",
+                "threshold": threshold,
+                "actual": actual,
+                "passed": passed,
+                "why": (
+                    f"unresolved {actual} is at most {threshold}"
+                    if passed
+                    else f"unresolved {actual} exceeds {threshold}"
+                ),
+            }
+        )
+
+    if require_no_unmatched is not False:
+        if not isinstance(require_no_unmatched, bool):
+            raise ValidationError(
+                f"require_no_unmatched must be a boolean, got {require_no_unmatched!r}"
+            )
+        actual = len(report["unmatched"])
+        passed = actual == 0
+        checks.append(
+            {
+                "name": "require_no_unmatched",
+                "threshold": 0,
+                "actual": actual,
+                "passed": passed,
+                "why": (
+                    "no traffic host is missing from the inventory"
+                    if passed
+                    else f"{actual} traffic host(s) are absent from the inventory"
+                ),
+            }
+        )
+
+    if not checks:
+        return {
+            "passed": False,
+            "checks": [],
+            "failing": [],
+            "reason": "no gate threshold supplied",
+            "report": report,
+        }
+
+    failing = [check for check in checks if not check["passed"]]
+    return {
+        "passed": not failing,
+        "checks": checks,
+        "failing": failing,
+        "reason": None,
+        "report": report,
     }

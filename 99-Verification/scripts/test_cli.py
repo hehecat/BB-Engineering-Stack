@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 import tempfile
 import unittest
 from contextlib import ExitStack, contextmanager, redirect_stderr, redirect_stdout
@@ -494,6 +495,19 @@ class CliTests(unittest.TestCase):
             self.assertEqual(command(args, self.paths), 0)
         return output.getvalue().rstrip("\n")
 
+    def _run_main(self, arguments: list[str]) -> tuple[int, str]:
+        """Drive the real entry point so exit codes (not just dispatch) are seen."""
+        stdout = StringIO()
+        stderr = StringIO()
+        with (
+            patch.object(sys, "argv", ["bb-stack", *arguments]),
+            patch("bb_stack.cli.StackPaths.discover", return_value=self.paths),
+            patch.dict(os.environ, {"BB_STACK_DEBUG": "0"}),
+            redirect_stdout(stdout),
+            redirect_stderr(stderr),
+        ):
+            return main(), stdout.getvalue() + stderr.getvalue()
+
     def test_graph_build_and_summary_keep_node_content_out(self) -> None:
         root, token = self._surveyed_engagement("graph-build")
 
@@ -584,6 +598,105 @@ class CliTests(unittest.TestCase):
         ) as caught:
             self.run_command(["coverage", "coverage-empty"])
         self.assertIn("asset-inventory.md", str(caught.exception))
+
+    def test_coverage_gate_pass_and_fail_name_the_next_action(self) -> None:
+        self._surveyed_engagement("coverage-gate")
+        # Fixture: api.example.invalid concluded by a validated lead,
+        # legacy.example.invalid untouched -> evidenced_ratio 0.5, untouched 1.
+
+        passed = StringIO()
+        with redirect_stdout(passed):
+            args = self.parser.parse_args(
+                ["coverage", "coverage-gate", "--gate", "--min-evidenced-ratio", "0.5"]
+            )
+            self.assertEqual(command(args, self.paths), 0)
+        text = passed.getvalue()
+        self.assertIn("coverage gate: PASS", text)
+        self.assertIn("[PASS] min-evidenced-ratio", text)
+
+        failed = StringIO()
+        with redirect_stdout(failed):
+            args = self.parser.parse_args(
+                ["coverage", "coverage-gate", "--gate", "--max-untouched", "0"]
+            )
+            self.assertEqual(command(args, self.paths), 1)
+        text = failed.getvalue()
+        self.assertIn("coverage gate: FAIL", text)
+        self.assertIn("[FAIL] max-untouched", text)
+        # The failure must name the asset to open next, not only a count.
+        self.assertIn("uncovered assets (1):", text)
+        self.assertIn("legacy.example.invalid", text)
+        self.assertIn("no traffic observed", text)
+
+    def test_coverage_gate_require_no_unmatched_names_drift_hosts(self) -> None:
+        self._surveyed_engagement("coverage-gate-drift")
+        with store_for(self.paths, "coverage-gate-drift") as store:
+            store.record(
+                FlowRecord(
+                    method="GET",
+                    host="drift.example.invalid",
+                    path="/",
+                    response_status=200,
+                    response_headers={"Content-Type": "text/html"},
+                    response_body=b"ok",
+                )
+            )
+        output = StringIO()
+        with redirect_stdout(output):
+            args = self.parser.parse_args(
+                ["coverage", "coverage-gate-drift", "--gate", "--require-no-unmatched"]
+            )
+            self.assertEqual(command(args, self.paths), 1)
+        text = output.getvalue()
+        self.assertIn("coverage gate: FAIL", text)
+        self.assertIn("[FAIL] require-no-unmatched", text)
+        self.assertIn("unmatched traffic hosts (1):", text)
+        self.assertIn("drift.example.invalid", text)
+
+    def test_coverage_gate_json_carries_checks_and_the_report(self) -> None:
+        self._surveyed_engagement("coverage-gate-json")
+        result = self._command_json(
+            [
+                "coverage",
+                "coverage-gate-json",
+                "--gate",
+                "--min-evidenced-ratio",
+                "0.5",
+                "--json",
+            ]
+        )
+        self.assertTrue(result["passed"])
+        self.assertEqual(result["checks"][0]["name"], "min_evidenced_ratio")
+        self.assertEqual(result["checks"][0]["actual"], 0.5)
+        self.assertEqual(result["report"]["totals"]["assets"], 2)
+
+    def test_coverage_gate_exits_two_on_parameter_errors(self) -> None:
+        self._surveyed_engagement("coverage-gate-error")
+
+        # --gate with no declared standard is an operator error, not a pass.
+        code, message = self._run_main(["coverage", "coverage-gate-error", "--gate"])
+        self.assertEqual(code, 2)
+        self.assertIn("at least one threshold", message)
+
+        # An out-of-range ratio is rejected before any verdict is rendered.
+        code, message = self._run_main(
+            ["coverage", "coverage-gate-error", "--gate", "--min-evidenced-ratio", "1.5"]
+        )
+        self.assertEqual(code, 2)
+        self.assertIn("[0,1]", message)
+
+        # A threshold without --gate must not be silently ignored.
+        code, message = self._run_main(
+            ["coverage", "coverage-gate-error", "--max-untouched", "1"]
+        )
+        self.assertEqual(code, 2)
+        self.assertIn("--gate", message)
+
+    def test_coverage_without_gate_is_unchanged(self) -> None:
+        self._surveyed_engagement("coverage-plain")
+        text = self._command_text(["coverage", "coverage-plain"])
+        self.assertNotIn("coverage gate:", text)
+        self.assertIn("uncovered 1/2 ratio=0.500 evidenced_ratio=0.500", text)
 
     def test_policy_check_allows_read_only_and_denies_unruled_tools(self) -> None:
         EngagementManager(self.paths).create(

@@ -16,7 +16,7 @@ from .agents import AgentRoster
 from .browser import BrowserRuntimeManager
 from .capabilities import CapabilityRegistry
 from .configuration import ConfigurationManager
-from .coverage import assess
+from .coverage import assess, gate
 from .data import DataManager
 from .engagement import EngagementManager
 from .errors import StackError, ValidationError
@@ -256,6 +256,56 @@ def _format_coverage(report: Mapping[str, Any]) -> str:
         f"evidenced_ratio={totals['evidenced_ratio']:.3f}"
     )
     return "\n".join(lines)
+
+
+def _format_coverage_gate(result: Mapping[str, Any]) -> str:
+    """Verdict, each declared threshold, then the items that must be opened next.
+
+    The failing checks drive a concrete worklist -- the uncovered hosts and the
+    unresolved entries by name -- so the operator reads *what to do*, not a bare
+    count that would have to be re-derived from `assess` by hand.
+    """
+    report = result["report"]
+    totals = report["totals"]
+    lines = [f"coverage gate: {'PASS' if result['passed'] else 'FAIL'}"]
+    for check in result["checks"]:
+        marker = "PASS" if check["passed"] else "FAIL"
+        lines.append(
+            f"  [{marker}] {check['name'].replace('_', '-')}: "
+            f"required {check['threshold']}, actual {check['actual']} "
+            f"-- {check['why']}"
+        )
+    failing = {check["name"] for check in result["checks"] if not check["passed"]}
+    if failing & {"min_evidenced_ratio", "max_untouched", "max_unresolved_leads"}:
+        lines.append(f"uncovered assets ({len(report['unresolved'])}):")
+        for entry in report["unresolved"]:
+            lines.append(
+                f"  {entry['coverage']:<9} {entry['host']}  ({entry['reason']})"
+            )
+    if "require_no_unmatched" in failing:
+        lines.append(f"unmatched traffic hosts ({len(report['unmatched'])}):")
+        for entry in report["unmatched"]:
+            lines.append(f"  {entry['host']}  flows={entry['flows']}")
+    lines.append(
+        f"assets={totals['assets']} concluded={totals['concluded']} "
+        f"untouched={totals['untouched']} ratio={totals['ratio']:.3f} "
+        f"evidenced_ratio={totals['evidenced_ratio']:.3f}"
+    )
+    return "\n".join(lines)
+
+
+def _require_coverage_inventory(
+    paths: StackPaths, slug: str, report: Mapping[str, Any]
+) -> None:
+    """Both `coverage` modes are meaningless without an asset list to rank."""
+    if report["sources"]["inventory"]:
+        return
+    raise ValidationError(
+        f"no asset inventory found for engagement {slug!r}: "
+        "write a markdown table with a `Host` column to "
+        f"{paths.engagement(slug) / 'notes' / 'asset-inventory.md'}, "
+        f"then re-run `bb-stack coverage {slug}`"
+    )
 
 
 def _rule_summary(rule: Any) -> dict[str, Any]:
@@ -811,6 +861,34 @@ def build_parser() -> argparse.ArgumentParser:
         "coverage", help="rank asset coverage and show what remains uncovered"
     )
     coverage.add_argument("engagement")
+    coverage.add_argument(
+        "--gate",
+        action="store_true",
+        help="exit 0 when the declared thresholds are met, 1 when they are not",
+    )
+    coverage.add_argument(
+        "--min-evidenced-ratio",
+        type=float,
+        default=None,
+        help="require totals.evidenced_ratio >= this value in [0,1]",
+    )
+    coverage.add_argument(
+        "--max-untouched",
+        type=int,
+        default=None,
+        help="require totals.untouched <= this non-negative count",
+    )
+    coverage.add_argument(
+        "--max-unresolved-leads",
+        type=int,
+        default=None,
+        help="require len(unresolved) <= this non-negative count",
+    )
+    coverage.add_argument(
+        "--require-no-unmatched",
+        action="store_true",
+        help="require no traffic host to be missing from the inventory",
+    )
     coverage.add_argument("--json", action="store_true")
 
     policy = commands.add_parser(
@@ -1428,16 +1506,41 @@ def command(args: argparse.Namespace, paths: StackPaths) -> int:
                 raise StackError(f"unhandled graph subcommand: {args.graph_command}")
         return 0
     if args.command == "coverage":
-        report = assess(paths, args.engagement)
-        if not report["sources"]["inventory"]:
+        declared = (
+            args.min_evidenced_ratio is not None
+            or args.max_untouched is not None
+            or args.max_unresolved_leads is not None
+            or args.require_no_unmatched
+        )
+        if not args.gate:
+            if declared:
+                # Silently ignoring a declared threshold would let an operator
+                # believe they gated when they did not.
+                raise ValidationError(
+                    "coverage thresholds apply only with --gate; re-run as "
+                    f"`bb-stack coverage {args.engagement} --gate ...`"
+                )
+            report = assess(paths, args.engagement)
+            _require_coverage_inventory(paths, args.engagement, report)
+            emit(report if args.json else _format_coverage(report), args.json)
+            return 0
+        result = gate(
+            paths,
+            args.engagement,
+            min_evidenced_ratio=args.min_evidenced_ratio,
+            max_untouched=args.max_untouched,
+            max_unresolved_leads=args.max_unresolved_leads,
+            require_no_unmatched=args.require_no_unmatched,
+        )
+        if not result["checks"]:
             raise ValidationError(
-                f"no asset inventory found for engagement {args.engagement!r}: "
-                "write a markdown table with a `Host` column to "
-                f"{paths.engagement(args.engagement) / 'notes' / 'asset-inventory.md'}, "
-                f"then re-run `bb-stack coverage {args.engagement}`"
+                "coverage --gate requires at least one threshold "
+                "(--min-evidenced-ratio / --max-untouched / "
+                "--max-unresolved-leads / --require-no-unmatched)"
             )
-        emit(report if args.json else _format_coverage(report), args.json)
-        return 0
+        _require_coverage_inventory(paths, args.engagement, result["report"])
+        emit(result if args.json else _format_coverage_gate(result), args.json)
+        return 0 if result["passed"] else 1
     if args.command == "policy":
         policy = policy_for(paths, args.engagement)
         if args.policy_command == "show":

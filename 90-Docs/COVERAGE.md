@@ -68,3 +68,71 @@ triangulating facts that already exist on disk.
       mark them out of scope.
 - [ ] Re-run after recon or findings land; the report reflects the files as they
       are now.
+
+## Declare Convergence With `--gate`
+
+`coverage` reports; `--gate` decides. Add `--gate` plus at least one threshold to
+turn the report into a convergence check with an exit code:
+
+```bash
+bb-stack coverage SLUG --gate --max-untouched 0 --min-evidenced-ratio 0.9
+bb-stack coverage SLUG --gate --max-unresolved-leads 3 --require-no-unmatched
+```
+
+Thresholds (each is inert unless `--gate` is also given):
+
+- `--max-untouched INT` -- pass when `totals.untouched <= INT`: no inventoried asset
+  is left never-touched.
+- `--min-evidenced-ratio FLOAT` -- pass when `totals.evidenced_ratio >= FLOAT`: the
+  share of assets carrying any evidence.
+- `--max-unresolved-leads INT` -- pass when `len(unresolved) <= INT`: how many
+  non-concluded assets may remain open.
+- `--require-no-unmatched` -- pass when `len(unmatched) == 0`: no traffic host is
+  missing from the inventory.
+
+Equality passes for every comparison. `--json` still prints the underlying report.
+There is no default gate: a threshold is required, and one supplied without `--gate`
+is rejected rather than silently ignored.
+
+Exit codes:
+
+- `0` -- gate PASS: every declared threshold held.
+- `1` -- gate FAIL: at least one declared threshold was missed.
+- `2` -- parameter error: `--gate` with no threshold, a threshold given without
+  `--gate`, or a threshold out of range/negative. Nothing is written to stdout; the
+  reason goes to stderr.
+
+Output names each check: a `coverage gate: PASS` or `coverage gate: FAIL` first line,
+then one `  [PASS|FAIL] <name>: required <threshold>, actual <value> -- <why>` line per
+threshold (the name is dashed, e.g. `min-evidenced-ratio`), then the concrete misses --
+`uncovered assets (N):` listing `  <coverage> <host>  (<reason>)`, and/or
+`unmatched traffic hosts (N):` listing `  <host>  flows=<n>` -- and a trailing
+`assets=... concluded=... untouched=... ratio=... evidenced_ratio=...` summary line.
+
+At the library level `coverage.gate()` fails closed: called with no threshold it
+returns `passed=False` with no checks. The CLI rejects that call as a parameter error
+first, so an ungated run can never be mistaken for a pass.
+
+## Convergence Playbook
+
+Coverage is a goal the operator sets, not one the tool infers, so there is no default
+threshold: "covered enough to close or switch phase" depends on the engagement's
+scope, authorization, and appetite for open leads. Decide it, run it, and keep the
+output with the handoff.
+
+A workable order:
+
+1. Clear never-touched assets first: `--gate --max-untouched 0`. Every failure names
+   an asset no traffic reached -- pure, unambiguous work.
+2. Once nothing is untouched, raise the evidence bar:
+   `--gate --max-untouched 0 --min-evidenced-ratio 0.8`. Pick the fraction you can
+   defend: a broad host inventory rarely reaches a high value, while a small
+   lead-driven engagement can aim higher. Each failure is a `touched`-but-not-concluded
+   host; drive its lead to a terminal state or record why it stays open.
+3. Bound the open work: `--max-unresolved-leads N` freezes how many leads may remain
+   at close, and `--require-no-unmatched` forces every exercised host into the
+   inventory.
+
+An accepted gap never stands in for coverage -- `accepted_gaps` is a decision to stop,
+so it raises no ratio, and using it to pass a gate is exactly the inflation this report
+refuses to count.

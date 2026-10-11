@@ -64,6 +64,15 @@ Before pausing or switching computers, update evidence references, exact next
 action, STATUS, HANDOFF, then checkpoint YAML. Keep credentials only in ignored
 local files with mode 600.
 
+## Before Closing Or Handing Off
+
+Treat close and handoff as a convergence decision, not just a state change. Run
+`bb-stack coverage SLUG --gate ...` with the thresholds that mean "done" for this
+engagement, and keep its output -- the PASS/FAIL lines plus any listed `uncovered`
+or `unmatched` hosts -- with STATUS and HANDOFF. Work what it names, or record why
+each item stays open. See `90-Docs/COVERAGE.md` for the thresholds and exit codes:
+a gate that was not run is not a gate that passed.
+
 ## Continuous Mode
 
 Use an Engagement created with `--mode continuous` and launch

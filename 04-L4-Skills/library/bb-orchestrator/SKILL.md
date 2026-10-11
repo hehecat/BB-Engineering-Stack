@@ -22,6 +22,17 @@ before choosing work.
    requires a Scope revision and source in `notes/SCOPE.md`.
 4. Out-of-scope candidates never block work on remaining in-scope leads.
 
+## Coverage Drives Convergence
+
+Before choosing the next lead, read the coverage rollup (`bb-stack coverage <SLUG>`,
+plus `bb-stack graph summary <SLUG>` when relationships matter) rather than opening a
+blind probe. Push the assets that move a gate: `untouched` (never touched) and
+`unresolved` entries (a lead exists but never closed). Add `unmatched` hosts -- traffic
+you exercised but the inventory never listed -- to the asset inventory; they are
+discoveries, not noise. `accepted_gaps` is a recorded decision to stop, not coverage
+evidence. Never declare coverage complete before running the gate: to close or change
+phase, state thresholds explicitly with `bb-stack coverage <SLUG> --gate ...` and get PASS.
+
 ## Rank A Small Queue
 
 Use `bb-recon` for initial and resumed reconnaissance. Read its coverage and

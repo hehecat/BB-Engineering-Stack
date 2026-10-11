@@ -21,7 +21,8 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[2]
 os.environ["BB_STACK_ROOT"] = str(ROOT)
 
-from bb_stack.coverage import assess
+from bb_stack.coverage import assess, gate
+from bb_stack.errors import ValidationError
 from bb_stack.paths import StackPaths
 from bb_stack.traffic import FlowRecord, store_for
 
@@ -340,6 +341,129 @@ class CoverageTests(unittest.TestCase):
         assess(self.paths, self.slug)
         self.assertFalse((self.engagement / "traffic" / "flows.db").exists())
         self.assertFalse((self.engagement / "traffic").exists())
+
+    # -- gate (convergence verdict) --------------------------------------
+
+    def test_gate_without_thresholds_fails_closed(self) -> None:
+        self.write_inventory([("www.example.test", "200")])
+        self.write_findings([("F-001", "closed", "www.example.test")])
+        result = gate(self.paths, self.slug)
+        # Even a fully-covered engagement fails: the standard must be declared.
+        self.assertFalse(result["passed"])
+        self.assertEqual(result["checks"], [])
+        self.assertEqual(result["failing"], [])
+        self.assertEqual(result["reason"], "no gate threshold supplied")
+        self.assertEqual(result["report"], assess(self.paths, self.slug))
+
+    def test_gate_evidenced_ratio_boundary_is_inclusive(self) -> None:
+        self.write_inventory(
+            [("www.example.test", "200"), ("api.example.test", "401")]
+        )
+        self.record_flow("www.example.test")  # evidenced_ratio == 0.5
+        meeting = gate(self.paths, self.slug, min_evidenced_ratio=0.5)
+        self.assertTrue(meeting["passed"])
+        check = meeting["checks"][0]
+        self.assertEqual(check["name"], "min_evidenced_ratio")
+        self.assertEqual(check["actual"], 0.5)
+        self.assertTrue(check["passed"])
+
+        missed = gate(self.paths, self.slug, min_evidenced_ratio=0.6)
+        self.assertFalse(missed["passed"])
+        self.assertEqual(
+            [item["name"] for item in missed["failing"]], ["min_evidenced_ratio"]
+        )
+        self.assertIn("below", missed["failing"][0]["why"])
+
+    def test_gate_max_untouched_boundary_is_inclusive(self) -> None:
+        self.write_inventory(
+            [("a.example.test", "200"), ("b.example.test", "200")]
+        )
+        self.assertTrue(gate(self.paths, self.slug, max_untouched=2)["passed"])
+        missed = gate(self.paths, self.slug, max_untouched=1)
+        self.assertFalse(missed["passed"])
+        self.assertEqual(missed["checks"][0]["name"], "max_untouched")
+        self.assertEqual(missed["checks"][0]["actual"], 2)
+
+    def test_gate_max_unresolved_leads_counts_every_unconcluded_asset(self) -> None:
+        # `unresolved` is broader than `untouched`: a touched-but-unconcluded
+        # asset counts against the lead budget yet not against untouched.
+        self.write_inventory(
+            [("www.example.test", "200"), ("api.example.test", "401")]
+        )
+        self.record_flow("www.example.test")
+        self.assertTrue(gate(self.paths, self.slug, max_untouched=1)["passed"])
+        missed = gate(self.paths, self.slug, max_unresolved_leads=1)
+        self.assertFalse(missed["passed"])
+        self.assertEqual(missed["checks"][0]["name"], "max_unresolved_leads")
+        self.assertEqual(missed["checks"][0]["actual"], 2)
+        self.assertTrue(gate(self.paths, self.slug, max_unresolved_leads=2)["passed"])
+
+    def test_gate_requires_no_unmatched(self) -> None:
+        self.write_inventory([("www.example.test", "200")])
+        self.record_flow("www.example.test")
+        clean = gate(self.paths, self.slug, require_no_unmatched=True)
+        self.assertTrue(clean["passed"])
+        self.assertEqual(clean["checks"][0]["name"], "require_no_unmatched")
+        self.assertEqual(clean["checks"][0]["actual"], 0)
+
+        self.record_flow("drift.example.test")
+        drift = gate(self.paths, self.slug, require_no_unmatched=True)
+        self.assertFalse(drift["passed"])
+        self.assertEqual(drift["checks"][0]["actual"], 1)
+        self.assertIn("absent from the inventory", drift["checks"][0]["why"])
+
+    def test_gate_fails_only_the_missed_checks(self) -> None:
+        self.write_inventory(
+            [("www.example.test", "200"), ("api.example.test", "401")]
+        )
+        self.record_flow("www.example.test")
+        result = gate(
+            self.paths,
+            self.slug,
+            min_evidenced_ratio=0.5,
+            max_untouched=0,
+            max_unresolved_leads=0,
+        )
+        self.assertFalse(result["passed"])
+        self.assertEqual(
+            [(item["name"], item["passed"]) for item in result["checks"]],
+            [
+                ("min_evidenced_ratio", True),
+                ("max_untouched", False),
+                ("max_unresolved_leads", False),
+            ],
+        )
+        self.assertEqual(
+            [item["name"] for item in result["failing"]],
+            ["max_untouched", "max_unresolved_leads"],
+        )
+
+    def test_gate_rejects_out_of_range_and_unknown_thresholds(self) -> None:
+        self.write_inventory([("www.example.test", "200")])
+        for kwargs in (
+            {"min_evidenced_ratio": 1.5},
+            {"min_evidenced_ratio": -0.1},
+            {"max_untouched": -1},
+            {"max_unresolved_leads": -2},
+            {"require_no_unmatched": "yes"},
+        ):
+            with self.subTest(kwargs=kwargs):
+                with self.assertRaises(ValidationError):
+                    gate(self.paths, self.slug, **kwargs)
+        with self.assertRaisesRegex(ValidationError, "unknown gate parameter"):
+            gate(self.paths, self.slug, min_ratio=0.5)
+
+    def test_gate_writes_nothing(self) -> None:
+        self.write_inventory([("www.example.test", "200")])
+        self.record_flow("www.example.test")
+        before = sorted(
+            p.relative_to(self.engagement) for p in self.engagement.rglob("*")
+        )
+        gate(self.paths, self.slug, min_evidenced_ratio=0.5)
+        after = sorted(
+            p.relative_to(self.engagement) for p in self.engagement.rglob("*")
+        )
+        self.assertEqual(before, after)
 
 
 if __name__ == "__main__":
