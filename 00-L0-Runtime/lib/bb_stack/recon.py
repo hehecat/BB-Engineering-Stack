@@ -62,6 +62,14 @@ SEARCH_PROVIDER_ENV = {
     "tavily": "TAVILY_API_KEY",
     "brave": "BRAVE_SEARCH_API_KEY",
 }
+# dnsx resolver override. A network that intercepts DNS -- a fake-ip proxy, a
+# captive portal -- answers *every* name, so a brute force over 20000 words
+# "resolves" all of them, overruns the stage timeout, and leaves only phantom
+# hosts behind. A DNS-over-HTTPS resolver rides port 443 and survives that
+# interception. Comma-separated; entries pass through verbatim, so both
+# `1.1.1.1` and `https://1.1.1.1/dns-query` work.
+DNS_RESOLVER_ENV = "BB_DNS_RESOLVERS"
+
 # Providers are launched in their own session/process group so a timeout can
 # terminate grandchildren (puredns -> massdns, BBOT worker processes) instead
 # of only the direct child, which would keep sending packets.
@@ -71,6 +79,20 @@ PROVIDER_KILL_POLL_SECONDS = 0.05
 
 def _now() -> str:
     return datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def _dns_resolver_args() -> list[str]:
+    """``-r <resolver>...`` for dnsx, or nothing when none are configured.
+
+    Returning no argument rather than a default keeps the existing behaviour
+    (system resolver) for every machine that never sets the variable.
+    """
+    values = [
+        item.strip()
+        for item in os.environ.get(DNS_RESOLVER_ENV, "").split(",")
+        if item.strip()
+    ]
+    return ["-r", *values] if values else []
 
 
 class ReconManager:
@@ -812,6 +834,7 @@ class ReconManager:
                     str(scope_hosts),
                     "-w",
                     str(seclists / "Discovery/DNS/subdomains-top1million-20000.txt"),
+                    *_dns_resolver_args(),
                     "-silent",
                     "-json",
                     "-auto-wildcard",
@@ -825,6 +848,7 @@ class ReconManager:
                     "dnsx",
                     "-l",
                     str(candidates),
+                    *_dns_resolver_args(),
                     "-a",
                     "-aaaa",
                     "-cname",

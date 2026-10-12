@@ -41,6 +41,11 @@ Search. Set only the provider key needed for the local run (`EXA_API_KEY`,
 The resulting URLs remain reviewable scope candidates and are not activated
 automatically.
 
+`dns-active` uses the system resolver unless `BB_DNS_RESOLVERS` names others. On
+a network that intercepts DNS (fake-ip proxies, captive portals) every
+brute-force word resolves and the stage times out on phantoms; a DNS-over-HTTPS
+resolver rides port 443 and survives that. See `90-Docs/CONFIGURATION.md`.
+
 `close` also accepts repeated `--accept-signal` and `--accept-candidate` IDs.
 Read `recon/coverage.json` before acknowledging any limit, and note that an
 unfinished pipeline is not a limit you get to close: `bb-stack coverage SLUG`

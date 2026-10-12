@@ -191,6 +191,39 @@ source "$BB_CONFIG_HOME/env.sh"
 bb-stack status --profile ctf-web --strict
 ```
 
+## Recon DNS Resolvers
+
+`dns-active` and `dns-resolution` hand their target list to `dnsx`. By default
+`dnsx` uses the system resolver, which is wrong on a network that intercepts
+DNS:
+
+- a fake-ip proxy (Clash and friends) or a captive portal answers *every* name
+  out of its own pool, so all 20000 brute-force words "resolve", the stage
+  overruns its 900-second timeout, and the output is phantom hosts;
+- the interception is usually transparent, so pointing `dnsx` at a different
+  plain resolver does not help -- UDP/53 is rewritten in flight.
+
+Set `BB_DNS_RESOLVERS` to send `dnsx` through resolvers of your choice. DNS over
+HTTPS rides port 443 and survives the interception:
+
+```bash
+export BB_DNS_RESOLVERS="https://1.1.1.1/dns-query,https://8.8.8.8/dns-query"
+```
+
+Comma-separated; plain hosts (`1.1.1.1`) and DoH URLs both work. Unset, the
+system resolver stays in use, so a machine without interception is unaffected.
+Like the search keys above this is a process-environment value: not part of
+`config.env`, `env.sh`, or portable exports.
+
+Before trusting a Recon stage, compare what the host sees against what the world
+sees:
+
+```bash
+getent hosts www.example.test                                # this machine
+curl -s -H 'accept: application/dns-json' \
+  'https://1.1.1.1/dns-query?name=www.example.test&type=A'    # over DoH
+```
+
 The config parser accepts shell-style literal assignments but does not execute
 command substitutions or source the file during status collection.
 

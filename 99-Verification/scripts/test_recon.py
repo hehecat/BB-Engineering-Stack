@@ -418,6 +418,50 @@ class ReconManagerTests(unittest.TestCase):
             os.environ["EXA_API_KEY"] = "fixture-exa"
             self.assertTrue(self.manager._provider_available("exa"))
 
+    def test_dnsx_resolvers_come_from_the_environment(self) -> None:
+        # An intercepting network answers every name, so a brute force over 20000
+        # words "resolves" all of them and leaves only phantom hosts; a DoH
+        # resolver rides 443 and survives the interception.
+        self.manager._ensure_layout(self.engagement)
+        recon = self.engagement / "recon"
+        output = recon / "dns/dns-active.dnsx.jsonl"
+
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("BB_DNS_RESOLVERS", None)
+            default = self.manager._provider_command(
+                "dnsx", "dns-active", "example.invalid", recon, output
+            )
+        # No override means no `-r` at all, so the system resolver stays the
+        # default on every machine that never sets the variable.
+        self.assertNotIn("-r", default)
+
+        with patch.dict(
+            os.environ,
+            {"BB_DNS_RESOLVERS": "https://1.1.1.1/dns-query, 8.8.8.8 "},
+            clear=False,
+        ):
+            overridden = self.manager._provider_command(
+                "dnsx", "dns-active", "example.invalid", recon, output
+            )
+        at = overridden.index("-r")
+        self.assertEqual(
+            overridden[at + 1 : at + 3],
+            ["https://1.1.1.1/dns-query", "8.8.8.8"],
+        )
+
+    def test_dns_resolution_also_honours_the_resolver_override(self) -> None:
+        self.manager._ensure_layout(self.engagement)
+        recon = self.engagement / "recon"
+        output = recon / "dns/dns-resolution.dnsx.jsonl"
+        with patch.dict(
+            os.environ, {"BB_DNS_RESOLVERS": "https://1.1.1.1/dns-query"}, clear=False
+        ):
+            command = self.manager._provider_command(
+                "dnsx", "dns-resolution", "example.invalid", recon, output
+            )
+        self.assertIn("-r", command)
+        self.assertIn("https://1.1.1.1/dns-query", command)
+
     def test_provider_availability_requires_both_puredns_binaries(self) -> None:
         def which(name: str, **_: object) -> str | None:
             return f"/usr/bin/{name}" if name == "puredns" else None
