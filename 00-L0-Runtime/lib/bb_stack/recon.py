@@ -81,17 +81,38 @@ def _now() -> str:
     return datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
+def _resolver_values() -> list[str]:
+    """Configured resolvers in order, blanks dropped."""
+    return [
+        item.strip()
+        for item in os.environ.get(DNS_RESOLVER_ENV, "").split(",")
+        if item.strip()
+    ]
+
+
 def _dns_resolver_args() -> list[str]:
     """``-r <resolver>...`` for dnsx, or nothing when none are configured.
 
     Returning no argument rather than a default keeps the existing behaviour
     (system resolver) for every machine that never sets the variable.
     """
-    values = [
-        item.strip()
-        for item in os.environ.get(DNS_RESOLVER_ENV, "").split(",")
-        if item.strip()
-    ]
+    values = _resolver_values()
+    return ["-r", *values] if values else []
+
+
+def _asnmap_resolver_args() -> list[str]:
+    """``-r <resolver>...`` for asnmap, which wants an explicit scheme prefix.
+
+    asnmap returns nothing at all for the bare DoH URL that dnsx accepts
+    (`doh:https://1.1.1.1/dns-query` works, `https://1.1.1.1/dns-query` does
+    not), so the shared configuration is rewritten here instead of being
+    duplicated per provider. Values that already carry a scheme pass through.
+    """
+    values: list[str] = []
+    for value in _resolver_values():
+        # A DoH URL without a scheme is what dnsx takes; asnmap needs the
+        # prefix. Anything already prefixed passes through untouched.
+        values.append(f"doh:{value}" if value.startswith(("https://", "http://")) else value)
     return ["-r", *values] if values else []
 
 
@@ -807,7 +828,14 @@ class ReconManager:
                 f"web.http_rate_limit={limits['http_requests_per_second']}",
                 "-y",
             ],
-            "asnmap": ["asnmap", "-d", scope_host_arg, "-json", "-silent"],
+            "asnmap": [
+                "asnmap",
+                "-d",
+                scope_host_arg,
+                *_asnmap_resolver_args(),
+                "-json",
+                "-silent",
+            ],
             "alterx": [
                 "alterx",
                 "-l",

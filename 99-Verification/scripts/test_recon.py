@@ -462,6 +462,41 @@ class ReconManagerTests(unittest.TestCase):
         self.assertIn("-r", command)
         self.assertIn("https://1.1.1.1/dns-query", command)
 
+    def test_asnmap_gets_the_resolver_with_a_scheme_prefix(self) -> None:
+        # asnmap returns nothing for the bare DoH URL that dnsx accepts, so the
+        # single configured value is rewritten per provider.
+        self.manager._ensure_layout(self.engagement)
+        recon = self.engagement / "recon"
+        output = recon / "inventory/organization-assets.asnmap.json"
+        with patch.dict(
+            os.environ,
+            {"BB_DNS_RESOLVERS": "https://1.1.1.1/dns-query,1.0.0.1"},
+            clear=False,
+        ):
+            command = self.manager._provider_command(
+                "asnmap", "organization-assets", "example.invalid", recon, output
+            )
+        at = command.index("-r")
+        self.assertEqual(
+            command[at + 1 : at + 3], ["doh:https://1.1.1.1/dns-query", "1.0.0.1"]
+        )
+
+    def test_asnmap_keeps_an_already_prefixed_resolver(self) -> None:
+        self.manager._ensure_layout(self.engagement)
+        recon = self.engagement / "recon"
+        output = recon / "inventory/organization-assets.asnmap.json"
+        with patch.dict(
+            os.environ,
+            {"BB_DNS_RESOLVERS": "doh:https://1.1.1.1/dns-query"},
+            clear=False,
+        ):
+            command = self.manager._provider_command(
+                "asnmap", "organization-assets", "example.invalid", recon, output
+            )
+        self.assertIn("doh:https://1.1.1.1/dns-query", command)
+        # A prefix must not be doubled.
+        self.assertNotIn("doh:doh:", " ".join(command))
+
     def test_provider_availability_requires_both_puredns_binaries(self) -> None:
         def which(name: str, **_: object) -> str | None:
             return f"/usr/bin/{name}" if name == "puredns" else None

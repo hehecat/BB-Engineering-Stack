@@ -215,6 +215,27 @@ system resolver stays in use, so a machine without interception is unaffected.
 Like the search keys above this is a process-environment value: not part of
 `config.env`, `env.sh`, or portable exports.
 
+`dnsx` and `asnmap` both read this value but need it written differently: `dnsx`
+takes the bare DoH URL, while `asnmap` returns nothing at all unless the resolver
+carries an explicit `doh:` scheme. Recon rewrites the value per provider, so one
+setting covers both.
+
+## PDCP Key
+
+`asnmap` (the `organization-assets` stage) requires a ProjectDiscovery Cloud
+Platform key. Without one it tries to prompt on a tty and dies with
+`Could not read input from terminal`. Create a key at
+<https://cloud.projectdiscovery.io> and export it alongside the search keys:
+
+```bash
+export PDCP_API_KEY=TOKEN
+```
+
+With the key present but `BB_DNS_RESOLVERS` unset on an intercepting network,
+`asnmap` still "works" and still lies: it resolves the domain through the
+poisoned resolver and reports `AS0 / not routed / 198.18.0.0/15` instead of the
+real range. Set both.
+
 Before trusting a Recon stage, compare what the host sees against what the world
 sees:
 
