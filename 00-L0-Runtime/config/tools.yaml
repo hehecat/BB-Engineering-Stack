@@ -168,7 +168,10 @@ installers:
   amass:
     kind: go
     checks: [amass]
-    package: github.com/owasp-amass/amass/v5/cmd/amass@v5.1.1
+    # v5 turned `enum` into a client for a separate `amass engine` daemon, so
+    # the `amass enum -passive -df ... -o ...` call recon issues fails with
+    # "The Amass engine did not respond". Keep the last self-contained release.
+    package: github.com/owasp-amass/amass/v4/cmd/amass@v4.2.0
   asnmap:
     kind: go
     checks: [asnmap]
