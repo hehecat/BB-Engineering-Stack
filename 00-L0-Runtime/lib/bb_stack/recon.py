@@ -575,12 +575,20 @@ class ReconManager:
         if uses_attempt:
             attempt.unlink(missing_ok=True)
         provider_stdin = self._provider_stdin(provider, recon_root)
+        # A provider with nothing to feed gets /dev/null, not an open pipe. An
+        # open-but-empty pipe reads as EOF, and a tool that accepts both a list
+        # file *and* stdin then prefers the (empty) pipe and reports no input --
+        # alterx does exactly that with `-l <file>`, which made `dns-active`
+        # report `no input found` while the file it was pointed at had content.
+        stdin_mode = (
+            subprocess.PIPE if provider_stdin is not None else subprocess.DEVNULL
+        )
         try:
             process = subprocess.Popen(
                 execution_command,
                 env=env,
                 text=True,
-                stdin=subprocess.PIPE,
+                stdin=stdin_mode,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 start_new_session=True,

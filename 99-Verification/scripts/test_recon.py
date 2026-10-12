@@ -511,6 +511,31 @@ class ReconManagerTests(unittest.TestCase):
             self.assertFalse(self.manager._provider_available("subfinder"))
 
 
+    def test_open_pipe_stdin_is_reserved_for_providers_that_are_fed(self) -> None:
+        # An open-but-empty pipe reads as EOF, and a tool that accepts both a
+        # list file and stdin then prefers the pipe and reports no input --
+        # alterx with `-l`, which failed `dns-active` while the file it was
+        # pointed at had content. Providers with nothing to feed get /dev/null.
+        self.manager._ensure_layout(self.engagement)
+        recon = self.engagement / "recon"
+        seen: dict[str, object] = {}
+
+        def fake_popen(command: list[str], **kwargs: object) -> FakeProviderProcess:
+            seen[str(command[0])] = kwargs.get("stdin")
+            return FakeProviderProcess()
+
+        for provider in ("alterx", "gau"):
+            output = recon / f"dns/dns-active.{provider}.txt"
+            log = recon / f"logs/dns-active.{provider}.log"
+            command = self.manager._provider_command(
+                provider, "dns-active", "example.invalid", recon, output
+            )
+            with patch("bb_stack.recon.subprocess.Popen", side_effect=fake_popen):
+                self.manager._execute_provider(provider, command, output, log)
+
+        self.assertIs(seen["alterx"], subprocess.DEVNULL)
+        self.assertIs(seen["gau"], subprocess.PIPE)
+
     def test_bbot_output_is_archived_to_the_declared_artifact(self) -> None:
         self.manager._ensure_layout(self.engagement)
         recon = self.engagement / "recon"
@@ -656,7 +681,9 @@ class ReconManagerTests(unittest.TestCase):
         self.assertEqual(result["state"], "completed")
         self.assertEqual(len(launches), 1)
         self.assertIs(launches[0]["start_new_session"], True)
-        self.assertEqual(launches[0]["stdin"], subprocess.PIPE)
+        # assetfinder reads its target from the command line, so it is launched
+        # with /dev/null rather than an open pipe (see the stdin test above).
+        self.assertIs(launches[0]["stdin"], subprocess.DEVNULL)
 
     def test_provider_timeout_terminates_the_whole_process_group(self) -> None:
         self.manager._ensure_layout(self.engagement)

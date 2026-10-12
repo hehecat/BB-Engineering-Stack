@@ -201,6 +201,22 @@ coverage gap。对应测试:`test_recon.py::test_subfinder_timeout_promotes_only
 
 ---
 
+## P1-8: 空管道 stdin 让 alterx 无视 `-l` 文件
+
+- 现象:`dns-active` 里 `alterx` 稳定报 `[FTL] alterx: no input found`,而它 `-l` 指向的
+  `subdomains.txt` 明明有内容;手工跑同一条命令却正常(生成 690 条变体)。
+- 根因:`_execute_provider` 对**所有** provider 都用 `stdin=PIPE` 并立即关闭。`alterx` 的
+  `-l` 帮助写着输入可以是 "stdin, comma-separated, file" —— 面对一个**打开着的空管道**
+  它走 stdin 分支、读到 EOF,于是忽略了文件。`</dev/null` 与终端 stdin 都正常。
+- 修法:只有确实要喂 stdin 的 provider(`gau`/`waybackurls`)拿 `PIPE`,其余拿 `DEVNULL`。
+- 同批:`asnmap` 的 DoH resolver 需要显式 `doh:` 前缀(`dnsx` 用裸 URL),共享的
+  `BB_DNS_RESOLVERS` 按 provider 改写;`asnmap` 另需 `PDCP_API_KEY`,否则它会尝试在 tty
+  上提示并 `[FTL]` 退出。
+
+**状态: shipped。**
+
+---
+
 ## 建议修复顺序(落实状态)
 
 1. **P0-1**(attempt 隔离 + partial 结果 + 格式校验 + timeout 配置化)—— shipped
