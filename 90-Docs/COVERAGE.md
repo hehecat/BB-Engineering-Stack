@@ -25,11 +25,19 @@ triangulating facts that already exist on disk.
 - `notes/asset-inventory.md` -- the asset list. Canonical shape is a markdown
   table with a `Host` column (hosts in backticks); any `##` section may carry
   one such table. `assets-inventory.md` is accepted as a fallback filename.
+- `recon/inventory/*` -- the accepted scope as recon writes it: one host or URL
+  per line in `scope-targets.txt`, `scope-hosts.txt`, `scope-urls.txt` and
+  `subdomains.txt`. A live engagement often has no hand-written inventory at all,
+  so these are read too. The hand-written row wins for a host appearing in both,
+  because only it carries a status. `candidates.jsonl` sits in the same directory
+  and is **not** read -- it holds discoveries that failed the scope check, and an
+  unauthorised host is not an asset to cover.
 - `traffic/flows.db` -- which hosts actually received traffic. Missing or empty
   is not an error, it just means "no traffic evidence".
 - `notes/findings-live.md` and `hypotheses.md` -- which assets have a
   conclusion.
-- `recon/state.json` -- `coverage_gaps[]`, reported verbatim as `gaps`.
+- `recon/state.json` -- `coverage_gaps[]`, reported verbatim as `gaps`, and
+  `stages`, rolled up under `recon` (see below).
 
 ## Ratios (`totals`)
 
@@ -39,6 +47,26 @@ triangulating facts that already exist on disk.
 - Both are `0.0` for an empty inventory.
 - `uncovered` = the `untouched` count. `traffic_hosts`, `findings`, `leads`,
   `gaps`, and `accepted_gaps` are raw counts of what was read.
+
+## `recon` -- Pipeline Completion
+
+Asset coverage says nothing about stages that never ran. A one-host engagement can
+be fully concluded while eleven of fourteen recon stages are still `pending`, and a
+`ratio` of `1.0` would call that finished.
+
+`recon` rolls up `stages` from `recon/state.json`:
+
+- `stages` -- how many stages are recorded.
+- `terminal` -- stages in a terminal state, using recon's own definition
+  (`completed`, `partial`, `skipped`).
+- `incomplete` -- everything else (`pending`, `running`, `blocked`).
+- `by_state` -- stage state to count.
+- `incomplete_stages` -- the *names* of the unfinished stages, sorted, so a gate
+  failure can say what to run rather than only how much is left.
+
+`recon` is `null` when there is no `recon/state.json`. That is deliberately not the
+same as "zero incomplete": "no stages recorded" and "no stages left" are opposite
+facts, and a gate must not read the second out of the first.
 
 ## `unmatched` And `accepted_gaps`
 
@@ -61,6 +89,8 @@ triangulating facts that already exist on disk.
       `concluded`, then by ascending evidence volume, then by host.
 - [ ] Read `ratio` for the headline and `evidenced_ratio` to separate "not
       concluded" from "never touched".
+- [ ] Read `recon.incomplete` before believing either: every asset can be concluded
+      while most stages never ran, and a short list is cheap to conclude.
 - [ ] Work the `unresolved` list top-down: each entry names why it is unresolved
       ("no traffic observed and no conclusion recorded" vs "traffic observed but
       no finding or terminal lead"). That is the queue to push.
@@ -77,6 +107,7 @@ turn the report into a convergence check with an exit code:
 ```bash
 bb-stack coverage SLUG --gate --max-untouched 0 --min-evidenced-ratio 0.9
 bb-stack coverage SLUG --gate --max-unresolved-leads 3 --require-no-unmatched
+bb-stack coverage SLUG --gate --max-incomplete-stages 0
 ```
 
 Thresholds (each is inert unless `--gate` is also given):
@@ -89,6 +120,10 @@ Thresholds (each is inert unless `--gate` is also given):
   non-concluded assets may remain open.
 - `--require-no-unmatched` -- pass when `len(unmatched) == 0`: no traffic host is
   missing from the inventory.
+- `--max-incomplete-stages INT` -- pass when `recon.incomplete <= INT`: how many
+  recon stages may still be unfinished. This is the one threshold that ignores the
+  asset list, so a short inventory cannot satisfy it by being cheap to cover. With
+  no `recon/state.json` the check cannot be evaluated and therefore fails.
 
 Equality passes for every comparison. `--json` still prints the underlying report.
 There is no default gate: a threshold is required, and one supplied without `--gate`
@@ -106,8 +141,10 @@ Output names each check: a `coverage gate: PASS` or `coverage gate: FAIL` first 
 then one `  [PASS|FAIL] <name>: required <threshold>, actual <value> -- <why>` line per
 threshold (the name is dashed, e.g. `min-evidenced-ratio`), then the concrete misses --
 `uncovered assets (N):` listing `  <coverage> <host>  (<reason>)`, and/or
-`unmatched traffic hosts (N):` listing `  <host>  flows=<n>` -- and a trailing
-`assets=... concluded=... untouched=... ratio=... evidenced_ratio=...` summary line.
+`unmatched traffic hosts (N):` listing `  <host>  flows=<n>`, and/or
+`unfinished recon stages (N):` listing `  <stage-id>` -- and a trailing
+`assets=... concluded=... untouched=... ratio=... evidenced_ratio=...` summary line,
+with `recon_stages=... recon_incomplete=...` appended when a state file exists.
 
 At the library level `coverage.gate()` fails closed: called with no threshold it
 returns `passed=False` with no checks. The CLI rejects that call as a parameter error
@@ -132,6 +169,10 @@ A workable order:
 3. Bound the open work: `--max-unresolved-leads N` freezes how many leads may remain
    at close, and `--require-no-unmatched` forces every exercised host into the
    inventory.
+4. Bound the pipeline: `--max-incomplete-stages 0` refuses to accept an engagement
+   whose recon never finished. Steps 1-3 only measure the asset list, and a short
+   list is cheap to cover; this is the step that stops a one-host survey with eleven
+   stages unrun from reading as done.
 
 An accepted gap never stands in for coverage -- `accepted_gaps` is a decision to stop,
 so it raises no ratio, and using it to pass a gate is exactly the inflation this report

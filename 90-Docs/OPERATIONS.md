@@ -42,7 +42,10 @@ The resulting URLs remain reviewable scope candidates and are not activated
 automatically.
 
 `close` also accepts repeated `--accept-signal` and `--accept-candidate` IDs.
-Read `recon/coverage.json` before acknowledging any limit.
+Read `recon/coverage.json` before acknowledging any limit, and note that an
+unfinished pipeline is not a limit you get to close: `bb-stack coverage SLUG`
+reports the stage rollup, and `--gate --max-incomplete-stages N` refuses to
+accept one.
 
 For Bug Bounty, use profile `web` with `bb-interactive` or `bb-continuous`.
 `bb-stack status --profile web --engagement SLUG` derives the platform and mode
@@ -70,9 +73,12 @@ local files with mode 600.
 Treat close and handoff as a convergence decision, not just a state change. Run
 `bb-stack coverage SLUG --gate ...` with the thresholds that mean "done" for this
 engagement, and keep its output -- the PASS/FAIL lines plus any listed `uncovered`
-or `unmatched` hosts -- with STATUS and HANDOFF. Work what it names, or record why
-each item stays open. See `90-Docs/COVERAGE.md` for the thresholds and exit codes:
-a gate that was not run is not a gate that passed.
+hosts, `unmatched` hosts, or `unfinished recon stages` -- with STATUS and HANDOFF.
+Work what it names, or record why each item stays open. Include
+`--max-incomplete-stages 0` when the engagement must be *surveyed* and not merely
+reported on: the asset thresholds cannot see a pipeline that never ran. See
+`90-Docs/COVERAGE.md` for the thresholds and exit codes: a gate that was not run
+is not a gate that passed.
 
 ## Continuous Mode
 

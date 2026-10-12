@@ -107,6 +107,22 @@ class CoverageTests(unittest.TestCase):
             json.dumps({"coverage_gaps": gaps}), encoding="utf-8"
         )
 
+    def write_recon_inventory(self, files: dict[str, str]) -> None:
+        directory = self.engagement / "recon" / "inventory"
+        directory.mkdir(parents=True, exist_ok=True)
+        for name, text in files.items():
+            (directory / name).write_text(text, encoding="utf-8")
+
+    def write_stages(self, states: dict[str, str]) -> None:
+        recon = self.engagement / "recon"
+        recon.mkdir(parents=True, exist_ok=True)
+        (recon / "state.json").write_text(
+            json.dumps(
+                {"stages": {name: {"state": state} for name, state in states.items()}}
+            ),
+            encoding="utf-8",
+        )
+
     def record_flow(self, host: str) -> None:
         with store_for(self.paths, self.slug) as store:
             store.record(
@@ -445,6 +461,7 @@ class CoverageTests(unittest.TestCase):
             {"min_evidenced_ratio": -0.1},
             {"max_untouched": -1},
             {"max_unresolved_leads": -2},
+            {"max_incomplete_stages": -1},
             {"require_no_unmatched": "yes"},
         ):
             with self.subTest(kwargs=kwargs):
@@ -452,6 +469,140 @@ class CoverageTests(unittest.TestCase):
                     gate(self.paths, self.slug, **kwargs)
         with self.assertRaisesRegex(ValidationError, "unknown gate parameter"):
             gate(self.paths, self.slug, min_ratio=0.5)
+
+    # -- recon inventory and stages --------------------------------------
+
+    def test_recon_inventory_is_a_source_when_notes_are_absent(self) -> None:
+        # A live engagement often has no hand-written inventory at all; the hosts
+        # live where recon wrote them.
+        self.write_recon_inventory(
+            {"scope-hosts.txt": "a.example.test\nb.example.test\n"}
+        )
+        report = assess(self.paths, self.slug)
+        self.assertTrue(report["sources"]["inventory"])
+        self.assertEqual(
+            sorted(self.status_by_host(report)), ["a.example.test", "b.example.test"]
+        )
+        entry = report["by_asset"][0]
+        self.assertIsNone(entry["status"])
+        self.assertEqual(entry["source"], "recon/inventory/scope-hosts.txt")
+
+    def test_recon_inventory_reads_urls_and_ignores_the_candidate_pool(self) -> None:
+        self.write_recon_inventory(
+            {
+                "scope-urls.txt": "https://c.example.test/login?a=1#x\n",
+                # `candidates.jsonl` holds discoveries that failed the scope
+                # check; counting one as an asset would inflate `untouched`.
+                "candidates.jsonl": (
+                    '{"value": "d.example.test", "scope_state": "candidate"}\n'
+                ),
+            }
+        )
+        report = assess(self.paths, self.slug)
+        self.assertEqual(sorted(self.status_by_host(report)), ["c.example.test"])
+        self.assertEqual(report["totals"]["assets"], 1)
+
+    def test_hand_written_inventory_wins_for_a_shared_host(self) -> None:
+        self.write_inventory([("www.example.test", "200")])
+        self.write_recon_inventory(
+            {"scope-hosts.txt": "www.example.test\napi.example.test\n"}
+        )
+        report = assess(self.paths, self.slug)
+        self.assertEqual(report["totals"]["assets"], 2)
+        by_host = {entry["host"]: entry for entry in report["by_asset"]}
+        # The curated row survives, so its status never degrades to None.
+        self.assertEqual(by_host["www.example.test"]["status"], "200")
+        self.assertIsNone(by_host["api.example.test"]["status"])
+
+    def test_recon_stage_rollup_counts_only_non_terminal_as_incomplete(self) -> None:
+        self.write_inventory([("www.example.test", "200")])
+        self.write_stages(
+            {
+                "scope": "completed",
+                "web-probe": "partial",
+                "archives": "skipped",
+                "dns-active": "pending",
+                "crawl": "running",
+                "cloud": "blocked",
+            }
+        )
+        recon = assess(self.paths, self.slug)["recon"]
+        self.assertEqual(recon["stages"], 6)
+        self.assertEqual(recon["terminal"], 3)
+        self.assertEqual(recon["incomplete"], 3)
+        self.assertEqual(
+            recon["by_state"],
+            {
+                "blocked": 1,
+                "completed": 1,
+                "partial": 1,
+                "pending": 1,
+                "running": 1,
+                "skipped": 1,
+            },
+        )
+        self.assertEqual(recon["incomplete_stages"], ["cloud", "crawl", "dns-active"])
+
+    def test_recon_rollup_is_absent_without_a_state_file(self) -> None:
+        self.write_inventory([("www.example.test", "200")])
+        report = assess(self.paths, self.slug)
+        # "No stages recorded" must never read as "no stages left".
+        self.assertIsNone(report["recon"])
+        self.assertFalse(report["sources"]["recon_stages"])
+
+    def test_gate_max_incomplete_stages_boundary_is_inclusive(self) -> None:
+        self.write_inventory([("www.example.test", "200")])
+        self.write_stages(
+            {"scope": "completed", "web-probe": "pending", "dns-active": "pending"}
+        )
+        meeting = gate(self.paths, self.slug, max_incomplete_stages=2)
+        self.assertTrue(meeting["passed"])
+        self.assertEqual(meeting["checks"][0]["name"], "max_incomplete_stages")
+        self.assertEqual(meeting["checks"][0]["actual"], 2)
+
+        missed = gate(self.paths, self.slug, max_incomplete_stages=1)
+        self.assertFalse(missed["passed"])
+        self.assertIn("exceeds", missed["failing"][0]["why"])
+
+    def test_gate_stage_budget_fails_closed_without_a_state_file(self) -> None:
+        self.write_inventory([("www.example.test", "200")])
+        result = gate(self.paths, self.slug, max_incomplete_stages=99)
+        # A budget that cannot be measured is not a budget that was met.
+        self.assertFalse(result["passed"])
+        self.assertIsNone(result["checks"][0]["actual"])
+        self.assertIn("no recon/state.json", result["checks"][0]["why"])
+
+    def test_gate_catches_a_covered_short_list_with_an_unrun_pipeline(self) -> None:
+        # The live failure this change exists for: one asset, fully concluded on
+        # paper, while most of the recon pipeline never ran. Every asset-side
+        # threshold passes; only the stage budget sees the missing work.
+        self.write_recon_inventory({"scope-hosts.txt": "www.example.test\n"})
+        self.record_flow("www.example.test")
+        self.write_findings([("F-001", "closed", "www.example.test")])
+        self.write_stages(
+            {
+                "scope": "completed",
+                "web-probe": "pending",
+                "dns-active": "pending",
+                "templates": "pending",
+            }
+        )
+        asset_side = gate(
+            self.paths, self.slug, min_evidenced_ratio=1.0, max_untouched=0
+        )
+        self.assertTrue(asset_side["passed"])
+
+        both = gate(
+            self.paths,
+            self.slug,
+            min_evidenced_ratio=1.0,
+            max_untouched=0,
+            max_incomplete_stages=0,
+        )
+        self.assertFalse(both["passed"])
+        self.assertEqual(
+            [check["name"] for check in both["failing"]], ["max_incomplete_stages"]
+        )
 
     def test_gate_writes_nothing(self) -> None:
         self.write_inventory([("www.example.test", "200")])

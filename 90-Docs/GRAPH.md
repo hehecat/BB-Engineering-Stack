@@ -18,8 +18,9 @@ reading every markdown file into context.
 ## Derived, Not Authoritative
 
 - The graph is a *derived index*. Authority stays with the source artifacts:
-  `notes/asset-inventory.md`, `recon/state.json`, `hypotheses.md`,
-  `notes/findings-live.md`, and the captured traffic in `traffic/flows.db`.
+  `notes/asset-inventory.md`, `recon/inventory/*`, `recon/state.json`,
+  `hypotheses.md`, `notes/findings-live.md`, and the captured traffic in
+  `traffic/flows.db`.
 - `graph build` reads those and **rewrites the graph from scratch**, so there is
   one direction of truth and no write-drift to reconcile. Editing the graph
   directly is never the move -- edit the source, rebuild.

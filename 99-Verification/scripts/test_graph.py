@@ -180,6 +180,12 @@ class GraphTests(unittest.TestCase):
     def result(self, **kwargs: Any) -> dict[str, Any]:
         return build(self.paths, self.slug, **kwargs)
 
+    def write_recon_inventory(self, files: dict[str, str]) -> None:
+        directory = self.engagement / "recon" / "inventory"
+        directory.mkdir(parents=True, exist_ok=True)
+        for name, text in files.items():
+            (directory / name).write_text(text, encoding="utf-8")
+
     # -- build -----------------------------------------------------------
 
     def test_build_counts_nodes_and_edges(self) -> None:
@@ -209,6 +215,44 @@ class GraphTests(unittest.TestCase):
         )
         # The non-asset table contributes neither assets nor skips.
         self.assertNotIn("owner", json.dumps(result))
+
+    def test_recon_inventory_supplies_assets_when_notes_have_none(self) -> None:
+        (self.engagement / "notes" / "asset-inventory.md").unlink()
+        self.write_recon_inventory(
+            {
+                "scope-hosts.txt": "delta.example.invalid\n",
+                "scope-urls.txt": "https://epsilon.example.invalid/login\n",
+                # Failed the scope check, so not an asset and not a node.
+                "candidates.jsonl": '{"value": "zeta.example.invalid"}\n',
+            }
+        )
+        result = self.result()
+        self.assertEqual(result["nodes"]["asset"], 2)
+        self.assertEqual(result["sources"]["asset-inventory"]["assets"], 2)
+        self.assertNotIn("absent", result["sources"]["asset-inventory"])
+        with graph_for(self.paths, self.slug) as store:
+            self.assertEqual(
+                store.node("asset", "delta.example.invalid")["source"],
+                "recon-inventory",
+            )
+            self.assertEqual(
+                store.node("asset", "epsilon.example.invalid")["source"],
+                "recon-inventory",
+            )
+            self.assertIsNone(store.node("asset", "zeta.example.invalid"))
+
+    def test_recon_inventory_does_not_double_count_a_known_host(self) -> None:
+        # `alpha` is already in the markdown table; the curated row owns it, and
+        # recon must neither add a second node nor inflate the asset count.
+        self.write_recon_inventory({"scope-hosts.txt": "alpha.example.invalid\n"})
+        result = self.result()
+        self.assertEqual(result["nodes"]["asset"], 2)
+        self.assertEqual(result["sources"]["asset-inventory"]["assets"], 2)
+
+    def test_asset_inventory_is_absent_only_without_either_source(self) -> None:
+        (self.engagement / "notes" / "asset-inventory.md").unlink()
+        result = self.result()
+        self.assertTrue(result["sources"]["asset-inventory"]["absent"])
 
     def test_rebuild_is_idempotent(self) -> None:
         first = self.result()

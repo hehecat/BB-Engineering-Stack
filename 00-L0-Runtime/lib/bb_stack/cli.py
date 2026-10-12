@@ -300,6 +300,17 @@ def _format_coverage(report: Mapping[str, Any]) -> str:
         f"ratio={totals['ratio']:.3f} "
         f"evidenced_ratio={totals['evidenced_ratio']:.3f}"
     )
+    recon = report.get("recon")
+    if recon:
+        # Asset coverage and stage completion answer different questions: a
+        # short asset list can be fully covered while most stages never ran.
+        states = " ".join(
+            f"{name}={count}" for name, count in recon["by_state"].items()
+        )
+        lines.append(
+            f"recon stages {recon['stages']} ({states}) "
+            f"incomplete={recon['incomplete']}"
+        )
     return "\n".join(lines)
 
 
@@ -331,11 +342,23 @@ def _format_coverage_gate(result: Mapping[str, Any]) -> str:
         lines.append(f"unmatched traffic hosts ({len(report['unmatched'])}):")
         for entry in report["unmatched"]:
             lines.append(f"  {entry['host']}  flows={entry['flows']}")
-    lines.append(
+    if "max_incomplete_stages" in failing:
+        unfinished = (report.get("recon") or {}).get("incomplete_stages", [])
+        lines.append(f"unfinished recon stages ({len(unfinished)}):")
+        for stage_id in unfinished:
+            lines.append(f"  {stage_id}")
+    recon = report.get("recon")
+    reported = (
         f"assets={totals['assets']} concluded={totals['concluded']} "
         f"untouched={totals['untouched']} ratio={totals['ratio']:.3f} "
         f"evidenced_ratio={totals['evidenced_ratio']:.3f}"
     )
+    if recon:
+        reported += (
+            f" recon_stages={recon['stages']}"
+            f" recon_incomplete={recon['incomplete']}"
+        )
+    lines.append(reported)
     return "\n".join(lines)
 
 
@@ -368,10 +391,12 @@ def _require_coverage_inventory(
     """Both `coverage` modes are meaningless without an asset list to rank."""
     if report["sources"]["inventory"]:
         return
+    engagement = paths.engagement(slug)
     raise ValidationError(
-        f"no asset inventory found for engagement {slug!r}: "
-        "write a markdown table with a `Host` column to "
-        f"{paths.engagement(slug) / 'notes' / 'asset-inventory.md'}, "
+        f"no asset inventory found for engagement {slug!r}: either run recon so "
+        f"{engagement / 'recon' / 'inventory'} is populated, or write a markdown "
+        "table with a `Host` column to "
+        f"{engagement / 'notes' / 'asset-inventory.md'}, "
         f"then re-run `bb-stack coverage {slug}`"
     )
 
@@ -977,6 +1002,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--require-no-unmatched",
         action="store_true",
         help="require no traffic host to be missing from the inventory",
+    )
+    coverage.add_argument(
+        "--max-incomplete-stages",
+        type=int,
+        default=None,
+        help="require at most this many recon stages to be unfinished",
     )
     coverage.add_argument("--json", action="store_true")
 
@@ -1624,6 +1655,7 @@ def command(args: argparse.Namespace, paths: StackPaths) -> int:
             or args.max_untouched is not None
             or args.max_unresolved_leads is not None
             or args.require_no_unmatched
+            or args.max_incomplete_stages is not None
         )
         if not args.gate:
             if declared:
@@ -1644,12 +1676,14 @@ def command(args: argparse.Namespace, paths: StackPaths) -> int:
             max_untouched=args.max_untouched,
             max_unresolved_leads=args.max_unresolved_leads,
             require_no_unmatched=args.require_no_unmatched,
+            max_incomplete_stages=args.max_incomplete_stages,
         )
         if not result["checks"]:
             raise ValidationError(
                 "coverage --gate requires at least one threshold "
                 "(--min-evidenced-ratio / --max-untouched / "
-                "--max-unresolved-leads / --require-no-unmatched)"
+                "--max-unresolved-leads / --require-no-unmatched / "
+                "--max-incomplete-stages)"
             )
         _require_coverage_inventory(paths, args.engagement, result["report"])
         emit(result if args.json else _format_coverage_gate(result), args.json)

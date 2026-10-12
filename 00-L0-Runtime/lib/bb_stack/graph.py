@@ -2,10 +2,10 @@
 
 The graph is a *derived index*, never a source of truth. Authority stays with
 the artifacts an operator already maintains -- `notes/asset-inventory.md`,
-`recon/state.json`, `hypotheses.md`, `notes/findings-live.md`, and the captured
-traffic under `traffic/flows.db`. `build` reads those and rewrites the graph
-from scratch, so there is exactly one direction of truth and no write-drift to
-reconcile.
+`recon/inventory/*`, `recon/state.json`, `hypotheses.md`,
+`notes/findings-live.md`, and the captured traffic under `traffic/flows.db`.
+`build` reads those and rewrites the graph from scratch, so there is exactly one
+direction of truth and no write-drift to reconcile.
 
 Its job is context economy: the orchestration layer reads a `summary` and then
 pulls individual `node`/`neighbors` records on demand, instead of re-loading
@@ -223,6 +223,48 @@ def _parse_asset_inventory(
             if notes:
                 attrs["notes"] = _cell_attr(notes)
             assets.append({"host": host, "attrs": attrs})
+    return assets
+
+
+# Recon's accepted scope, one host or URL per line. `candidates.jsonl` lives in
+# the same directory and is not read: it holds discoveries that failed the scope
+# check, and an unauthorised host is not an asset.
+_RECON_INVENTORY_FILES = (
+    ("scope-targets.txt", "recon-inventory"),
+    ("scope-hosts.txt", "recon-inventory"),
+    ("scope-urls.txt", "recon-inventory"),
+    ("subdomains.txt", "recon-inventory"),
+)
+
+
+def _parse_recon_inventory(root: Path) -> list[dict[str, Any]]:
+    """Assets from the flat files recon writes under `recon/inventory/`.
+
+    A live engagement frequently has no hand-written inventory at all -- the
+    hosts sit where recon left them, and without this source the graph would be
+    empty for work that plainly exists. Lines are hosts or URLs, so each goes
+    through the same cleaner as an inventory cell.
+
+    Entries the cleaner rejects are dropped silently rather than counted as
+    skipped: these files hold IP literals, bare ports and comment lines by
+    design, and reporting each one would bury the real parse failures.
+    """
+    directory = root / "recon" / "inventory"
+    assets: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for name, source in _RECON_INVENTORY_FILES:
+        path = directory / name
+        if not path.is_file():
+            continue
+        for raw in _read_text_if(path).splitlines():
+            line = raw.strip()
+            if not line or line.startswith("#"):
+                continue
+            host = _clean_host(line)
+            if not host or host in seen:
+                continue
+            seen.add(host)
+            assets.append({"host": host, "attrs": {}, "source": source})
     return assets
 
 
@@ -492,7 +534,7 @@ class GraphStore:
         def _record_edge(kind: str, src: int, dst: int) -> None:
             counted_edges.setdefault(kind, set()).add((src, dst))
 
-        # 1. assets from the markdown inventory
+        # 1. assets, from the hand-written inventory and from recon's own
         inventory_path = root / "notes" / "asset-inventory.md"
         if "asset-inventory" in selected:
             entry: dict[str, Any] = {"assets": 0, "skipped": 0}
@@ -509,11 +551,29 @@ class GraphStore:
                     asset_ids[asset["host"]] = node_id
                     entry["assets"] += 1
                     _record_node("asset", asset["host"])
-            else:
-                entry["absent"] = True
+            recon_assets = _parse_recon_inventory(root)
+            for asset in recon_assets:
+                if asset["host"] in asset_ids:
+                    # The hand-written row already claimed this host and carries
+                    # more than recon knows (a status); recon only contributes
+                    # hosts nothing else recorded.
+                    continue
+                node_id = self._upsert_node(
+                    "asset",
+                    asset["host"],
+                    label=asset["host"],
+                    attrs=asset["attrs"],
+                    source=asset["source"],
+                )
+                asset_ids[asset["host"]] = node_id
+                entry["assets"] += 1
+                _record_node("asset", asset["host"])
             entry["skipped"] = sum(
                 1 for item in result.skipped if item["source"] == "asset-inventory"
             )
+            # Only "absent" when neither source had anything to read.
+            if not inventory_path.is_file() and not recon_assets:
+                entry["absent"] = True
             result.sources["asset-inventory"] = entry
 
         # 2. recon branches and coverage gaps

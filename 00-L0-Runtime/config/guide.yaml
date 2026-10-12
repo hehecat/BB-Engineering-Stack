@@ -29,6 +29,8 @@ sections:
         command: "bb-stack coverage <slug>"
       - when: "A handoff or CI gate must fail while coverage thresholds are unmet."
         command: "bb-stack coverage <slug> --gate --min-evidenced-ratio 0.8 --max-untouched 5"
+      - when: "The asset list already looks covered but recon stages were never finished."
+        command: "bb-stack coverage <slug> --gate --max-incomplete-stages 0"
 
   - title: "Progress -- choose the next action"
     entries:
