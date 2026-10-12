@@ -190,8 +190,14 @@ coverage gap。对应测试:`test_recon.py::test_subfinder_timeout_promotes_only
   recon 的 `_provider_available` 用 `shutil.which`,**不解析 shell alias**,故不影响管线;
   手动调用会踩坑。建议移除 alias 或用完整路径。
 - 安装 `gau` 时使用 `tools.yaml` 固定的正确仓库与版本,不要改用其他 repo。
+- **DNS 被透明劫持**(fake-ip 代理 / 强制门户):本机解析对**任意**域名都返回同一个地址池
+  (实测 Clash 的 `198.18.0.0/15`,连直连 `8.8.8.8` 也被在途改写)。后果是 `dns-active`
+  的 20000 词爆破"全部解析成功"、跑满 900 秒超时、产出全是幻影主机,整条流水线被
+  `blocked`。**已提供代码出口**:`BB_DNS_RESOLVERS`(逗号分隔,`1.1.1.1` 与
+  `https://1.1.1.1/dns-query` 均可)让 `dnsx` 走指定 resolver —— DoH 走 443,不被劫持。
+  不设置该变量时行为与之前完全一致。详见 `90-Docs/CONFIGURATION.md`。
 
-**状态: 环境说明,无代码改动。**
+**状态: alias 为环境说明;DNS 劫持已提供 `BB_DNS_RESOLVERS` 出口(shipped)。**
 
 ---
 
