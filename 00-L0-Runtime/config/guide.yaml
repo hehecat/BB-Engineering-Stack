@@ -42,6 +42,8 @@ sections:
         command: "bb-stack graph node <slug> <kind> <key>"
       - when: "You need to expand everything a node connects to."
         command: "bb-stack graph neighbors <slug> <node-id> --depth 2"
+      - when: "Work must continue past the end of a single agent turn -- one turn always finishes, so the repetition has to come from outside."
+        command: "bb-continuous <slug>"
 
   - title: "Engagement state -- record where it stands and whether you may act"
     entries:

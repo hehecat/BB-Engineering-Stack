@@ -586,6 +586,7 @@ class RuntimeManager:
             "bb-search",
             "bb-claude",
             "bb-traffic",
+            "bb-continuous",
             "bootstrap",
             "filecodebox-upload",
             "mail-otp",

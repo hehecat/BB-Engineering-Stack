@@ -16,6 +16,7 @@ from .agents import AgentRoster
 from .browser import BrowserRuntimeManager
 from .capabilities import CapabilityRegistry
 from .configuration import ConfigurationManager
+from .continuous import STOP_FILE_NAME, run as continuous_run
 from .coverage import assess, gate
 from .data import DataManager
 from .engagement import EngagementManager
@@ -381,6 +382,37 @@ def _suggest_targets(result: Mapping[str, Any]) -> str:
     lines.append(
         "no role inferred; coverage carries no domain information -- re-run with "
         "`--agent NAME` to emit requests you can hand to `agents plan --file`"
+    )
+    return "\n".join(lines)
+
+
+def _format_continuous(result: Mapping[str, Any]) -> str:
+    """Round-by-round progress, then why the loop stopped.
+
+    The stop file is printed in full because it is the only control the operator
+    has between rounds -- a prompt saying "until I say stop" has nowhere to land.
+    """
+    lines = [
+        f"{result['engagement']}: {result['round_count']} round(s) via "
+        f"{result['profile']} ({result['backend'] or 'default backend'})"
+    ]
+    for record in result["rounds"]:
+        if record.get("dry_run"):
+            lines.append(
+                f"  round {record['round']}: dry run -- {' '.join(record['command'])}"
+            )
+            continue
+        status = (
+            "ok" if record.get("returncode") == 0 else f"exit {record.get('returncode')}"
+        )
+        lines.append(
+            f"  round {record['round']:<3} {status:<8} {record['seconds']:>6}s  "
+            f"checkpoint={record.get('checkpointed_at') or '-'}"
+        )
+    lines.append(f"stopped: {result['stopped_because']}")
+    lines.append(
+        f"stop file: {result['stop_file']} "
+        "(create it and the loop stops before the next round)"
     )
     return "\n".join(lines)
 
@@ -1010,6 +1042,47 @@ def build_parser() -> argparse.ArgumentParser:
         help="require at most this many recon stages to be unfinished",
     )
     coverage.add_argument("--json", action="store_true")
+
+    continuous = commands.add_parser(
+        "continuous",
+        help="drive an engagement through repeated headless agent rounds",
+    )
+    continuous.add_argument("engagement")
+    continuous.add_argument(
+        "--backend",
+        choices=backend_choices,
+        default=None,
+        help="agent backend to drive (default: the registry's declared default)",
+    )
+    continuous.add_argument(
+        "--profile",
+        default=None,
+        help="workflow profile (default: the profile declared for the engagement's workflow)",
+    )
+    continuous.add_argument(
+        "--max-rounds", type=int, default=25, help="stop after this many rounds"
+    )
+    continuous.add_argument(
+        "--max-failures",
+        type=int,
+        default=3,
+        help="stop after this many consecutive rounds that exit non-zero",
+    )
+    continuous.add_argument(
+        "--interval", type=float, default=0.0, help="seconds between rounds"
+    )
+    continuous.add_argument(
+        "--round-timeout", type=int, default=3600, help="seconds allowed per round"
+    )
+    continuous.add_argument(
+        "--stop-file",
+        default=None,
+        help=f"marker whose presence stops the loop (default: <engagement>/{STOP_FILE_NAME})",
+    )
+    continuous.add_argument(
+        "--dry-run", action="store_true", help="print the first round's command, run nothing"
+    )
+    continuous.add_argument("--json", action="store_true")
 
     policy = commands.add_parser(
         "policy", help="inspect the engagement tool policy or dry-run one call"
@@ -1688,6 +1761,37 @@ def command(args: argparse.Namespace, paths: StackPaths) -> int:
         _require_coverage_inventory(paths, args.engagement, result["report"])
         emit(result if args.json else _format_coverage_gate(result), args.json)
         return 0 if result["passed"] else 1
+    if args.command == "continuous":
+        result = continuous_run(
+            paths,
+            args.engagement,
+            backend=args.backend,
+            profile=args.profile,
+            max_rounds=args.max_rounds,
+            max_failures=args.max_failures,
+            interval=args.interval,
+            round_timeout=args.round_timeout,
+            stop_file=args.stop_file,
+            dry_run=args.dry_run,
+            # Progress goes to stderr as each round lands: a continuous run is
+            # long and silent by nature, and stdout stays reserved for the final
+            # report (or the JSON document).
+            on_round=lambda record: print(
+                "bb-stack continuous: round {round} {status} {seconds}s".format(
+                    round=record["round"],
+                    status=(
+                        "dry-run"
+                        if record.get("dry_run")
+                        else f"exit {record.get('returncode')}"
+                    ),
+                    seconds=record.get("seconds", "-"),
+                ),
+                file=sys.stderr,
+                flush=True,
+            ),
+        )
+        emit(result if args.json else _format_continuous(result), args.json)
+        return 0
     if args.command == "policy":
         policy = policy_for(paths, args.engagement)
         if args.policy_command == "show":

@@ -87,10 +87,31 @@ is not a gate that passed.
 
 ## Continuous Mode
 
-Use an Engagement created with `--mode continuous` and launch
-`bb-continuous`. Specialist Skill pivot rules close one lead; they do not close
-the Engagement. SHIP starts when the work reaches that phase or the user asks
-for delivery.
+Create the Engagement with `--mode continuous`, then drive it with
+`bb-continuous`, which runs repeated headless agent rounds until you stop it:
+
+```bash
+bb-stack new SLUG TARGET --workflow assessment --platform authorized-assessment \
+  --mode continuous --authorization-source '...' --authorization-status user-asserted
+bb-continuous SLUG            # run rounds until a stopping condition fires
+bb-continuous SLUG --dry-run  # print the first round's command, run nothing
+touch "$BB_WORK_ROOT/engagements/SLUG/.bb-continuous-stop"   # stop it
+```
+
+Why a loop exists at all: an agent told "keep going until I say stop" still
+finishes its turn, because the repetition is not in the model. Each round
+therefore asks for **exactly one recorded next action plus a checkpoint**, so a
+killed round costs that one action and the next round resumes from `STATUS.md` on
+disk rather than from a conversation about to be truncated.
+
+Every round re-derives the launch plan, so the authorization basis, the required
+Skills and the required capabilities are checked again before each round -- the
+loop adds repetition, never reach. It stops when the stop file appears, when the
+Engagement leaves `active`, when `--max-rounds` (default 25) is reached, or after
+`--max-failures` (default 3) consecutive non-zero rounds.
+
+Specialist Skill pivot rules close one lead; they do not close the Engagement.
+SHIP starts when the work reaches that phase or the user asks for delivery.
 
 ## Unified Status
 
