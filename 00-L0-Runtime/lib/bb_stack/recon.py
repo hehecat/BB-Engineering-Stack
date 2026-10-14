@@ -17,11 +17,13 @@ from pathlib import Path
 from typing import Any, Iterator
 from urllib.parse import urljoin, urlparse
 
+from .configuration import ConfigurationManager
 from .data import DataManager
 from .engagement import AUTHORIZED_STATUSES, EngagementManager, PROTECTED_WORKFLOWS
 from .errors import CommandError, ValidationError
 from .io import atomic_write, dump_json, load_json, load_yaml
 from .paths import StackPaths
+from .proxy import provider_args as proxy_provider_args
 from .validation import validate
 
 BASELINE_STAGE_IDS = (
@@ -131,6 +133,10 @@ class ReconManager:
         )
         self.config = load_yaml(self.config_path)
         validate(self.config, self.schema_path, "recon pipeline")
+        # The machine's proxy decision, read once: every provider command is
+        # built from it so routing is a property of the command line rather than
+        # of whatever environment the process happened to inherit.
+        self.machine = ConfigurationManager(paths).effective()
         self._validate_pipeline()
 
     def required_providers(self) -> list[str]:
@@ -1025,7 +1031,13 @@ class ReconManager:
             ]
         if provider not in commands:
             raise ValidationError(f"no recon command adapter for provider: {provider}")
-        return commands[provider]
+        command = commands[provider]
+        # Inserted directly after the binary name: several of these tools reject
+        # flags placed after their positional arguments. A provider with no proxy
+        # flag at all is named in `proxy.PROXY_BLIND_TOOLS`, so the gap is visible
+        # rather than assumed away.
+        proxy_flags = proxy_provider_args(provider, self.machine)
+        return [command[0], *proxy_flags, *command[1:]] if proxy_flags else command
 
     def _provider_stdin(self, provider: str, recon_root: Path) -> str | None:
         if provider in {"gau", "waybackurls"}:

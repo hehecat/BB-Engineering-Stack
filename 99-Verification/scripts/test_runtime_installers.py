@@ -424,7 +424,7 @@ class RuntimeInstallerTests(unittest.TestCase):
             self.manager._install_tool("fixture", spec, {"PATH": "/usr/bin:/bin"})
         self.assertTrue(destination.is_dir())
 
-    def test_tool_install_uses_configured_proxy_without_lowercase_residue(self) -> None:
+    def test_tool_install_replaces_inherited_proxy_with_uppercase_only(self) -> None:
         document = {
             "profiles": {"fixture": {"required": ["demo"], "optional": []}},
             "installers": {
@@ -467,9 +467,11 @@ class RuntimeInstallerTests(unittest.TestCase):
         self.assertEqual(env["HTTP_PROXY"], machine["BB_HTTP_PROXY"])
         self.assertEqual(env["HTTPS_PROXY"], machine["BB_HTTP_PROXY"])
         self.assertEqual(env["ALL_PROXY"], machine["BB_SOCKS_PROXY"])
-        self.assertNotIn("http_proxy", env)
-        self.assertNotIn("https_proxy", env)
-        self.assertNotIn("all_proxy", env)
+        # Only the uppercase spelling is written back -- it is what every client
+        # checked reads -- and clearing both spellings first is what makes the
+        # stale inherited values above disappear rather than survive alongside.
+        for name in ("http_proxy", "https_proxy", "all_proxy"):
+            self.assertNotIn(name, env)
 
     def test_run_and_registry_helpers_handle_failures_and_malformed_state(self) -> None:
         with patch("bb_stack.runtime.subprocess.run") as run:

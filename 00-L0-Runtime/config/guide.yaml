@@ -31,6 +31,8 @@ sections:
         command: "bb-stack coverage <slug> --gate --min-evidenced-ratio 0.8 --max-untouched 5"
       - when: "The asset list already looks covered but recon stages were never finished."
         command: "bb-stack coverage <slug> --gate --max-incomplete-stages 0"
+      - when: "You need to know whether traffic really leaves through the configured proxy, and which tools cannot be proxied at all."
+        command: "bb-stack proxy check"
 
   - title: "Progress -- choose the next action"
     entries:

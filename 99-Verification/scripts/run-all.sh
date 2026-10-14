@@ -31,6 +31,7 @@ doctor_if_installed() {
 "$PYTHON" "$ROOT/99-Verification/scripts/test_traffic.py"
 "$PYTHON" "$ROOT/99-Verification/scripts/test_traffic_mcp.py"
 "$PYTHON" "$ROOT/99-Verification/scripts/test_graph.py"
+"$PYTHON" "$ROOT/99-Verification/scripts/test_proxy.py"
 "$PYTHON" "$ROOT/99-Verification/scripts/test_continuous.py"
 "$PYTHON" "$ROOT/99-Verification/scripts/test_coverage.py"
 "$PYTHON" "$ROOT/99-Verification/scripts/test_policy.py"

@@ -17,6 +17,7 @@ from .errors import StackError, ValidationError
 from .io import atomic_write, dump_json, load_json
 from .paths import StackPaths
 from .profiles import ProfileRegistry
+from .proxy import apply as proxy_apply
 from .skills import SkillRegistry
 
 WORKSPACE_SCHEMA_VERSION = 1
@@ -572,31 +573,9 @@ class WorkspaceManager:
             "CHROME_DEVTOOLS_MCP_NO_UPDATE_CHECKS": "1",
             "PATH": self.paths.runtime_path(machine.get("BB_EXTRA_PATH", "")),
         }
-        if machine["BB_PROXY_MODE"] == "mihomo":
-            settings_env.update(
-                {
-                    "HTTP_PROXY": machine["BB_HTTP_PROXY"],
-                    "HTTPS_PROXY": machine["BB_HTTP_PROXY"],
-                    "ALL_PROXY": machine["BB_SOCKS_PROXY"],
-                    "http_proxy": "",
-                    "https_proxy": "",
-                    "all_proxy": "",
-                }
-            )
-        else:
-            settings_env.update(
-                {
-                    name: ""
-                    for name in (
-                        "HTTP_PROXY",
-                        "HTTPS_PROXY",
-                        "ALL_PROXY",
-                        "http_proxy",
-                        "https_proxy",
-                        "all_proxy",
-                    )
-                }
-            )
+        # Proxy variables come from one module so the shell, the launched agent
+        # and recon cannot disagree about whether traffic is proxied.
+        proxy_apply(settings_env, machine)
         settings = {
             "$schema": "https://json.schemastore.org/claude-code-settings.json",
             "env": settings_env,

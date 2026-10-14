@@ -89,9 +89,9 @@ the environment or included in portable exports.
 
 | Variable | Purpose | Default |
 | --- | --- | --- |
-| `BB_PROXY_MODE` | `direct` or `mihomo` | `direct` |
-| `BB_HTTP_PROXY` | mihomo HTTP endpoint | `http://127.0.0.1:7890` |
-| `BB_SOCKS_PROXY` | mihomo SOCKS endpoint | `socks5://127.0.0.1:7891` |
+| `BB_PROXY_MODE` | `direct`, `http`, `socks`, or `mihomo` | `direct` |
+| `BB_HTTP_PROXY` | HTTP proxy endpoint (used by `http` and `mihomo`) | `http://127.0.0.1:7890` |
+| `BB_SOCKS_PROXY` | SOCKS proxy endpoint (used by `socks` and `mihomo`) | `socks5://127.0.0.1:7891` |
 | `BB_H1_USERNAME` | HackerOne tester identity | empty |
 | `BB_FILECODEBOX_URL` | FileCodeBox base origin | empty |
 | `BB_AGENT_LANGUAGE` | Agent visible output language: `zh-CN` or `en` | `zh-CN` |
@@ -272,12 +272,31 @@ The value must be an HTTP(S) URL without embedded credentials, query, or
 fragment; a trailing `/simple` path is allowed. It is machine-specific and is
 never exported by `bb-stack portable`.
 
-## Proxy Comparison
+## Proxy Routing
 
-`direct` clears uppercase and lowercase HTTP proxy variables. `mihomo` requires
-the configured HTTP listener to accept TCP connections and the active
-`HTTP_PROXY`, `HTTPS_PROXY`, and `ALL_PROXY` values to match `config.env`.
-Conflicting lowercase variables are also detected.
+`BB_PROXY_MODE` decides which proxy variables a session carries. One module
+(`bb_stack.proxy`) answers for all three consumers -- the generated `env.sh`, the
+workspace settings handed to a launched agent, and recon's provider command lines
+-- so the shell and the tools cannot disagree about whether traffic is routed:
+
+| Mode | Sets | Needs |
+| --- | --- | --- |
+| `direct` | nothing; every proxy variable is cleared | -- |
+| `http` | `HTTP_PROXY`, `HTTPS_PROXY` from `BB_HTTP_PROXY` | an HTTP listener |
+| `socks` | `ALL_PROXY` from `BB_SOCKS_PROXY` | a SOCKS listener |
+| `mihomo` | both -- the historical name for a local mihomo/Clash instance | both listeners |
+
+Only the uppercase spelling is set, and both spellings are cleared first. Every
+client checked -- curl, urllib, the Go tools, npm -- reads the uppercase form,
+while the lowercase one is where a stale inherited value hides; clearing both is
+what makes `direct` mean "nothing is routed" rather than "nothing was added".
+
+Recon passes an explicit `-proxy` to the providers that accept one (`httpx`,
+`nuclei`, `ffuf`, `katana`, `subfinder`, `naabu`, `dnsx`, `bbot`, `gau`,
+`asnmap`), using the flag and kind each tool actually documents -- `subfinder`
+takes HTTP only, `naabu` and `dnsx` take socks5 only, `ffuf` short-forms it as
+`-x`. That makes routing a property of the command line instead of a property of
+whatever environment the process happened to inherit.
 
 ```bash
 bb-stack configure --proxy-mode mihomo \
@@ -285,8 +304,43 @@ bb-stack configure --proxy-mode mihomo \
   --socks-proxy socks5://127.0.0.1:7891
 ```
 
-After configuring, source `env.sh` again. A listening mihomo service does not enable
-proxying by itself; the dashboard distinguishes `listener` from `applied`.
+After configuring, source `env.sh` again. A listening mihomo service does not
+enable proxying by itself; the dashboard distinguishes `listener` from `applied`.
+
+### Verify It, Do Not Assume It
+
+```bash
+bb-stack proxy check          # --json for the raw document
+```
+
+The check requests an address-echo service twice -- once with every proxy variable
+cleared, once with the configured routing -- and compares the results. **The
+addresses are evidence; whether they differ is the answer.** A proxy that is
+configured but not applied leaves them identical, and a tool that ignores its
+proxy flag looks exactly like one that honours it until the comparison is made.
+
+Recon passes an explicit `-proxy` to the providers that accept one (`httpx`,
+`nuclei`, `ffuf`, `katana`, `subfinder`, `naabu`, `dnsx`, `bbot`, `gau`,
+`asnmap`), using the flag and kind each tool actually documents -- `subfinder`
+takes HTTP only, `naabu` and `dnsx` take socks5 only, `ffuf` short-forms it as
+`-x`. That makes routing a property of the command line instead of a property of
+whatever environment the process happened to inherit.
+
+### What A Proxy Cannot Cover
+
+`bb-stack proxy check` lists these, because planning around them is the difference
+between routed and merely configured:
+
+| Tool | Why |
+| --- | --- |
+| `nmap` | raw packets; needs a VPN, or `proxychains` with a SOCKS proxy |
+| `massdns`, `puredns` | raw DNS; need a VPN or a resolver-level tunnel |
+| `amass`, `arjun`, `trufflehog`, `waybackurls` | no proxy option at all |
+| `alterx`, `jsluice` | offline only -- they send nothing |
+
+A proxy is an OPSEC tool for work you are already authorised to do; it does not
+create authority. The authorization gate that governs active traffic lives in
+`03-L3-Engagement-State`.
 
 ## Platform Identity
 

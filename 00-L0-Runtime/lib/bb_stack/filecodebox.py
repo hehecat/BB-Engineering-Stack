@@ -10,16 +10,9 @@ from urllib.parse import urljoin
 from .configuration import ConfigurationManager, url_origin
 from .errors import CommandError, ValidationError
 from .paths import StackPaths
+from .proxy import apply as proxy_apply
 
 EXPIRY_STYLES = ("day", "hour", "minute", "count", "forever")
-_PROXY_ENV_NAMES = (
-    "HTTP_PROXY",
-    "HTTPS_PROXY",
-    "ALL_PROXY",
-    "http_proxy",
-    "https_proxy",
-    "all_proxy",
-)
 
 
 def _origin(paths: StackPaths) -> str:
@@ -36,16 +29,9 @@ def _origin(paths: StackPaths) -> str:
 def _request_environment(paths: StackPaths) -> dict[str, str]:
     machine = ConfigurationManager(paths).effective()
     environment = paths.environment()
-    for name in _PROXY_ENV_NAMES:
-        environment.pop(name, None)
-    if machine["BB_PROXY_MODE"] == "mihomo":
-        environment.update(
-            {
-                "HTTP_PROXY": machine["BB_HTTP_PROXY"],
-                "HTTPS_PROXY": machine["BB_HTTP_PROXY"],
-                "ALL_PROXY": machine["BB_SOCKS_PROXY"],
-            }
-        )
+    # An upload is traffic too, so it follows the same proxy decision as
+    # everything else instead of a second copy of it.
+    proxy_apply(environment, machine)
     environment["PATH"] = paths.runtime_path(machine.get("BB_EXTRA_PATH", ""))
     return environment
 

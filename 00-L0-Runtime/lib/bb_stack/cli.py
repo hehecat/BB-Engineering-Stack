@@ -37,6 +37,12 @@ from .paths import StackPaths, load_stack_manifest, source_root
 from .policy import ToolPolicy, policy_for
 from .portable import PortableManager
 from .profiles import ProfileRegistry
+from .proxy import (
+    PROXY_MODES,
+    check as proxy_check,
+    describe as proxy_describe,
+    environment as proxy_environment,
+)
 from .recon import BASELINE_STAGE_IDS, ReconManager
 from .runtime import RuntimeManager
 from .self_update import SelfUpdateManager
@@ -417,6 +423,50 @@ def _format_continuous(result: Mapping[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def _format_proxy_check(result: Mapping[str, Any]) -> str:
+    """Mode, then both addresses, then the verdict, then what a proxy cannot cover.
+
+    The verdict line is the point. The addresses are evidence; what the operator
+    needs to know is whether the proxy is actually in the path, and which
+    providers go direct no matter what the answer is.
+    """
+    lines = [f"proxy mode: {result['mode']}"]
+    configured = result["configured"]
+    lines.append(
+        "configured: "
+        + (", ".join(f"{kind}={url}" for kind, url in configured.items()) or "(none)")
+    )
+    direct = result["direct"]
+    lines.append(f"direct outbound address:  {direct.get('ip') or '(probe failed)'}")
+    if direct.get("error"):
+        lines.append(f"  {direct['error']}")
+    if result["proxied"] is None:
+        lines.append("proxied outbound address: (mode is direct -- nothing is routed)")
+    else:
+        proxied = result["proxied"]
+        lines.append(
+            f"proxied outbound address: {proxied.get('ip') or '(probe failed)'}"
+        )
+        if proxied.get("error"):
+            lines.append(f"  {proxied['error']}")
+        lines.append(
+            "verdict: "
+            + (
+                "the proxy IS in the path (the two addresses differ)"
+                if result["differs"]
+                else "the proxy is NOT in the path (the two addresses are identical)"
+            )
+        )
+    lines.append(
+        "providers given an explicit -proxy: "
+        + (", ".join(result["routed_tools"]) or "(none)")
+    )
+    lines.append("providers that cannot be proxied at all:")
+    for name, why in result["blind_tools"].items():
+        lines.append(f"  {name}: {why}")
+    return "\n".join(lines)
+
+
 def _require_coverage_inventory(
     paths: StackPaths, slug: str, report: Mapping[str, Any]
 ) -> None:
@@ -509,7 +559,7 @@ def build_parser() -> argparse.ArgumentParser:
     configure = commands.add_parser(
         "configure", help="set non-secret machine options and regenerate env.sh"
     )
-    configure.add_argument("--proxy-mode", choices=["direct", "mihomo"])
+    configure.add_argument("--proxy-mode", choices=list(PROXY_MODES))
     configure.add_argument("--http-proxy")
     configure.add_argument("--socks-proxy")
     configure.add_argument("--h1-username")
@@ -1083,6 +1133,19 @@ def build_parser() -> argparse.ArgumentParser:
         "--dry-run", action="store_true", help="print the first round's command, run nothing"
     )
     continuous.add_argument("--json", action="store_true")
+
+    proxy_parser = commands.add_parser(
+        "proxy", help="inspect and verify the machine's proxy routing"
+    )
+    proxy_sub = proxy_parser.add_subparsers(dest="proxy_command", required=True)
+    proxy_check_parser = proxy_sub.add_parser(
+        "check",
+        help="compare the outbound address with and without the configured proxy",
+    )
+    proxy_check_parser.add_argument(
+        "--timeout", type=int, default=15, help="seconds allowed for each probe"
+    )
+    proxy_check_parser.add_argument("--json", action="store_true")
 
     policy = commands.add_parser(
         "policy", help="inspect the engagement tool policy or dry-run one call"
@@ -1792,6 +1855,12 @@ def command(args: argparse.Namespace, paths: StackPaths) -> int:
         )
         emit(result if args.json else _format_continuous(result), args.json)
         return 0
+    if args.command == "proxy":
+        if args.proxy_command == "check":
+            result = proxy_check(paths, timeout=args.timeout)
+            emit(result if args.json else _format_proxy_check(result), args.json)
+            return 0
+        raise StackError(f"unhandled proxy subcommand: {args.proxy_command}")
     if args.command == "policy":
         policy = policy_for(paths, args.engagement)
         if args.policy_command == "show":

@@ -28,6 +28,13 @@ from .errors import CommandError, ValidationError
 from .io import atomic_write, dump_json, expand, load_yaml
 from .paths import StackPaths
 from .profiles import ProfileRegistry
+from .proxy import (
+    MODE_SOURCES,
+    PROXY_MODES,
+    PROXY_VARIABLES,
+    UPPERCASE_VARIABLES,
+    apply as proxy_apply,
+)
 from .skills import SkillRegistry
 from .validation import validate
 from .workspace import WorkspaceManager
@@ -579,6 +586,39 @@ class RuntimeManager:
                 )
         archive.extractall(destination)
 
+    @staticmethod
+    def _proxy_shell_lines() -> list[str]:
+        """The ``case`` block that turns BB_PROXY_MODE into proxy variables.
+
+        Generated from `proxy.MODE_SOURCES` so a mode cannot exist in the code
+        and be missing from the shell, or the reverse. Both spellings are cleared
+        and only the uppercase ones are exported, matching `proxy.apply`: a shell
+        that quietly carried a different value from the one the launcher applies
+        is exactly how traffic escapes a proxy that looked configured.
+        """
+        fallback = {
+            "http": "http://127.0.0.1:7890",
+            "socks": "socks5://127.0.0.1:7891",
+        }
+        lines = ['case "${BB_PROXY_MODE:-direct}" in']
+        for mode in PROXY_MODES:
+            lines.append(f"  {mode})")
+            for name in PROXY_VARIABLES:
+                lines.append(f"    unset {name}")
+            for name in UPPERCASE_VARIABLES:
+                kind = MODE_SOURCES[mode].get(name)
+                if kind:
+                    source = "BB_HTTP_PROXY" if kind == "http" else "BB_SOCKS_PROXY"
+                    lines.append(
+                        f'    export {name}="${{{source}:-{fallback[kind]}}}"'
+                    )
+            lines.append("    ;;")
+        lines.append(
+            '  *) printf "bb-stack: unknown BB_PROXY_MODE=%s\\n" "$BB_PROXY_MODE" >&2 ;;'
+        )
+        lines.append("esac")
+        return lines
+
     def _install_wrappers(self, dry_run: bool) -> list[dict[str, Any]]:
         wrappers = [
             "bb-stack",
@@ -672,16 +712,7 @@ class RuntimeManager:
                 f"export PATH={shlex.quote(self.paths.runtime_path(effective['BB_EXTRA_PATH']))}",
                 "export CHROME_DEVTOOLS_MCP_NO_USAGE_STATISTICS=1",
                 "export CHROME_DEVTOOLS_MCP_NO_UPDATE_CHECKS=1",
-                'case "${BB_PROXY_MODE:-direct}" in',
-                "  mihomo)",
-                '    export HTTP_PROXY="${BB_HTTP_PROXY:-http://127.0.0.1:7890}"',
-                '    export HTTPS_PROXY="${BB_HTTP_PROXY:-http://127.0.0.1:7890}"',
-                '    export ALL_PROXY="${BB_SOCKS_PROXY:-socks5://127.0.0.1:7891}"',
-                "    unset http_proxy https_proxy all_proxy",
-                "    ;;",
-                "  direct) unset HTTP_PROXY HTTPS_PROXY ALL_PROXY http_proxy https_proxy all_proxy ;;",
-                '  *) printf "bb-stack: unknown BB_PROXY_MODE=%s\\n" "$BB_PROXY_MODE" >&2 ;;',
-                "esac",
+                *self._proxy_shell_lines(),
                 "",
             ]
         )
@@ -778,24 +809,10 @@ class RuntimeManager:
         """
         env = self.paths.environment()
         machine = ConfigurationManager(self.paths).effective()
-        proxy_names = {
-            "HTTP_PROXY",
-            "HTTPS_PROXY",
-            "ALL_PROXY",
-            "http_proxy",
-            "https_proxy",
-            "all_proxy",
-        }
-        for key in proxy_names:
-            env.pop(key, None)
-        if machine["BB_PROXY_MODE"] == "mihomo":
-            env.update(
-                {
-                    "HTTP_PROXY": machine["BB_HTTP_PROXY"],
-                    "HTTPS_PROXY": machine["BB_HTTP_PROXY"],
-                    "ALL_PROXY": machine["BB_SOCKS_PROXY"],
-                }
-            )
+        # Installers fetch code, which is exactly the traffic an operator may
+        # need routed, so they follow the same proxy decision as everything else
+        # rather than a second copy of it.
+        proxy_apply(env, machine)
         if any(document["installers"][name]["kind"] == "go" for name in selected):
             self._ensure_toolchain("go")
         env["PATH"] = self.paths.runtime_path()
