@@ -15,9 +15,13 @@ exclusions.
 2. Classify the active lead by the boundary being tested, not only by artifact
    type: Web/API, Android, iOS, network/identity, cloud, LLM/agent, or source and
    supply chain.
-3. Load one domain specialist first. Add another only when observed evidence
+3. For a Web or API lead, take one client-asset pass before opening it: fetch
+   each discovered asset's production JavaScript and source maps, and inventory
+   the endpoints, credentials, signing rules, and environment identifiers they
+   expose.
+4. Load one domain specialist first. Add another only when observed evidence
    crosses that boundary inside the same written Scope.
-4. Keep workflow and platform policy stable during a specialist handoff.
+5. Keep workflow and platform policy stable during a specialist handoff.
 
 ## Prove And Record
 
