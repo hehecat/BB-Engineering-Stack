@@ -24,6 +24,8 @@ from .mail_otp import MailOtpError, MailSettings
 from .mail_otp import load_config as load_mail_config
 from .paths import StackPaths
 from .profiles import ProfileRegistry
+from .proxy import environment as proxy_environment
+from .proxy import validate_mode as proxy_validate_mode
 from .runtime import RuntimeManager
 from .skills import SkillRegistry
 from .workspace import WorkspaceManager
@@ -322,27 +324,68 @@ class StackStatus:
         }
         expected_http = self._redact_url(http_url)
         expected_socks = self._redact_url(socks_url)
-        if mode == "mihomo":
-            required_applied = bool(
-                active.get("HTTP_PROXY") == expected_http
-                and active.get("HTTPS_PROXY") == expected_http
-                and active.get("ALL_PROXY") == expected_socks
+        try:
+            mode = proxy_validate_mode(mode)
+        except ValidationError:
+            self._action(
+                actions,
+                "required",
+                "proxy.mode",
+                "Set the proxy mode through bb-stack configure",
+                "bb-stack configure --proxy-mode direct",
             )
-            lower_conflict = bool(
-                (active.get("http_proxy") and active["http_proxy"] != expected_http)
-                or (
-                    active.get("https_proxy") and active["https_proxy"] != expected_http
+            return {
+                "ready": False,
+                "configured_mode": mode,
+                "configured_http": expected_http or None,
+                "configured_socks": expected_socks or None,
+                "http_listener": http_listening,
+                "socks_listener": socks_listening,
+                "active_environment": active,
+                "configuration_applied": False,
+            }
+        # The expected variables come from the one module that decides routing,
+        # so the dashboard cannot disagree with what a launched agent inherits.
+        expected = {
+            name: self._redact_url(url)
+            for name, url in proxy_environment(config).items()
+        }
+        applied = active == expected
+        required_listeners = {
+            "direct": (),
+            "http": ("http",),
+            "socks": ("socks",),
+            "mihomo": ("http", "socks"),
+        }[mode]
+        listening = {"http": http_listening, "socks": socks_listening}
+        missing = [kind for kind in required_listeners if not listening[kind]]
+        if mode == "direct":
+            ready = applied
+            if not applied:
+                self._action(
+                    actions,
+                    "required",
+                    "proxy.environment",
+                    "Clear stale proxy variables by reloading the generated environment",
+                    f"source {shlex.quote(str(self.paths.env_file))}",
                 )
-                or (active.get("all_proxy") and active["all_proxy"] != expected_socks)
-            )
-            applied = required_applied and not lower_conflict
-            ready = bool(http_listening and applied)
-            if not http_listening:
+            if http_listening or socks_listening:
+                self._action(
+                    actions,
+                    "info",
+                    "proxy.available",
+                    "a proxy is reachable but BB_PROXY_MODE is direct",
+                    None,
+                )
+        else:
+            ready = bool(applied and not missing)
+            if missing:
+                label = " and ".join(kind.upper() for kind in missing)
                 self._action(
                     actions,
                     "required",
                     "proxy.service",
-                    "Start the configured mihomo HTTP listener",
+                    f"Start the configured {label} proxy listener",
                     None,
                 )
             if not applied:
@@ -353,35 +396,6 @@ class StackStatus:
                     "Reload the generated environment so proxy variables reach bb-stack",
                     f"source {shlex.quote(str(self.paths.env_file))}",
                 )
-        elif mode == "direct":
-            applied = not active
-            ready = applied
-            if not applied:
-                self._action(
-                    actions,
-                    "required",
-                    "proxy.environment",
-                    "Clear stale proxy variables by reloading the generated environment",
-                    f"source {shlex.quote(str(self.paths.env_file))}",
-                )
-            if http_listening:
-                self._action(
-                    actions,
-                    "info",
-                    "proxy.available",
-                    "mihomo is reachable but BB_PROXY_MODE is direct",
-                    None,
-                )
-        else:
-            applied = False
-            ready = False
-            self._action(
-                actions,
-                "required",
-                "proxy.mode",
-                "Set the proxy mode through bb-stack configure",
-                "bb-stack configure --proxy-mode direct",
-            )
         return {
             "ready": ready,
             "configured_mode": mode,

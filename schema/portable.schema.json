@@ -49,7 +49,7 @@
         "BB_NPM_REGISTRY"
       ],
       "properties": {
-        "BB_PROXY_MODE": {"enum": ["direct", "mihomo"]},
+        "BB_PROXY_MODE": {"enum": ["direct", "http", "socks", "mihomo"]},
         "BB_HTTP_PROXY": {"type": "string", "pattern": "^https?://[^/?#@]+$"},
         "BB_SOCKS_PROXY": {"type": "string", "pattern": "^socks5h?://[^/?#@]+$"},
         "BB_H1_USERNAME": {"type": "string", "maxLength": 100, "pattern": "^\\S*$"},

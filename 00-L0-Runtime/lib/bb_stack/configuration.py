@@ -11,6 +11,7 @@ from urllib.parse import urlparse
 from .errors import StackError, ValidationError
 from .io import atomic_write
 from .paths import StackPaths
+from .proxy import PROXY_MODES
 
 MACHINE_CONFIG_DEFAULTS = {
     "BB_PROXY_MODE": "direct",
@@ -215,8 +216,10 @@ class ConfigurationManager:
     @staticmethod
     def validate(values: dict[str, str]) -> None:
         mode = values.get("BB_PROXY_MODE", "")
-        if mode not in {"direct", "mihomo"}:
-            raise ValidationError("BB_PROXY_MODE must be direct or mihomo")
+        if mode not in PROXY_MODES:
+            raise ValidationError(
+                "BB_PROXY_MODE must be one of " + ", ".join(PROXY_MODES)
+            )
         ConfigurationManager._validate_url(
             "BB_HTTP_PROXY", values.get("BB_HTTP_PROXY", ""), {"http", "https"}
         )
@@ -301,7 +304,7 @@ class ConfigurationManager:
             return value if value else current[key]
 
         return {
-            "BB_PROXY_MODE": ask("Proxy mode (direct/mihomo)", "BB_PROXY_MODE"),
+            "BB_PROXY_MODE": ask("Proxy mode (direct/http/socks/mihomo)", "BB_PROXY_MODE"),
             "BB_HTTP_PROXY": ask("HTTP proxy origin", "BB_HTTP_PROXY"),
             "BB_SOCKS_PROXY": ask("SOCKS proxy origin", "BB_SOCKS_PROXY"),
             "BB_H1_USERNAME": ask("HackerOne username", "BB_H1_USERNAME"),

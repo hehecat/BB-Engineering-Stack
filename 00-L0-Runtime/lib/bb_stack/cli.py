@@ -449,14 +449,18 @@ def _format_proxy_check(result: Mapping[str, Any]) -> str:
         )
         if proxied.get("error"):
             lines.append(f"  {proxied['error']}")
-        lines.append(
-            "verdict: "
-            + (
-                "the proxy IS in the path (the two addresses differ)"
-                if result["differs"]
-                else "the proxy is NOT in the path (the two addresses are identical)"
+        if result["differs"]:
+            verdict = "the proxy IS in the path (the two addresses differ)"
+        elif result["in_path"]:
+            verdict = (
+                "the proxy IS in the path (the request completed through it; the "
+                "exit address matches direct, which a shared NAT also produces)"
             )
-        )
+        else:
+            verdict = (
+                "the proxy is NOT in the path (the proxied probe did not complete)"
+            )
+        lines.append("verdict: " + verdict)
     lines.append(
         "providers given an explicit -proxy: "
         + (", ".join(result["routed_tools"]) or "(none)")

@@ -136,6 +136,38 @@ class StatusTests(unittest.TestCase):
             self.assertEqual(actions[0]["id"], "proxy.environment")
             self.assertNotIn("secret", json.dumps(report))
 
+    def test_http_mode_needs_a_listener_and_an_applied_environment(self) -> None:
+        clean = {
+            name: ""
+            for name in (
+                "HTTP_PROXY",
+                "HTTPS_PROXY",
+                "ALL_PROXY",
+                "http_proxy",
+                "https_proxy",
+                "all_proxy",
+            )
+        }
+        clean["HTTP_PROXY"] = "http://127.0.0.1:7890"
+        clean["HTTPS_PROXY"] = "http://127.0.0.1:7890"
+        actions: list[dict[str, str]] = []
+        with patch.dict(os.environ, clean, clear=False), patch.object(
+            StackStatus, "_tcp_ready", return_value=True
+        ):
+            report = self.manager._proxy(
+                {"BB_PROXY_MODE": "http", "BB_HTTP_PROXY": "http://127.0.0.1:7890"},
+                actions,
+            )
+        self.assertTrue(report["configuration_applied"])
+        self.assertTrue(report["ready"])
+        self.assertEqual(actions, [])
+
+    def test_unknown_proxy_mode_asks_the_operator_to_configure(self) -> None:
+        actions: list[dict[str, str]] = []
+        report = self.manager._proxy({"BB_PROXY_MODE": "tor"}, actions)
+        self.assertFalse(report["ready"])
+        self.assertEqual(actions[0]["id"], "proxy.mode")
+
     def test_hackerone_identity_is_only_required_for_hackerone(self) -> None:
         registry = CapabilityRegistry(self.paths)
         actions: list[dict[str, str]] = []

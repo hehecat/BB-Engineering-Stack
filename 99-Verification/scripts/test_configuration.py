@@ -65,6 +65,16 @@ class ConfigurationTests(unittest.TestCase):
         self.assertEqual(values["BB_NPM_REGISTRY"], "npmjs")
         self.assertEqual(self.manager.path.stat().st_mode & 0o777, 0o600)
 
+    def test_every_documented_proxy_mode_is_accepted(self) -> None:
+        for mode in ("direct", "http", "socks", "mihomo"):
+            with self.subTest(mode=mode):
+                self.manager.configure({"BB_PROXY_MODE": mode})
+                self.assertEqual(self.manager.read()["BB_PROXY_MODE"], mode)
+
+    def test_an_unknown_proxy_mode_is_still_rejected(self) -> None:
+        with self.assertRaises(ValidationError):
+            self.manager.configure({"BB_PROXY_MODE": "tor"})
+
     def test_hash_in_value_is_not_treated_as_a_comment(self) -> None:
         self.manager.path.write_text(
             "MAIL_OTP_PASSWORD=p@ss#2024\n", encoding="utf-8"

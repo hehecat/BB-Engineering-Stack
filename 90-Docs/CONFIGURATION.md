@@ -314,10 +314,13 @@ bb-stack proxy check          # --json for the raw document
 ```
 
 The check requests an address-echo service twice -- once with every proxy variable
-cleared, once with the configured routing -- and compares the results. **The
-addresses are evidence; whether they differ is the answer.** A proxy that is
-configured but not applied leaves them identical, and a tool that ignores its
-proxy flag looks exactly like one that honours it until the comparison is made.
+cleared, once with the configured routing. **A proxied request that completes is
+the proof: the traffic left through the proxy.** The addresses are the second
+piece of evidence -- when they differ the exit really is the proxy's, but a shared
+NAT produces identical addresses even though the proxy was used, so a match is
+reported as "in the path, address matches" rather than as "not routed". A proxy
+that is configured but not applied, or one that cannot be reached, makes the
+proxied request fail instead.
 
 Recon passes an explicit `-proxy` to the providers that accept one (`httpx`,
 `nuclei`, `ffuf`, `katana`, `subfinder`, `naabu`, `dnsx`, `bbot`, `gau`,

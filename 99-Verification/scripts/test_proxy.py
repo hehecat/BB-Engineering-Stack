@@ -145,16 +145,18 @@ class CheckTests(unittest.TestCase):
         result = self.with_machine({**MACHINE, "BB_PROXY_MODE": "direct"})
         self.assertIsNone(result["proxied"])
         self.assertEqual(len(result["_probes"]), 1)
+        self.assertFalse(result["in_path"])
         self.assertFalse(result["differs"])
 
     def test_differing_addresses_mean_the_proxy_is_in_the_path(self) -> None:
         result = self.with_machine(MACHINE)
+        self.assertTrue(result["in_path"])
         self.assertTrue(result["differs"])
         self.assertEqual(result["direct"]["ip"], "203.0.113.9")
         self.assertEqual(result["proxied"]["ip"], "10.0.0.2")
         self.assertEqual(len(result["_probes"]), 2)
 
-    def test_identical_addresses_mean_it_is_not(self) -> None:
+    def test_identical_addresses_still_route_when_the_probe_completes(self) -> None:
         def fetch(_environment: dict[str, str], _timeout: int) -> dict[str, Any]:
             return {"ip": "203.0.113.9", "error": None}
 
@@ -162,6 +164,9 @@ class CheckTests(unittest.TestCase):
             "bb_stack.configuration.ConfigurationManager.effective", return_value=MACHINE
         ):
             result = proxy.check(self.paths, fetch=fetch)
+        # A shared NAT makes the two addresses identical even though the request
+        # went through the proxy; a completed proxied probe is the real evidence.
+        self.assertTrue(result["in_path"])
         self.assertFalse(result["differs"])
 
     def test_a_failed_probe_does_not_read_as_success(self) -> None:
@@ -172,6 +177,7 @@ class CheckTests(unittest.TestCase):
             "bb_stack.configuration.ConfigurationManager.effective", return_value=MACHINE
         ):
             result = proxy.check(self.paths, fetch=fetch)
+        self.assertFalse(result["in_path"])
         self.assertFalse(result["differs"])
         self.assertIn("refused", result["proxied"]["error"])
 

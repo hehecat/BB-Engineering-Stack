@@ -230,11 +230,14 @@ def check(
 ) -> dict[str, Any]:
     """Compare the address a direct request and a proxied request come from.
 
-    The address itself is not the point -- whether the two differ is. A proxy
-    that is configured but not applied leaves them identical, and a tool that
-    ignores its proxy flag looks exactly like a tool that honours it until the
-    comparison is made. The blind-tool list is reported alongside, because those
-    providers go direct no matter how the comparison turns out.
+    A proxied probe that completes without an error is the primary evidence: the
+    request left through the configured proxy. The addresses are the second
+    piece -- when they differ the exit really is the proxy's, but a shared NAT
+    makes them identical even though the proxy was used, so a match must not be
+    read as "not routed". A proxy that is configured but not applied, or one
+    that cannot be reached, makes the proxied probe fail instead. The blind-tool
+    list is reported alongside, because those providers go direct no matter how
+    the comparison turns out.
     """
     from .configuration import ConfigurationManager
 
@@ -245,10 +248,10 @@ def check(
     proxied: dict[str, Any] | None = None
     if described["proxied"]:
         proxied = probe(environment(machine), timeout)
+    in_path = bool(proxied and proxied.get("ip") and not proxied.get("error"))
     differs = bool(
-        proxied
+        in_path
         and direct.get("ip")
-        and proxied.get("ip")
         and direct["ip"] != proxied["ip"]
     )
     return {
@@ -256,6 +259,7 @@ def check(
         "configured": described["configured"],
         "direct": direct,
         "proxied": proxied,
+        "in_path": in_path,
         "differs": differs,
         "blind_tools": described["blind_tools"],
         "routed_tools": sorted(PROVIDER_FLAGS),
