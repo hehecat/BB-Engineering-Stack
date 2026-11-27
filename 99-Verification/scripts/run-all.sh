@@ -5,6 +5,7 @@ ROOT="$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)"
 PYTHON="$ROOT/.runtime/venv/bin/python"
 [[ -x "$PYTHON" ]] || PYTHON="$ROOT/.venv/bin/python"
 [[ -x "$PYTHON" ]] || PYTHON=python3
+export PYTHON3="$PYTHON"
 export BB_STACK_ROOT="$ROOT"
 export PYTHONPATH="$ROOT/00-L0-Runtime/lib${PYTHONPATH:+:$PYTHONPATH}"
 STACK="$ROOT/00-L0-Runtime/bin/bb-stack"
