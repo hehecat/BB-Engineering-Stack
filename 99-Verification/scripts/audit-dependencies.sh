@@ -63,23 +63,32 @@ failures: list[str] = []
 allowlisted: list[str] = []
 for name, entry in sorted(vulnerabilities.items()):
     severity = entry.get("severity")
-    fix_available = bool(entry.get("fixAvailable"))
-    advisories = [item for item in entry.get("via", []) if isinstance(item, dict)]
+    fix_available = entry.get("fixAvailable")
     if severity == "critical":
-        failures.append(f"{name}: critical severity (fixAvailable={entry.get('fixAvailable')})")
+        failures.append(f"{name}: critical severity (fixAvailable={fix_available})")
         continue
-    if fix_available:
-        failures.append(f"{name}: {severity} severity has fixAvailable={entry.get('fixAvailable')}")
+    via = entry.get("via")
+    if not isinstance(via, list) or not via:
+        failures.append(f"{name}: {severity} severity has empty or invalid via={via!r}")
         continue
-    for advisory in advisories:
-        url = str(advisory.get("url", ""))
-        ghsa = url.rstrip("/").rsplit("/", 1)[-1]
-        if ghsa not in ALLOWED_UNFIXABLE_GHSAS:
-            failures.append(
-                f"{name}: unexpected unallowlisted advisory {ghsa or url!r} ({advisory.get('title')})"
-            )
+    for item in via:
+        if isinstance(item, str):
+            if item not in vulnerabilities:
+                failures.append(
+                    f"{name}: {severity} severity references missing dependency {item!r}"
+                )
+        elif isinstance(item, dict):
+            url = str(item.get("url", ""))
+            ghsa = url.rstrip("/").rsplit("/", 1)[-1]
+            if ghsa not in ALLOWED_UNFIXABLE_GHSAS:
+                failures.append(
+                    f"{name}: unexpected {severity} advisory {ghsa or url!r} "
+                    f"({item.get('title')}; fixAvailable={fix_available})"
+                )
+            else:
+                allowlisted.append(f"{name}:{ghsa}")
         else:
-            allowlisted.append(f"{name}:{ghsa}")
+            failures.append(f"{name}: unexpected via entry {item!r}")
 
 if failures:
     for item in failures:
