@@ -92,6 +92,8 @@ class BrowserRuntimeTests(unittest.TestCase):
             None,
         )
         self.assertNotIn("--no-sandbox", command)
+        self.assertIn("--no-first-run", command)
+        self.assertIn("--disable-dev-shm-usage", command)
         self.assertIn("--remote-debugging-port=49152", command)
 
     def test_browser_state_is_scoped_to_each_engagement(self) -> None:

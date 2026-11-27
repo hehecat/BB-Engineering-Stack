@@ -22,6 +22,7 @@ class BrowserRuntimeManager:
     """Own one isolated Chromium CDP process for an active work unit."""
 
     HOST = "127.0.0.1"
+    START_TIMEOUT_SECONDS = 30
 
     def __init__(self, paths: StackPaths):
         self.paths = paths
@@ -72,6 +73,8 @@ class BrowserRuntimeManager:
                 "Chromium or Chrome is required for managed browser work"
             )
 
+        if not env.get("DBUS_SESSION_BUS_ADDRESS"):
+            env["DBUS_SESSION_BUS_ADDRESS"] = "disabled:"
         self.paths.home.mkdir(parents=True, exist_ok=True)
         runtime_dir = engagement / ".bb-stack" / "browser"
         profile_dir = runtime_dir / "profile"
@@ -101,18 +104,20 @@ class BrowserRuntimeManager:
             os.close(null_fd)
             os.close(log_fd)
         try:
-            deadline = time.monotonic() + 12
+            deadline = time.monotonic() + self.START_TIMEOUT_SECONDS
             while time.monotonic() < deadline:
                 if self._endpoint_ready(port):
                     break
                 if self._child_exited(pid):
                     excerpt = self._log_excerpt(log_path)
-                    message = f"Chromium CDP exited early; inspect {log_path}"
+                    message = (
+                        f"Chromium CDP exited early ({chromium}); inspect {log_path}"
+                    )
                     raise CommandError(f"{message}\n{excerpt}" if excerpt else message)
                 time.sleep(0.2)
             else:
                 excerpt = self._log_excerpt(log_path)
-                message = f"Chromium CDP did not become ready; inspect {log_path}"
+                message = f"Chromium CDP did not become ready ({chromium}); inspect {log_path}"
                 raise CommandError(f"{message}\n{excerpt}" if excerpt else message)
 
             browser_url = f"http://{self.HOST}:{port}"
@@ -293,6 +298,14 @@ class BrowserRuntimeManager:
             chromium,
             "--headless",
             "--disable-gpu",
+            "--disable-dev-shm-usage",
+            "--no-first-run",
+            "--no-default-browser-check",
+            "--disable-background-networking",
+            "--disable-sync",
+            "--disable-search-engine-choice-screen",
+            "--password-store=basic",
+            "--use-mock-keychain",
             f"--remote-debugging-address={cls.HOST}",
             f"--remote-debugging-port={port}",
             f"--user-data-dir={profile_dir}",
