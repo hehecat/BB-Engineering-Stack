@@ -223,7 +223,9 @@ class RuntimeInstallerTests(unittest.TestCase):
         self.assertFalse(paths.work_root.exists())
         self.assertFalse(paths.config_home.exists())
 
-    def test_bootstrap_launcher_dry_run_survives_missing_runtime_dependencies(self) -> None:
+    def test_bootstrap_launcher_dry_run_survives_missing_runtime_dependencies(
+        self,
+    ) -> None:
         base = Path(self.temporary.name) / "launcher-dry-run"
         stack = isolated_stack_source(ROOT, base / "stack")
         home = base / "home"
@@ -246,8 +248,7 @@ class RuntimeInstallerTests(unittest.TestCase):
             ],
             env=env,
             text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
             check=False,
         )
 
@@ -264,8 +265,8 @@ class RuntimeInstallerTests(unittest.TestCase):
         python.parent.mkdir(parents=True)
         python.write_text(
             "#!/bin/sh\n"
-            "case \"$*\" in\n"
-            "  *\"import pip,\"*) exit 1 ;;\n"
+            'case "$*" in\n'
+            '  *"import pip,"*) exit 1 ;;\n'
             "  *) exit 0 ;;\n"
             "esac\n",
             encoding="utf-8",
@@ -281,8 +282,7 @@ class RuntimeInstallerTests(unittest.TestCase):
             [str(stack / "00-L0-Runtime/bin/bootstrap"), "--dry-run", "--json"],
             env=env,
             text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
             check=False,
         )
 
@@ -305,7 +305,9 @@ class RuntimeInstallerTests(unittest.TestCase):
             ),
             patch.object(self.manager, "_install_wrappers", return_value=[]),
             patch.object(self.manager, "_write_env"),
-            patch("bb_stack.runtime.WorkspaceManager.initialize", return_value=workspace),
+            patch(
+                "bb_stack.runtime.WorkspaceManager.initialize", return_value=workspace
+            ),
         ):
             self.manager.bootstrap(
                 "web",
@@ -664,8 +666,16 @@ class RuntimeInstallerTests(unittest.TestCase):
         document = {
             "profiles": {"fixture": {"required": ["first"], "optional": ["second"]}},
             "installers": {
-                "first": {"kind": "go", "package": "example/first@v1", "checks": ["first"]},
-                "second": {"kind": "go", "package": "example/second@v1", "checks": ["second"]},
+                "first": {
+                    "kind": "go",
+                    "package": "example/first@v1",
+                    "checks": ["first"],
+                },
+                "second": {
+                    "kind": "go",
+                    "package": "example/second@v1",
+                    "checks": ["second"],
+                },
             },
         }
         machine = {

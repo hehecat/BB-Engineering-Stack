@@ -24,7 +24,7 @@ from typing import Any
 import yaml
 
 from .errors import StackError, ValidationError
-from .io import dump_json, dump_yaml, load_yaml
+from .io import dump_json, load_yaml
 from .paths import StackPaths
 from .validation import validate
 
@@ -40,9 +40,9 @@ class _PatchLoader(yaml.SafeLoader):
 
 _PatchLoader.add_multi_constructor(
     "tag:yaml.org,2002:js",
-    lambda loader, _suffix, node: loader.construct_scalar(node)
-    if isinstance(node, yaml.ScalarNode)
-    else None,
+    lambda loader, _suffix, node: (
+        loader.construct_scalar(node) if isinstance(node, yaml.ScalarNode) else None
+    ),
 )
 
 
@@ -117,11 +117,12 @@ class Backend:
         """Extend *command*/*env* so this backend receives the routed Prompt."""
         injector = self.prompt_injector(prompt_mode)
         style = injector["style"]
-        record: dict[str, Any] = {"backend": self.name, "style": style, "mode": prompt_mode}
-        if style == "flag-file":
-            command.extend([injector["flag"], str(prompt_file)])
-            record["flag"] = injector["flag"]
-        elif style == "flag-text":
+        record: dict[str, Any] = {
+            "backend": self.name,
+            "style": style,
+            "mode": prompt_mode,
+        }
+        if style == "flag-file" or style == "flag-text":
             command.extend([injector["flag"], str(prompt_file)])
             record["flag"] = injector["flag"]
         elif style == "config-text":
@@ -134,7 +135,10 @@ class Backend:
             record["key"] = injector["key"]
         elif style == "config-file":
             command.extend(
-                [injector["flag"], f"{injector['key']}={_toml_string(str(prompt_file))}"]
+                [
+                    injector["flag"],
+                    f"{injector['key']}={_toml_string(str(prompt_file))}",
+                ]
             )
             record["key"] = injector["key"]
         elif style == "patch-config":
@@ -151,7 +155,9 @@ class Backend:
             entries = [
                 entry
                 for entry in read_patch(path)
-                if not (isinstance(entry, dict) and entry.get("id") == injector["entry"])
+                if not (
+                    isinstance(entry, dict) and entry.get("id") == injector["entry"]
+                )
             ]
             entries.append(
                 {"id": injector["entry"], "name": injector["plugin"], "config": config}
@@ -236,7 +242,11 @@ class Backend:
             converted: dict[str, Any] = {}
             for name, server in servers.items():
                 command = [server["command"], *server.get("args", [])]
-                entry: dict[str, Any] = {"type": "local", "command": command, "enabled": True}
+                entry: dict[str, Any] = {
+                    "type": "local",
+                    "command": command,
+                    "enabled": True,
+                }
                 if server.get("env"):
                     entry["environment"] = dict(server["env"])
                 elif server.get("type") == "http" and server.get("url"):
@@ -274,14 +284,18 @@ class Backend:
             for name, server in servers.items():
                 prefix = f"{table}.{name}"
                 command.extend(
-                    [self.mcp["flag"], f"{prefix}.command={_toml_string(server['command'])}"]
+                    [
+                        self.mcp["flag"],
+                        f"{prefix}.command={_toml_string(server['command'])}",
+                    ]
                 )
                 if server.get("args"):
                     args = ", ".join(_toml_string(a) for a in server["args"])
                     command.extend([self.mcp["flag"], f"{prefix}.args=[{args}]"])
                 if server.get("env"):
                     pairs = ", ".join(
-                        f"{k}={_toml_string(v)}" for k, v in sorted(server["env"].items())
+                        f"{k}={_toml_string(v)}"
+                        for k, v in sorted(server["env"].items())
                     )
                     command.extend([self.mcp["flag"], f"{prefix}.env={{{pairs}}}"])
         elif style == "project-file":
@@ -336,7 +350,9 @@ class Backend:
         return record
 
 
-def _merge_env_config(env: dict[str, str], variable: str, payload: dict[str, Any]) -> None:
+def _merge_env_config(
+    env: dict[str, str], variable: str, payload: dict[str, Any]
+) -> None:
     """Deep-merge *payload* into the JSON object already held by *variable*."""
     current: dict[str, Any] = {}
     if env.get(variable):
@@ -483,7 +499,10 @@ class BackendRegistry:
                 "mcp-project-file",
                 "mcp-env-config",
             ):
-                if capability in backend.capabilities and backend.mcp["style"] == "unsupported":
+                if (
+                    capability in backend.capabilities
+                    and backend.mcp["style"] == "unsupported"
+                ):
                     raise ValidationError(
                         f"backend {name} claims {capability} but declares no MCP channel"
                     )

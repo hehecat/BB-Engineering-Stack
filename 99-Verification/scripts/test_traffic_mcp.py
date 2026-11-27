@@ -19,13 +19,13 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 os.environ["BB_STACK_ROOT"] = str(ROOT)
 
-from bb_stack.policy import DEFAULT_MODE, ToolPolicy  # noqa: E402
-from bb_stack.traffic import FlowRecord, TrafficStore  # noqa: E402
+from bb_stack.policy import DEFAULT_MODE, ToolPolicy
+from bb_stack.traffic import FlowRecord, TrafficStore
 
 SERVER = ROOT / "05-L5-MCP-CLI" / "lib" / "traffic_mcp.py"
 
 sys.path.insert(0, str(SERVER.parent))
-import traffic_mcp  # noqa: E402
+import traffic_mcp
 
 
 class _Session:
@@ -93,7 +93,15 @@ def _payload(response: dict) -> dict:
     return json.loads(_text(response))
 
 
-def _record(client: str, cookie: str, path: str, status: int, body: bytes, *, host: str = "api.example.com") -> FlowRecord:
+def _record(
+    client: str,
+    cookie: str,
+    path: str,
+    status: int,
+    body: bytes,
+    *,
+    host: str = "api.example.com",
+) -> FlowRecord:
     return FlowRecord(
         method="GET",
         host=host,
@@ -114,12 +122,16 @@ class TrafficMcpTests(unittest.TestCase):
         self.db = base / "traffic" / "flows.db"
         with TrafficStore(self.db) as store:
             store.record(
-                _record("alice", "sid=alice", "/admin/users", 200, b"alice private profile")
+                _record(
+                    "alice", "sid=alice", "/admin/users", 200, b"alice private profile"
+                )
             )
             store.record(
                 _record("bob", "sid=bob", "/admin/users", 200, b"alice private profile")
             )
-            store.record(_record("alice", "sid=alice", "/health", 500, b"internal error trace"))
+            store.record(
+                _record("alice", "sid=alice", "/health", 500, b"internal error trace")
+            )
             store.record(
                 _record(
                     "browser",
@@ -175,7 +187,9 @@ class TrafficMcpTests(unittest.TestCase):
         self.assertEqual(hits["flows"][0]["url"], "GET cdn.example.com/static/app.js")
         self.assertEqual(hits["flows"][0]["status"], 200)
 
-        status_hits = _payload(self.session.call_tool("search_traffic", {"status": 500}))
+        status_hits = _payload(
+            self.session.call_tool("search_traffic", {"status": 500})
+        )
         self.assertEqual([flow["id"] for flow in status_hits["flows"]], [3])
 
         host_hits = _payload(
@@ -191,18 +205,24 @@ class TrafficMcpTests(unittest.TestCase):
         for flow in hits["flows"]:
             self.assertNotIn("body", flow)
             self.assertNotIn("response_body", flow)
-        self.assertEqual(hits["flows"][0]["response_bytes"], len(b"const TOKEN='leakedapi';"))
+        self.assertEqual(
+            hits["flows"][0]["response_bytes"], len(b"const TOKEN='leakedapi';")
+        )
 
     def test_read_flow_respects_max_bytes_and_flags_truncation(self) -> None:
         self._handshake()
-        capped = _payload(self.session.call_tool("read_flow", {"id": 4, "max_bytes": 8}))
+        capped = _payload(
+            self.session.call_tool("read_flow", {"id": 4, "max_bytes": 8})
+        )
         body = capped["flow"]["response"]
         self.assertEqual(body["body"], "const TO")
         self.assertTrue(body["body_truncated"])
         self.assertEqual(body["body_bytes"], len(b"const TOKEN='leakedapi';"))
         self.assertEqual(capped["flow"]["request"]["headers"]["Cookie"], "sid=browser")
 
-        full = _payload(self.session.call_tool("read_flow", {"id": 4, "max_bytes": 4096}))
+        full = _payload(
+            self.session.call_tool("read_flow", {"id": 4, "max_bytes": 4096})
+        )
         self.assertEqual(full["flow"]["response"]["body"], "const TOKEN='leakedapi';")
         self.assertNotIn("body_truncated", full["flow"]["response"])
 
@@ -215,7 +235,9 @@ class TrafficMcpTests(unittest.TestCase):
 
     def test_diff_flows_reports_cookie_difference(self) -> None:
         self._handshake()
-        result = _payload(self.session.call_tool("diff_flows", {"first": 1, "second": 2}))
+        result = _payload(
+            self.session.call_tool("diff_flows", {"first": 1, "second": 2})
+        )
         self.assertFalse(result["identical"])
         self.assertEqual(list(result["changed"]), ["req:cookie"])
         self.assertEqual(
@@ -249,6 +271,7 @@ class TrafficMcpConfigTests(unittest.TestCase):
             text=True,
             env=env,
             timeout=20,
+            check=False,
         )
         self.assertNotEqual(completed.returncode, 0)
         self.assertIn("BB_TRAFFIC_DB", completed.stderr)
@@ -345,7 +368,9 @@ class TrafficMcpPolicyGateTests(unittest.TestCase):
         self.assertFalse(result["isError"])
         self.assertEqual(server.calls, [("read_flow", {"id": 4, "max_bytes": 8})])
         payload = json.loads(result["content"][0]["text"])
-        self.assertEqual(payload["policy"]["effective_arguments"], {"id": 4, "max_bytes": 8})
+        self.assertEqual(
+            payload["policy"]["effective_arguments"], {"id": 4, "max_bytes": 8}
+        )
 
     def test_read_only_tool_passes_the_default_posture(self) -> None:
         server = _StubServer(traffic_mcp._augment_read_only(ToolPolicy.default()))
@@ -374,7 +399,9 @@ class TrafficMcpPolicyFileTests(unittest.TestCase):
         self.db = base / "traffic" / "flows.db"
         with TrafficStore(self.db) as store:
             store.record(
-                _record("alice", "sid=alice", "/admin/users", 200, b"alice private profile")
+                _record(
+                    "alice", "sid=alice", "/admin/users", 200, b"alice private profile"
+                )
             )
             store.record(
                 _record(
@@ -386,7 +413,9 @@ class TrafficMcpPolicyFileTests(unittest.TestCase):
                     host="cdn.example.com",
                 )
             )
-            store.record(_record("alice", "sid=alice", "/health", 500, b"internal error trace"))
+            store.record(
+                _record("alice", "sid=alice", "/health", 500, b"internal error trace")
+            )
         self.work = base / "work"
         self.slug = "traffic-policy-fixture"
         self.engagement = self.work / "engagements" / self.slug
@@ -429,10 +458,14 @@ class TrafficMcpPolicyFileTests(unittest.TestCase):
         self.assertNotIn("alice private profile", _text(denied))
 
         # The allow rule rewrote the arguments, and says so.
-        rewritten = _payload(session.call_tool("read_flow", {"id": 2, "max_bytes": 4096}))
+        rewritten = _payload(
+            session.call_tool("read_flow", {"id": 2, "max_bytes": 4096})
+        )
         self.assertEqual(rewritten["flow"]["response"]["body"], "const TO")
         self.assertTrue(rewritten["flow"]["response"]["body_truncated"])
-        self.assertEqual(rewritten["policy"]["effective_arguments"], {"id": 2, "max_bytes": 8})
+        self.assertEqual(
+            rewritten["policy"]["effective_arguments"], {"id": 2, "max_bytes": 8}
+        )
 
         # A flow the policy does not name reads in full, unannotated.
         untouched = _payload(session.call_tool("read_flow", {"id": 3}))

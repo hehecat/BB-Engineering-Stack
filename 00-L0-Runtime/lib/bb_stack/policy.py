@@ -62,7 +62,6 @@ from __future__ import annotations
 import fnmatch
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any
 
 from .errors import ValidationError
@@ -79,10 +78,10 @@ __all__ = [
     "DEFAULT_MODE",
     "DEFAULT_READ_ONLY_TOOLS",
     "DENY",
-    "Decision",
     "MODES",
     "POLICY_FILENAME",
     "READ_ONLY_MODE",
+    "Decision",
     "Rule",
     "ToolPolicy",
     "policy_for",
@@ -279,9 +278,7 @@ def _parse_rule(entry: Any, behavior: str, *, index: int, source: str) -> Rule:
         raise ValidationError(f"{where}.message in {source} must be a string")
     updated = entry.get("updated_input")
     if updated is not None and not isinstance(updated, Mapping):
-        raise ValidationError(
-            f"{where}.updated_input in {source} must be a mapping"
-        )
+        raise ValidationError(f"{where}.updated_input in {source} must be a mapping")
     return Rule(
         tool=tool.strip(),
         behavior=behavior,
@@ -407,9 +404,7 @@ class ToolPolicy:
         # Phase 3 -- allow rules, then read-only auto-pass.
         for rule in self.allow:
             if rule.matches(tool_name, args):
-                return Decision(
-                    ALLOW, rule.message, rule.rewrite(args), "allow-rule"
-                )
+                return Decision(ALLOW, rule.message, rule.rewrite(args), "allow-rule")
         if self.is_read_only(tool_name):
             return Decision(ALLOW, reason="read-only")
 

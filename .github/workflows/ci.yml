@@ -42,9 +42,12 @@ jobs:
           mkdir -p .runtime
           cp 00-L0-Runtime/config/node-runtime/package.json \
             00-L0-Runtime/config/node-runtime/package-lock.json .runtime/
+          cp 05-L5-MCP-CLI/lib/mcp_probe.mjs .runtime/mcp_probe.mjs
           npm ci --prefix .runtime --ignore-scripts --no-audit --no-fund \
             --cache "$HOME/.cache/bb-stack-npm"
           printf 'node_dir=%s\n' "$(dirname "$(command -v node)")" >> "$GITHUB_OUTPUT"
+      - name: Allow Chromium user-namespace sandbox on Ubuntu 24.04
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       - name: Run contracts as non-root
         env:
           PATH: ${{ github.workspace }}/.venv/bin:${{ steps.node_runtime.outputs.node_dir }}:/usr/local/bin:/usr/bin:/bin

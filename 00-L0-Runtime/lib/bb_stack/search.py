@@ -26,7 +26,9 @@ class SearchProviderError(RuntimeError):
 
 
 def _host(target: str) -> str:
-    value = target if target.startswith(("http://", "https://")) else f"https://{target}"
+    value = (
+        target if target.startswith(("http://", "https://")) else f"https://{target}"
+    )
     return (urlparse(value).hostname or target).lower().strip()
 
 
@@ -54,7 +56,9 @@ def _json_request(
     except HTTPError as error:
         raise SearchProviderError(f"provider returned HTTP {error.code}") from error
     except (TimeoutError, URLError) as error:
-        raise SearchProviderError(f"provider request failed: {error.reason if isinstance(error, URLError) else error}") from error
+        raise SearchProviderError(
+            f"provider request failed: {error.reason if isinstance(error, URLError) else error}"
+        ) from error
     try:
         document = json.loads(raw.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError) as error:
@@ -82,7 +86,9 @@ def _result(
         "title": title if isinstance(title, str) else None,
         "url": url,
         "snippet": snippet if isinstance(snippet, str) else None,
-        "score": item.get("score") if isinstance(item.get("score"), (int, float)) else None,
+        "score": item.get("score")
+        if isinstance(item.get("score"), (int, float))
+        else None,
         "published_at": (
             item.get("publishedDate")
             or item.get("published_date")
@@ -91,7 +97,13 @@ def _result(
     }
 
 
-def search(provider: str, target: str, *, limit: int = DEFAULT_LIMIT, timeout: int = DEFAULT_TIMEOUT) -> list[dict[str, Any]]:
+def search(
+    provider: str,
+    target: str,
+    *,
+    limit: int = DEFAULT_LIMIT,
+    timeout: int = DEFAULT_TIMEOUT,
+) -> list[dict[str, Any]]:
     if provider not in SEARCH_PROVIDERS:
         raise SearchProviderError(f"unsupported search provider: {provider}")
     api_key = os.environ.get(SEARCH_PROVIDERS[provider], "").strip()
@@ -150,7 +162,9 @@ def search(provider: str, target: str, *, limit: int = DEFAULT_LIMIT, timeout: i
     ]
 
 
-def write_results(provider: str, target: str, output: Path, *, limit: int = DEFAULT_LIMIT) -> int:
+def write_results(
+    provider: str, target: str, output: Path, *, limit: int = DEFAULT_LIMIT
+) -> int:
     results = search(provider, target, limit=limit)
     content = "".join(
         json.dumps(item, ensure_ascii=True, sort_keys=True) + "\n" for item in results

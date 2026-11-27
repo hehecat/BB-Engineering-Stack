@@ -137,9 +137,7 @@ def environment(machine: dict[str, Any]) -> dict[str, str]:
     urls = configured_urls(machine)
     wanted = MODE_SOURCES[mode]
     return {
-        name: urls[kind]
-        for name in UPPERCASE_VARIABLES
-        if (kind := wanted.get(name))
+        name: urls[kind] for name in UPPERCASE_VARIABLES if (kind := wanted.get(name))
     }
 
 
@@ -182,7 +180,9 @@ def describe(machine: dict[str, Any]) -> dict[str, Any]:
         "http_url": active_url(machine, "http"),
         "socks_url": active_url(machine, "socks"),
         "configured": {kind: url for kind, url in urls.items() if url},
-        "proxied": sorted({name for name in ("http", "socks") if active_url(machine, name)}),
+        "proxied": sorted(
+            {name for name in ("http", "socks") if active_url(machine, name)}
+        ),
         "blind_tools": dict(sorted(PROXY_BLIND_TOOLS.items())),
     }
 
@@ -206,7 +206,9 @@ def _fetch_ip(routing: dict[str, str], timeout: int) -> dict[str, Any]:
             {
                 name: value
                 for name, value in (
-                    ("http", http), ("https", https), ("all", all_proxy)
+                    ("http", http),
+                    ("https", https),
+                    ("all", all_proxy),
                 )
                 if value
             }
@@ -249,11 +251,7 @@ def check(
     if described["proxied"]:
         proxied = probe(environment(machine), timeout)
     in_path = bool(proxied and proxied.get("ip") and not proxied.get("error"))
-    differs = bool(
-        in_path
-        and direct.get("ip")
-        and direct["ip"] != proxied["ip"]
-    )
+    differs = bool(in_path and direct.get("ip") and direct["ip"] != proxied["ip"])
     return {
         "mode": described["mode"],
         "configured": described["configured"],

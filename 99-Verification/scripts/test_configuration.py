@@ -76,9 +76,7 @@ class ConfigurationTests(unittest.TestCase):
             self.manager.configure({"BB_PROXY_MODE": "tor"})
 
     def test_hash_in_value_is_not_treated_as_a_comment(self) -> None:
-        self.manager.path.write_text(
-            "MAIL_OTP_PASSWORD=p@ss#2024\n", encoding="utf-8"
-        )
+        self.manager.path.write_text("MAIL_OTP_PASSWORD=p@ss#2024\n", encoding="utf-8")
         values = self.manager.read()
         self.assertEqual(values["MAIL_OTP_PASSWORD"], "p@ss#2024")
         self.manager.write(values)
@@ -91,16 +89,12 @@ class ConfigurationTests(unittest.TestCase):
 
     def test_quotes_expansions_and_backslashes_are_literal(self) -> None:
         self.manager.path.write_text(
-            "\n".join(
-                (
-                    "UNQUOTED=a b",
-                    'DOUBLE="a b"',
-                    "SINGLE='a b'",
-                    "EXPANSION=$HOME/x",
-                    r"BACKSLASH=a\b",
-                    "",
-                )
-            ),
+            "UNQUOTED=a b\n"
+            'DOUBLE="a b"\n'
+            "SINGLE='a b'\n"
+            "EXPANSION=$HOME/x\n"
+            r"BACKSLASH=a\b"
+            "\n",
             encoding="utf-8",
         )
         values = self.manager.read()
@@ -132,9 +126,7 @@ class ConfigurationTests(unittest.TestCase):
         self.assertEqual(self.manager.path.read_text(encoding="utf-8"), first)
 
     def test_line_without_assignment_is_reported(self) -> None:
-        self.manager.path.write_text(
-            "THIS IS NOT AN ASSIGNMENT\n", encoding="utf-8"
-        )
+        self.manager.path.write_text("THIS IS NOT AN ASSIGNMENT\n", encoding="utf-8")
         with self.assertRaises(ValidationError) as context:
             self.manager.read()
         self.assertIn("line 1", str(context.exception))

@@ -5,7 +5,7 @@ import re
 import shlex
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 from urllib.parse import urlparse
 
 from .errors import StackError, ValidationError
@@ -27,7 +27,7 @@ MACHINE_CONFIG_DEFAULTS = {
 MACHINE_CONFIG_KEYS = tuple(MACHINE_CONFIG_DEFAULTS)
 _ASSIGNMENT = re.compile(r"^\s*(?:export\s+)?([A-Z_][A-Z0-9_]*)=(.*)$")
 # Literal right-hand side: one wrapping quote pair is stripped, nothing else.
-_LITERAL_RHS = re.compile(r"'([^']*)'|\"([^\"]*)\"|(.*)", re.S)
+_LITERAL_RHS = re.compile(r"'([^']*)'|\"([^\"]*)\"|(.*)", re.DOTALL)
 
 
 def parse_literal_rhs(rhs: str) -> str:
@@ -177,7 +177,7 @@ class ConfigurationManager:
         "BB_AGENT_LANGUAGE",
         "BB_NPM_REGISTRY",
     )
-    _PORTABLE_ORIGIN_SCHEMES = {
+    _PORTABLE_ORIGIN_SCHEMES: ClassVar[dict[str, frozenset[str]]] = {
         "BB_HTTP_PROXY": frozenset({"http", "https"}),
         "BB_SOCKS_PROXY": frozenset({"socks5", "socks5h"}),
         "BB_FILECODEBOX_URL": frozenset({"http", "https"}),
@@ -304,7 +304,9 @@ class ConfigurationManager:
             return value if value else current[key]
 
         return {
-            "BB_PROXY_MODE": ask("Proxy mode (direct/http/socks/mihomo)", "BB_PROXY_MODE"),
+            "BB_PROXY_MODE": ask(
+                "Proxy mode (direct/http/socks/mihomo)", "BB_PROXY_MODE"
+            ),
             "BB_HTTP_PROXY": ask("HTTP proxy origin", "BB_HTTP_PROXY"),
             "BB_SOCKS_PROXY": ask("SOCKS proxy origin", "BB_SOCKS_PROXY"),
             "BB_H1_USERNAME": ask("HackerOne username", "BB_H1_USERNAME"),
@@ -314,8 +316,6 @@ class ConfigurationManager:
                 "npm registry (auto/npmjs/npmmirror/HTTPS URL)",
                 "BB_NPM_REGISTRY",
             ),
-            "BB_PYPI_INDEX": ask(
-                "Python package index URL", "BB_PYPI_INDEX"
-            ),
+            "BB_PYPI_INDEX": ask("Python package index URL", "BB_PYPI_INDEX"),
             "BB_EXTRA_PATH": ask("Extra PATH entries", "BB_EXTRA_PATH"),
         }

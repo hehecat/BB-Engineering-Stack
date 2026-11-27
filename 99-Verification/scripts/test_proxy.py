@@ -63,9 +63,7 @@ class ProxyEnvironmentTests(unittest.TestCase):
             "UNRELATED": "kept",
         }
         proxy.apply(target, {**MACHINE, "BB_PROXY_MODE": "direct"})
-        self.assertEqual(
-            [name for name in target if "proxy" in name.lower()], []
-        )
+        self.assertEqual([name for name in target if "proxy" in name.lower()], [])
         self.assertEqual(target["UNRELATED"], "kept")
 
     def test_an_unknown_mode_is_rejected(self) -> None:
@@ -108,7 +106,9 @@ class ProviderArgumentTests(unittest.TestCase):
                 self.assertIn(name, proxy.PROXY_BLIND_TOOLS)
 
     def test_a_provider_is_never_both_routed_and_listed_blind(self) -> None:
-        self.assertEqual(set(proxy.PROVIDER_FLAGS) & set(proxy.PROXY_BLIND_TOOLS), set())
+        self.assertEqual(
+            set(proxy.PROVIDER_FLAGS) & set(proxy.PROXY_BLIND_TOOLS), set()
+        )
 
 
 class CheckTests(unittest.TestCase):
@@ -135,7 +135,8 @@ class CheckTests(unittest.TestCase):
             return {"ip": "10.0.0.2" if routed else "203.0.113.9", "error": None}
 
         with patch(
-            "bb_stack.configuration.ConfigurationManager.effective", return_value=machine
+            "bb_stack.configuration.ConfigurationManager.effective",
+            return_value=machine,
         ):
             result = proxy.check(self.paths, fetch=fetch, **kwargs)
         result["_probes"] = seen
@@ -161,7 +162,8 @@ class CheckTests(unittest.TestCase):
             return {"ip": "203.0.113.9", "error": None}
 
         with patch(
-            "bb_stack.configuration.ConfigurationManager.effective", return_value=MACHINE
+            "bb_stack.configuration.ConfigurationManager.effective",
+            return_value=MACHINE,
         ):
             result = proxy.check(self.paths, fetch=fetch)
         # A shared NAT makes the two addresses identical even though the request
@@ -174,7 +176,8 @@ class CheckTests(unittest.TestCase):
             return {"ip": None, "error": "URLError: refused"}
 
         with patch(
-            "bb_stack.configuration.ConfigurationManager.effective", return_value=MACHINE
+            "bb_stack.configuration.ConfigurationManager.effective",
+            return_value=MACHINE,
         ):
             result = proxy.check(self.paths, fetch=fetch)
         self.assertFalse(result["in_path"])

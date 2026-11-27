@@ -25,12 +25,13 @@ from __future__ import annotations
 
 import subprocess
 import time
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from .backends import BackendRegistry
 from .engagement import EngagementManager
-from .errors import ValidationError
+from .errors import StackError, ValidationError
 from .paths import StackPaths
 from .runtime import RuntimeManager
 
@@ -207,7 +208,7 @@ def _checkpoint_stamp(manager: EngagementManager, engagement: Path) -> Any:
     """The Engagement's recorded checkpoint time, or ``None`` when unreadable."""
     try:
         state = manager.validate(engagement)
-    except Exception:
+    except (StackError, OSError):
         return None
     checkpoint = state.get("checkpoint") or {}
     return checkpoint.get("updated_at")

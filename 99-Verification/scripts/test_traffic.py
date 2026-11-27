@@ -24,7 +24,6 @@ os.environ["BB_STACK_ROOT"] = str(ROOT)
 from bb_stack.errors import ValidationError
 from bb_stack.paths import StackPaths
 from bb_stack.traffic import (
-    INDEX_TEXT_LIMIT,
     SCHEMA_VERSION,
     FlowRecord,
     TrafficStore,
@@ -107,19 +106,20 @@ class TrafficStoreTests(unittest.TestCase):
         self.assertEqual(self.ids(method="get"), [fourth, third, first])
         self.assertEqual(self.ids(status=304), [third])
         self.assertEqual(self.ids(client="browser"), [third, second])
-        self.assertEqual(
-            self.ids(host="api.example.invalid", method="POST"), [second]
-        )
+        self.assertEqual(self.ids(host="api.example.invalid", method="POST"), [second])
         self.assertEqual(self.store.search(status=999), [])
 
     def test_search_limit_returns_newest_first(self) -> None:
         for index in range(4):
             self.record(started_at=f"2024-03-01T10:0{index}:00.000+00:00")
         newest = self.store.search(limit=2)
-        self.assertEqual([summary.started_at for summary in newest], [
-            "2024-03-01T10:03:00.000+00:00",
-            "2024-03-01T10:02:00.000+00:00",
-        ])
+        self.assertEqual(
+            [summary.started_at for summary in newest],
+            [
+                "2024-03-01T10:03:00.000+00:00",
+                "2024-03-01T10:02:00.000+00:00",
+            ],
+        )
         self.assertEqual(len(self.store.search(limit=50)), 4)
         with self.assertRaisesRegex(ValidationError, "at least 1"):
             self.store.search(limit=0)
@@ -144,8 +144,12 @@ class TrafficStoreTests(unittest.TestCase):
         first = self.record(started_at="2024-03-01T10:00:00.000+00:00")
         second = self.record(started_at="2024-03-01T10:01:00.000+00:00")
         third = self.record(started_at="2024-03-01T10:02:00.000+00:00")
-        self.assertEqual(self.ids(since="2024-03-01T10:01:00.000+00:00"), [third, second])
-        self.assertEqual(self.ids(until="2024-03-01T10:01:00.000+00:00"), [second, first])
+        self.assertEqual(
+            self.ids(since="2024-03-01T10:01:00.000+00:00"), [third, second]
+        )
+        self.assertEqual(
+            self.ids(until="2024-03-01T10:01:00.000+00:00"), [second, first]
+        )
         self.assertEqual(
             self.ids(
                 since="2024-03-01T10:00:30.000+00:00",
@@ -157,7 +161,9 @@ class TrafficStoreTests(unittest.TestCase):
     def test_summary_carries_the_operator_facing_url(self) -> None:
         self.record(path="/admin/export", query="role=admin&page=2")
         summary = self.store.search()[0]
-        self.assertEqual(summary.url, "GET api.example.invalid/admin/export?role=admin&page=2")
+        self.assertEqual(
+            summary.url, "GET api.example.invalid/admin/export?role=admin&page=2"
+        )
         self.assertEqual(summary.content_type, "application/json")
         self.assertEqual(summary.response_bytes, len(b'{"id": 1}'))
 
@@ -224,7 +230,14 @@ class TrafficStoreTests(unittest.TestCase):
             response_headers={"X-Internal-Debug": "1", "Content-Type": "text/html"},
             response_body=b'<a href="/reset-password">Reset</a>',
         )
-        for query in ('X-Internal-Debug', "Authorization: Bearer none", "/reset-password", 'weird"quote', "(unbalanced", "AND"):
+        for query in (
+            "X-Internal-Debug",
+            "Authorization: Bearer none",
+            "/reset-password",
+            'weird"quote',
+            "(unbalanced",
+            "AND",
+        ):
             with self.subTest(query=query):
                 self.assertIsInstance(self.store.search(text=query), list)
         self.assertEqual(self.ids(text="X-Internal-Debug"), [flow])
@@ -343,9 +356,9 @@ class TrafficStoreTests(unittest.TestCase):
         # The write succeeds and the store keeps working.
         self.assertEqual(self.store.stats()["flows"], 1)
         self.assertEqual(self.ids(text="ZzBigstarttoken"), [flow])
-        self.assertEqual([host["host"] for host in self.store.hosts()], [
-            "api.example.invalid"
-        ])
+        self.assertEqual(
+            [host["host"] for host in self.store.hosts()], ["api.example.invalid"]
+        )
         # Only the first INDEX_TEXT_LIMIT bytes are decoded into the index, so a
         # token past the cap is not searchable even though the bytes are kept.
         self.assertEqual(self.ids(text="Zzbigendtoken"), [])
@@ -371,7 +384,9 @@ class TrafficStoreTests(unittest.TestCase):
                 )
                 self.assertEqual(self.store.read(flow)["response"]["body"], "")
                 self.assertEqual(self.ids(text="Binarymarkertoken"), [])
-                self.assertNotIn(flow, self.ids(host="api.example.invalid", text="binary"))
+                self.assertNotIn(
+                    flow, self.ids(host="api.example.invalid", text="binary")
+                )
 
     # -- browsing and rollups -------------------------------------------
 

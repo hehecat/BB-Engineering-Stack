@@ -151,8 +151,10 @@ class AgentRoster:
         lines = [
             "# Delegation roster",
             "",
-            "Delegate through the host's subagent tool. Pick one role per "
-            "independent unit and give it a self-contained task.",
+            (
+                "Delegate through the host's subagent tool. Pick one role per "
+                "independent unit and give it a self-contained task."
+            ),
             "",
         ]
         for name in selected:
@@ -160,9 +162,7 @@ class AgentRoster:
             lines.append(f"- `{name}` — {agent.description.strip()}")
         return "\n".join(lines)
 
-    def plan(
-        self, requests: list[dict[str, str]], *, depth: int = 0
-    ) -> dict[str, Any]:
+    def plan(self, requests: list[dict[str, str]], *, depth: int = 0) -> dict[str, Any]:
         """Validate a fan-out batch and return one delegation package per item.
 
         A request is `{agent, task, id}`. The plan is the contract the
@@ -185,7 +185,10 @@ class AgentRoster:
         seen_ids: set[str] = set()
         for request in requests:
             for field in ("agent", "task", "id"):
-                if not isinstance(request.get(field), str) or not request[field].strip():
+                if (
+                    not isinstance(request.get(field), str)
+                    or not request[field].strip()
+                ):
                     raise ValidationError(
                         f"delegation request is missing a non-empty {field!r}: {request}"
                     )
@@ -204,8 +207,7 @@ class AgentRoster:
                     "writes": agent.output_dir(slice_id),
                     "declared_writes": list(agent.writes),
                     "max_turns": agent.max_turns,
-                    "result": f"{agent.output_dir(slice_id)}/"
-                    f"{defaults['result_file']}",
+                    "result": f"{agent.output_dir(slice_id)}/{defaults['result_file']}",
                 }
             )
         self._check_batch_write_sets(packages)

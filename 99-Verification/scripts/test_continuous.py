@@ -90,7 +90,9 @@ class ContinuousTests(unittest.TestCase):
         return run_command
 
     def loop(self, *, codes: tuple[int, ...] = (), **kwargs: Any) -> dict[str, Any]:
-        with patch.object(continuous.RuntimeManager, "launch", side_effect=self.fake_launch):
+        with patch.object(
+            continuous.RuntimeManager, "launch", side_effect=self.fake_launch
+        ):
             return run(
                 self.paths,
                 self.slug,
@@ -131,7 +133,9 @@ class ContinuousTests(unittest.TestCase):
                 created = True
             return FakeCompleted()
 
-        with patch.object(continuous.RuntimeManager, "launch", side_effect=self.fake_launch):
+        with patch.object(
+            continuous.RuntimeManager, "launch", side_effect=self.fake_launch
+        ):
             result = run(
                 self.paths, self.slug, run_command=create_then_run, max_rounds=5
             )
@@ -204,9 +208,8 @@ class ContinuousTests(unittest.TestCase):
 
     def test_bounds_must_be_positive(self) -> None:
         for kwargs in ({"max_rounds": 0}, {"max_failures": 0}):
-            with self.subTest(kwargs=kwargs):
-                with self.assertRaises(ValidationError):
-                    run(self.paths, self.slug, **kwargs)
+            with self.subTest(kwargs=kwargs), self.assertRaises(ValidationError):
+                run(self.paths, self.slug, **kwargs)
 
 
 if __name__ == "__main__":

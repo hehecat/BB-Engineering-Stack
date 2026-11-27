@@ -23,10 +23,11 @@ import os
 import re
 import sqlite3
 import threading
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Self
 
 from .errors import ValidationError
 from .paths import StackPaths
@@ -59,7 +60,9 @@ _HOST_RE = re.compile(
     r"\b((?:[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?\.)+[A-Za-z]{2,})\b"
 )
 # Something that reads like an artifact path or file reference in a cell.
-_REFERENCE_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._/-]*\.(?:md|json|txt|html|js|log)\b")
+_REFERENCE_RE = re.compile(
+    r"[A-Za-z0-9][A-Za-z0-9._/-]*\.(?:md|json|txt|html|js|log)\b"
+)
 _SEPARATOR_RE = re.compile(r"^:?-{2,}:?$")
 
 # Boundary safety for `neighbors`: a hub node can otherwise expand without end.
@@ -95,12 +98,13 @@ def _clean_host(raw: str) -> str:
         token = token.split("://", 1)[1]
     token = token.split("/", 1)[0]
     token = token.split("?", 1)[0].split("#", 1)[0]
-    if token.startswith("*."):
-        token = token[2:]
+    token = token.removeprefix("*.")
     host = token.split(":", 1)[0].strip().lower()
     if not host or "." not in host:
         return ""
-    if not re.fullmatch(r"[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+", host):
+    if not re.fullmatch(
+        r"[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+", host
+    ):
         return ""
     return host
 
@@ -119,10 +123,8 @@ def _hosts_in(text: str) -> list[str]:
 
 def _split_row(line: str) -> list[str]:
     stripped = line.strip()
-    if stripped.startswith("|"):
-        stripped = stripped[1:]
-    if stripped.endswith("|"):
-        stripped = stripped[:-1]
+    stripped = stripped.removeprefix("|")
+    stripped = stripped.removesuffix("|")
     return [cell.strip() for cell in stripped.split("|")]
 
 
@@ -1050,9 +1052,7 @@ class GraphStore:
                 "source": row["source"],
             }
             for row in node_rows
-            if row["id"] == node_id
-            or kind_filter is None
-            or row["kind"] in kind_filter
+            if row["id"] == node_id or kind_filter is None or row["kind"] in kind_filter
         ]
         kept = {node["id"] for node in nodes}
         edges = [
@@ -1126,7 +1126,7 @@ class GraphStore:
         with self._lock:
             self._connection.close()
 
-    def __enter__(self) -> GraphStore:
+    def __enter__(self) -> Self:
         return self
 
     def __exit__(self, *_: object) -> None:

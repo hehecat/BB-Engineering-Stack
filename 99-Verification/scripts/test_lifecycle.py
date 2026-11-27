@@ -336,9 +336,7 @@ class LifecycleTests(unittest.TestCase):
         self.assertEqual(result["backend"], "omp")
         self.assertEqual(result["command"][0], omp)
         self.assertIn("--append-system-prompt", result["command"])
-        self.assertEqual(
-            result["injection"]["prompt"]["backend"], "omp"
-        )
+        self.assertEqual(result["injection"]["prompt"]["backend"], "omp")
         self.assertEqual(
             result["injection"]["prompt"]["flag"], "--append-system-prompt"
         )
@@ -430,7 +428,9 @@ class LifecycleTests(unittest.TestCase):
         )
         exempt = self.manager.create("edge-ctf", "example.invalid", workflow="ctf")
         self.assertEqual(
-            self.manager.authorize(exempt, status="pending", source=None)["authorization"]["status"],
+            self.manager.authorize(exempt, status="pending", source=None)[
+                "authorization"
+            ]["status"],
             "pending",
         )
         with self.assertRaisesRegex(ValidationError, "unsupported authorization"):
@@ -451,7 +451,9 @@ class LifecycleTests(unittest.TestCase):
         listed = self.manager.list()
         self.assertTrue(any("error" in item for item in listed))
 
-    def test_checkpoint_aligns_status_header_without_rewriting_agent_prose(self) -> None:
+    def test_checkpoint_aligns_status_header_without_rewriting_agent_prose(
+        self,
+    ) -> None:
         root = self.manager.create(
             "checkpoint-sync", "example.invalid", workflow="assessment"
         )
@@ -510,7 +512,9 @@ class LifecycleTests(unittest.TestCase):
         root = self.manager.create(
             "transition-sync", "example.invalid", workflow="assessment"
         )
-        self.manager.authorize(root, status="user-asserted", source="operator statement")
+        self.manager.authorize(
+            root, status="user-asserted", source="operator statement"
+        )
         self.assertIn(
             "| Authorization | pre-cleared |",
             (root / "STATUS.md").read_text(encoding="utf-8"),
@@ -576,9 +580,7 @@ class LifecycleTests(unittest.TestCase):
         )
         state = self.manager.validate(root)
         self.assertEqual(state["authorization"]["status"], "exempt")
-        self.assertEqual(
-            state["authorization"]["source"], "Own application under test"
-        )
+        self.assertEqual(state["authorization"]["source"], "Own application under test")
 
         pending = self.manager.create(
             "source-gate-pending", "https://example.invalid", workflow="assessment"
@@ -588,7 +590,9 @@ class LifecycleTests(unittest.TestCase):
         damaged = load_yaml(root / "engagement.yaml")
         damaged["authorization"] = {"status": "verified", "source": None}
         dump_yaml(root / "engagement.yaml", damaged)
-        with self.assertRaisesRegex(ValidationError, "requires an authorization source"):
+        with self.assertRaisesRegex(
+            ValidationError, "requires an authorization source"
+        ):
             self.manager.validate(root)
 
     def test_revoked_authorization_blocks_resume_until_reauthorized(self) -> None:
@@ -640,9 +644,7 @@ class LifecycleTests(unittest.TestCase):
             "partial-failure", "example.invalid", workflow="ctf"
         )
         self.assertEqual(retry.name, "partial-failure")
-        self.assertEqual(
-            [item for item in self.manager.list() if "error" in item], []
-        )
+        self.assertEqual([item for item in self.manager.list() if "error" in item], [])
 
     def test_reference_templates_only_contain_runtime_used_files(self) -> None:
         layer = ROOT / "03-L3-Engagement-State"

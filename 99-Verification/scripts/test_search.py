@@ -7,6 +7,7 @@ import tempfile
 import unittest
 from collections.abc import Callable
 from pathlib import Path
+from typing import Self
 from unittest.mock import patch
 from urllib.error import HTTPError
 from urllib.request import Request
@@ -21,7 +22,7 @@ class FakeResponse:
     def __init__(self, payload: dict[str, object]) -> None:
         self.payload = payload
 
-    def __enter__(self) -> "FakeResponse":
+    def __enter__(self) -> Self:
         return self
 
     def __exit__(self, *_: object) -> None:
@@ -61,14 +62,14 @@ class SearchProviderTests(unittest.TestCase):
                 }
             )
 
-        with patch.dict(os.environ, {"EXA_API_KEY": "fixture-secret"}, clear=False):
-            with patch("bb_stack.search.urlopen", side_effect=open_request):
-                with tempfile.TemporaryDirectory() as temporary:
-                    output = Path(temporary) / "exa.jsonl"
-                    self.assertEqual(
-                        write_results("exa", "https://example.invalid", output), 1
-                    )
-                    document = json.loads(output.read_text(encoding="utf-8"))
+        with (
+            patch.dict(os.environ, {"EXA_API_KEY": "fixture-secret"}, clear=False),
+            patch("bb_stack.search.urlopen", side_effect=open_request),
+            tempfile.TemporaryDirectory() as temporary,
+        ):
+            output = Path(temporary) / "exa.jsonl"
+            self.assertEqual(write_results("exa", "https://example.invalid", output), 1)
+            document = json.loads(output.read_text(encoding="utf-8"))
 
         self.assertEqual(document["provider"], "exa")
         self.assertEqual(document["url"], "https://example.invalid/docs")
@@ -77,7 +78,9 @@ class SearchProviderTests(unittest.TestCase):
         self.assertEqual(requests[0].get_header("X-api-key"), "fixture-secret")
         self.assertEqual(requests[0].full_url, "https://api.exa.ai/search")
 
-    def _credential_opener(self, requests: list[Request]) -> Callable[..., FakeResponse]:
+    def _credential_opener(
+        self, requests: list[Request]
+    ) -> Callable[..., FakeResponse]:
         """Fake transport that only accepts the credential on the right channel."""
 
         def open_request(request: Request, timeout: int) -> FakeResponse:
@@ -119,19 +122,21 @@ class SearchProviderTests(unittest.TestCase):
 
     def test_tavily_and_brave_carry_credentials_on_their_own_channel(self) -> None:
         requests: list[Request] = []
-        with patch.dict(
-            os.environ,
-            {
-                "TAVILY_API_KEY": "tavily-secret",
-                "BRAVE_SEARCH_API_KEY": "brave-secret",
-            },
-            clear=False,
-        ):
-            with patch(
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "TAVILY_API_KEY": "tavily-secret",
+                    "BRAVE_SEARCH_API_KEY": "brave-secret",
+                },
+                clear=False,
+            ),
+            patch(
                 "bb_stack.search.urlopen", side_effect=self._credential_opener(requests)
-            ):
-                tavily = search("tavily", "example.invalid")
-                brave = search("brave", "example.invalid")
+            ),
+        ):
+            tavily = search("tavily", "example.invalid")
+            brave = search("brave", "example.invalid")
 
         tavily_request, brave_request = requests
         self.assertEqual(tavily_request.get_header("X-subscription-token"), None)
@@ -153,21 +158,23 @@ class SearchProviderTests(unittest.TestCase):
 
     def test_swapped_credentials_are_rejected(self) -> None:
         requests: list[Request] = []
-        with patch.dict(
-            os.environ,
-            {
-                "TAVILY_API_KEY": "brave-secret",
-                "BRAVE_SEARCH_API_KEY": "tavily-secret",
-            },
-            clear=False,
-        ):
-            with patch(
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "TAVILY_API_KEY": "brave-secret",
+                    "BRAVE_SEARCH_API_KEY": "tavily-secret",
+                },
+                clear=False,
+            ),
+            patch(
                 "bb_stack.search.urlopen", side_effect=self._credential_opener(requests)
-            ):
-                with self.assertRaisesRegex(SearchProviderError, "HTTP 401"):
-                    search("tavily", "example.invalid")
-                with self.assertRaisesRegex(SearchProviderError, "HTTP 401"):
-                    search("brave", "example.invalid")
+            ),
+        ):
+            with self.assertRaisesRegex(SearchProviderError, "HTTP 401"):
+                search("tavily", "example.invalid")
+            with self.assertRaisesRegex(SearchProviderError, "HTTP 401"):
+                search("brave", "example.invalid")
         self.assertEqual(len(requests), 2)
 
 

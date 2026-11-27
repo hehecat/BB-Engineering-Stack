@@ -16,6 +16,8 @@ from unittest.mock import MagicMock, patch
 ROOT = Path(__file__).resolve().parents[2]
 os.environ["BB_STACK_ROOT"] = str(ROOT)
 
+from bb_stack.agents import AgentRoster
+from bb_stack.capabilities import CapabilityRegistry
 from bb_stack.cli import (
     _reload_command,
     build_parser,
@@ -25,8 +27,6 @@ from bb_stack.cli import (
     load_guide,
     main,
 )
-from bb_stack.agents import AgentRoster
-from bb_stack.capabilities import CapabilityRegistry
 from bb_stack.engagement import EngagementManager
 from bb_stack.errors import StackError, ValidationError
 from bb_stack.paths import StackPaths
@@ -65,7 +65,7 @@ def _command_path(command: str) -> list[str]:
     """
     path: list[str] = []
     for token in shlex.split(command)[1:]:
-        if token.startswith("-") or token.startswith("<"):
+        if token.startswith(("-", "<")):
             break
         path.append(token)
     return path
@@ -286,7 +286,15 @@ class CliTests(unittest.TestCase):
             ["recon", "run", "fixture", "--mode", "baseline"],
             ["recon", "resume", "fixture"],
             ["recon", "status", "fixture"],
-            ["recon", "rerun", "fixture", "--stage", "passive-assets", "--cascade", "--force"],
+            [
+                "recon",
+                "rerun",
+                "fixture",
+                "--stage",
+                "passive-assets",
+                "--cascade",
+                "--force",
+            ],
             [
                 "recon",
                 "expand",
@@ -316,7 +324,9 @@ class CliTests(unittest.TestCase):
         )
         with (
             patch("bb_stack.cli.ReconManager", return_value=manager),
-            patch("bb_stack.cli.StackPaths.engagement", return_value=Path("/tmp/fixture")),
+            patch(
+                "bb_stack.cli.StackPaths.engagement", return_value=Path("/tmp/fixture")
+            ),
         ):
             for arguments in cases:
                 with self.subTest(arguments=arguments):
@@ -426,7 +436,9 @@ class CliTests(unittest.TestCase):
 
         output = StringIO()
         with redirect_stdout(output):
-            args = self.parser.parse_args(["traffic", "hosts", "traffic-query", "--json"])
+            args = self.parser.parse_args(
+                ["traffic", "hosts", "traffic-query", "--json"]
+            )
             self.assertEqual(command(args, self.paths), 0)
         hosts = json.loads(output.getvalue())
         self.assertEqual([row["host"] for row in hosts], ["api.example.invalid"])
@@ -434,7 +446,9 @@ class CliTests(unittest.TestCase):
 
         output = StringIO()
         with redirect_stdout(output):
-            args = self.parser.parse_args(["traffic", "stats", "traffic-query", "--json"])
+            args = self.parser.parse_args(
+                ["traffic", "stats", "traffic-query", "--json"]
+            )
             self.assertEqual(command(args, self.paths), 0)
         stats = json.loads(output.getvalue())
         self.assertEqual(stats["flows"], 2)
@@ -563,12 +577,15 @@ class CliTests(unittest.TestCase):
         self.assertIn("hypotheses", built["sources"])
         self.assertTrue((root / "graph" / "nodes.db").is_file())
 
-        summary = self._command_json(["graph", "summary", "graph-build", "--top", "2", "--json"])
+        summary = self._command_json(
+            ["graph", "summary", "graph-build", "--top", "2", "--json"]
+        )
         self.assertEqual(summary["kinds"]["asset"], 2)
         self.assertGreaterEqual(summary["totals"]["nodes"], 2)
         self.assertNotIn(token, json.dumps(summary))
         self.assertEqual(
-            [node["key"] for node in summary["top"]["asset"]][0], "api.example.invalid"
+            next(node["key"] for node in summary["top"]["asset"]),
+            "api.example.invalid",
         )
 
         # The token really is in the store: the omission above is the summary's
@@ -585,7 +602,16 @@ class CliTests(unittest.TestCase):
         self.assertIsNotNone(stats["built_at"])
 
         found = self._command_json(
-            ["graph", "search", "graph-build", "--kind", "asset", "--label", "legacy", "--json"]
+            [
+                "graph",
+                "search",
+                "graph-build",
+                "--kind",
+                "asset",
+                "--label",
+                "legacy",
+                "--json",
+            ]
         )
         self.assertEqual([row["key"] for row in found], ["legacy.example.invalid"])
 
@@ -605,9 +631,7 @@ class CliTests(unittest.TestCase):
         self.assertLess(
             text.index("legacy.example.invalid"), text.index("api.example.invalid")
         )
-        self.assertEqual(
-            lines[-1], "uncovered 1/2 ratio=0.500 evidenced_ratio=0.500"
-        )
+        self.assertEqual(lines[-1], "uncovered 1/2 ratio=0.500 evidenced_ratio=0.500")
 
         report = self._command_json(["coverage", "coverage-rank", "--json"])
         self.assertEqual(report["totals"]["assets"], 2)
@@ -631,7 +655,9 @@ class CliTests(unittest.TestCase):
 
     def test_coverage_reports_a_missing_inventory_actionably(self) -> None:
         EngagementManager(self.paths).create(
-            "coverage-empty", "https://example.invalid", workflow="ctf",
+            "coverage-empty",
+            "https://example.invalid",
+            workflow="ctf",
             platform="standalone-ctf",
         )
         with self.assertRaisesRegex(
@@ -721,7 +747,13 @@ class CliTests(unittest.TestCase):
 
         # An out-of-range ratio is rejected before any verdict is rendered.
         code, message = self._run_main(
-            ["coverage", "coverage-gate-error", "--gate", "--min-evidenced-ratio", "1.5"]
+            [
+                "coverage",
+                "coverage-gate-error",
+                "--gate",
+                "--min-evidenced-ratio",
+                "1.5",
+            ]
         )
         self.assertEqual(code, 2)
         self.assertIn("[0,1]", message)
@@ -856,8 +888,14 @@ class CliTests(unittest.TestCase):
 
         allowed = self._command_json(
             [
-                "policy", "check", "policy-default",
-                "--tool", "search_traffic", "--arg", "text=admin", "--json",
+                "policy",
+                "check",
+                "policy-default",
+                "--tool",
+                "search_traffic",
+                "--arg",
+                "text=admin",
+                "--json",
             ]
         )
         self.assertEqual(allowed["behavior"], "allow")
@@ -902,8 +940,14 @@ class CliTests(unittest.TestCase):
 
         allowed = self._command_json(
             [
-                "policy", "check", "policy-rules",
-                "--tool", "shell", "--arg", "command=id", "--json",
+                "policy",
+                "check",
+                "policy-rules",
+                "--tool",
+                "shell",
+                "--arg",
+                "command=id",
+                "--json",
             ]
         )
         self.assertEqual(allowed["behavior"], "allow")
@@ -1045,7 +1089,9 @@ class CliTests(unittest.TestCase):
             patch("bb_stack.cli.WorkspaceManager", return_value=workspace),
             redirect_stdout(output),
         ):
-            args = self.parser.parse_args(["configure", "--proxy-mode", "direct", "--json"])
+            args = self.parser.parse_args(
+                ["configure", "--proxy-mode", "direct", "--json"]
+            )
             self.assertEqual(command(args, paths), 0)
         report = json.loads(output.getvalue())
         self.assertEqual(report["reload"], "source '" + str(paths.env_file) + "'")
@@ -1074,11 +1120,13 @@ class CliTests(unittest.TestCase):
 
     def test_validate_reports_minimum_runtime_findings(self) -> None:
         below = {"python": "3.10.7", "node": "v22.23.2", "claude_code": "2.1.223"}
-        with self.pinned_validate(below):
-            with self.assertRaisesRegex(
+        with (
+            self.pinned_validate(below),
+            self.assertRaisesRegex(
                 ValidationError, "minimum runtime not satisfied"
-            ) as caught:
-                self.run_command(["validate"])
+            ) as caught,
+        ):
+            self.run_command(["validate"])
         message = str(caught.exception)
         self.assertIn("python", message)
         self.assertIn("3.11", message)

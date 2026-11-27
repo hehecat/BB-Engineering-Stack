@@ -33,6 +33,8 @@ from .proxy import (
     PROXY_MODES,
     PROXY_VARIABLES,
     UPPERCASE_VARIABLES,
+)
+from .proxy import (
     apply as proxy_apply,
 )
 from .skills import SkillRegistry
@@ -609,9 +611,7 @@ class RuntimeManager:
                 kind = MODE_SOURCES[mode].get(name)
                 if kind:
                     source = "BB_HTTP_PROXY" if kind == "http" else "BB_SOCKS_PROXY"
-                    lines.append(
-                        f'    export {name}="${{{source}:-{fallback[kind]}}}"'
-                    )
+                    lines.append(f'    export {name}="${{{source}:-{fallback[kind]}}}"')
             lines.append("    ;;")
         lines.append(
             '  *) printf "bb-stack: unknown BB_PROXY_MODE=%s\\n" "$BB_PROXY_MODE" >&2 ;;'
@@ -788,9 +788,7 @@ class RuntimeManager:
         selected = list(dict.fromkeys(names))
         unknown = sorted(set(selected) - set(document["installers"]))
         if unknown:
-            raise ValidationError(
-                "unknown tool installer: " + ", ".join(unknown)
-            )
+            raise ValidationError("unknown tool installer: " + ", ".join(unknown))
         return self._install_selected_tools(document, selected, dry_run=dry_run)
 
     def _install_selected_tools(
@@ -851,9 +849,7 @@ class RuntimeManager:
             except CommandError:
                 if not is_optional:
                     raise
-                results.append(
-                    {"component": f"tool:{name}", "state": "unavailable"}
-                )
+                results.append({"component": f"tool:{name}", "state": "unavailable"})
                 continue
             results.append({"component": f"tool:{name}", "state": "installed"})
 
@@ -897,9 +893,7 @@ class RuntimeManager:
                         )
                         return
                     for name in names:
-                        spec = expand(
-                            document["installers"][name], env, strict=False
-                        )
+                        spec = expand(document["installers"][name], env, strict=False)
                         if not self._tool_ready(spec, env):
                             if degrade:
                                 results.append(
@@ -1351,7 +1345,9 @@ class RuntimeManager:
     ) -> dict[str, Any]:
         # `claude_args` is the deprecated spelling of `backend_args`: the extra
         # arguments are forwarded verbatim to whichever agent backend runs.
-        extra_args = list(backend_args if backend_args is not None else claude_args or [])
+        extra_args = list(
+            backend_args if backend_args is not None else claude_args or []
+        )
         profile_registry = ProfileRegistry(self.paths)
         profile_registry.load(profile_name)
         engagement_state: dict[str, Any] | None = None

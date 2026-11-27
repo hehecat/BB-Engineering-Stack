@@ -315,7 +315,10 @@ class GraphTests(unittest.TestCase):
         with graph_for(self.paths, self.slug) as store:
             self.assertEqual(len(store.search(kind="asset")), 2)
             self.assertEqual(
-                [row["key"] for row in store.search(kind="asset", key="beta.example.invalid")],
+                [
+                    row["key"]
+                    for row in store.search(kind="asset", key="beta.example.invalid")
+                ],
                 ["beta.example.invalid"],
             )
             self.assertEqual(
@@ -351,9 +354,7 @@ class GraphTests(unittest.TestCase):
             self.assertIn("alpha.example.invalid", keys)
             self.assertIn("notes/asset-inventory.md", keys)
             # kind filter keeps the origin but drops the evidence neighbour.
-            filtered = store.neighbors(
-                lead["id"], depth=1, kinds=["asset"]
-            )
+            filtered = store.neighbors(lead["id"], depth=1, kinds=["asset"])
             self.assertEqual(
                 {node["key"] for node in filtered["nodes"]},
                 {"H-001", "alpha.example.invalid"},
@@ -386,7 +387,10 @@ class GraphTests(unittest.TestCase):
         self.assertEqual(stats["schema_version"], SCHEMA_VERSION)
         self.assertEqual(stats["engagement"], self.slug)
         self.assertEqual(stats["nodes"], 9)
-        self.assertEqual(Path(stats["path"]).resolve(), (self.engagement / "graph" / "nodes.db").resolve())
+        self.assertEqual(
+            Path(stats["path"]).resolve(),
+            (self.engagement / "graph" / "nodes.db").resolve(),
+        )
         self.assertIsNotNone(stats["built_at"])
 
     # -- storage ---------------------------------------------------------
@@ -395,9 +399,7 @@ class GraphTests(unittest.TestCase):
         self.result()
         db = self.engagement / "graph" / "nodes.db"
         self.assertEqual(stat.S_IMODE(db.stat().st_mode), 0o600)
-        self.assertEqual(
-            stat.S_IMODE(db.parent.stat().st_mode), 0o700
-        )
+        self.assertEqual(stat.S_IMODE(db.parent.stat().st_mode), 0o700)
 
     def test_missing_engagement_raises(self) -> None:
         with self.assertRaises(ValidationError):

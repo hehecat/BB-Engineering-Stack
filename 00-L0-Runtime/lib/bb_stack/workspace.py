@@ -485,7 +485,6 @@ class WorkspaceManager:
         repair_commands: list[str] = []
         # Task-first edition: the authorization field is informational only.
         # It never produces a repair command and never blocks routing.
-        authorization_ready = True
         if missing_skills or not capability_status["ready"]:
             repair_commands.append(
                 f"bb-stack bootstrap --profile {shlex.quote(rendered.skill_profile)}"
@@ -661,9 +660,7 @@ class WorkspaceManager:
                 "BB_WORK_ROOT must not equal, contain, or be contained by the stack source, config home, or Claude config"
             )
 
-    def _profile_for_route(
-        self, kind: str, route: dict[str, Any], mode: str
-    ) -> str:
+    def _profile_for_route(self, kind: str, route: dict[str, Any], mode: str) -> str:
         """Resolve the L2 profile for a route, validating the requested mode."""
         if mode != "continuous":
             return str(route["profile"])

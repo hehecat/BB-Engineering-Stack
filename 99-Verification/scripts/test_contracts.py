@@ -40,7 +40,6 @@ def _redirected_skills_roots(roots: dict[str, Path]):
     return patch.object(BackendRegistry, "get", get)
 
 
-
 class ContractTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory(prefix="bb-contracts-")
@@ -443,7 +442,9 @@ class ContractTests(unittest.TestCase):
                 revision = inventory[f"skill.{name}"]["current_revision"]
                 # The stub mirrors the audited catalog entry instead of a shared
                 # constant, so a wrong channel -> revision mapping cannot pass.
-                manager._git_remote_revision = lambda repository, branch: revision
+                manager._git_remote_revision = lambda repository, branch, rev=revision: (
+                    rev
+                )
                 result = manager.check({"skills"}, f"skill.{name}")["results"][0]
                 self.assertEqual(result["status"], "current")
                 self.assertEqual(result["latest"], revision)
@@ -548,13 +549,10 @@ class ContractTests(unittest.TestCase):
             registry.install("ctf-web", agent="claude", force=False)
         self.assertTrue(marker.is_file())
 
-
     def test_skill_install_agent_all_covers_every_declared_backend(self) -> None:
         registry = SkillRegistry(self.paths)
         declared = BackendRegistry(self.paths).names()
-        roots = {
-            name: Path(self.temporary.name) / "roots" / name for name in declared
-        }
+        roots = {name: Path(self.temporary.name) / "roots" / name for name in declared}
         with _redirected_skills_roots(roots):
             results = registry.install("ctf-web", agent="all", include_optional=False)
         self.assertEqual({entry["agent"] for entry in results}, set(declared))
@@ -589,7 +587,11 @@ class ContractTests(unittest.TestCase):
             self.assertEqual((shared / name).readlink(), registry.source(name))
 
         shared_records = sorted(
-            (entry for entry in results if entry["name"] == skill and entry["agent"] in sharing),
+            (
+                entry
+                for entry in results
+                if entry["name"] == skill and entry["agent"] in sharing
+            ),
             key=lambda entry: entry["agent"],
         )
         self.assertEqual(len(shared_records), 3)
@@ -607,9 +609,7 @@ class ContractTests(unittest.TestCase):
     def test_skill_status_agent_all_spans_registry(self) -> None:
         registry = SkillRegistry(self.paths)
         declared = BackendRegistry(self.paths).names()
-        roots = {
-            name: Path(self.temporary.name) / "roots" / name for name in declared
-        }
+        roots = {name: Path(self.temporary.name) / "roots" / name for name in declared}
         with _redirected_skills_roots(roots):
             status = registry.status("ctf-web", "all")
         self.assertEqual({entry["agent"] for entry in status}, set(declared))

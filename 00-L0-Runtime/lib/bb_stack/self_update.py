@@ -45,7 +45,9 @@ class SelfUpdateManager:
         selected_profile = (
             profile
             if profile is not None
-            else None if check_only else self._saved_profile()
+            else None
+            if check_only
+            else self._saved_profile()
         )
         if check_only or dry_run:
             before = self._git_output("rev-parse", "HEAD")
@@ -53,8 +55,10 @@ class SelfUpdateManager:
                 remote, selected_branch, dry_run=dry_run
             )
             relationship = (
-                "current" if before == remote_commit else "unknown_without_fetch"
-            ) if dry_run else self._relationship(before, remote_commit)
+                ("current" if before == remote_commit else "unknown_without_fetch")
+                if dry_run
+                else self._relationship(before, remote_commit)
+            )
             common = {
                 "schema_version": 1,
                 "operation": "stack-source-update",
@@ -267,9 +271,7 @@ class SelfUpdateManager:
             "status", "--porcelain=v1", "--untracked-files=normal"
         )
         tracked_changes = [
-            line
-            for line in status.splitlines()
-            if line and not line.startswith("?? ")
+            line for line in status.splitlines() if line and not line.startswith("?? ")
         ]
         if tracked_changes:
             raise StackError(message)
@@ -285,9 +287,7 @@ class SelfUpdateManager:
         if completed.returncode != 0:
             raise StackError(f"Git remote does not exist: {remote}")
 
-    def _read_remote_commit(
-        self, remote: str, branch: str, *, dry_run: bool
-    ) -> str:
+    def _read_remote_commit(self, remote: str, branch: str, *, dry_run: bool) -> str:
         if dry_run:
             completed = self._git(
                 "ls-remote",
@@ -375,8 +375,7 @@ class SelfUpdateManager:
             )
         except subprocess.TimeoutExpired as error:
             raise CommandError(
-                "updated bootstrap timed out after "
-                f"{BOOTSTRAP_TIMEOUT_SECONDS} seconds"
+                f"updated bootstrap timed out after {BOOTSTRAP_TIMEOUT_SECONDS} seconds"
             ) from error
         except OSError as error:
             raise CommandError(f"failed to start updated bootstrap: {error}") from error

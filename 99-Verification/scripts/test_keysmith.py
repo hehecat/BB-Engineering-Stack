@@ -44,7 +44,9 @@ class KeysmithAdapterTests(unittest.TestCase):
 
     def test_source_override_and_validation(self) -> None:
         with patch.dict(os.environ, {"BB_KEYSMITH_SOURCE": str(self.source)}):
-            self.assertEqual(self.adapter.source(fetch=False).resolve(), self.source.resolve())
+            self.assertEqual(
+                self.adapter.source(fetch=False).resolve(), self.source.resolve()
+            )
 
         invalid = Path(self.temporary.name) / "invalid"
         invalid.mkdir()

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
-import json
 import fcntl
+import json
 import os
 import subprocess
 import tempfile
@@ -76,8 +76,8 @@ class SelfUpdateManagerTests(unittest.TestCase):
             "#!/bin/sh\n"
             "set -eu\n"
             'mkdir -p "$BB_CONFIG_HOME"\n'
-            f"printf '{release} %s\\n' \"$*\" >> \"$BB_CONFIG_HOME/bootstrap.log\"\n"
-            f"printf '{{\"schema_version\":1,\"release\":\"{release}\"}}\\n'\n",
+            f'printf \'{release} %s\\n\' "$*" >> "$BB_CONFIG_HOME/bootstrap.log"\n'
+            f'printf \'{{"schema_version":1,"release":"{release}"}}\\n\'\n',
             encoding="utf-8",
         )
         bootstrap.chmod(0o755)
@@ -107,13 +107,17 @@ class SelfUpdateManagerTests(unittest.TestCase):
         with self.assertRaisesRegex(StackError, "Git repository"):
             SelfUpdateManager(paths).update(profile="minimal", check_only=True)
 
-    def test_rejects_conflicting_non_refresh_modes_at_the_manager_boundary(self) -> None:
+    def test_rejects_conflicting_non_refresh_modes_at_the_manager_boundary(
+        self,
+    ) -> None:
         with self.assertRaisesRegex(ValidationError, "mutually exclusive"):
             SelfUpdateManager(self.paths).update(check_only=True, dry_run=True)
 
     def test_check_allows_a_dirty_source_tree_without_mutation(self) -> None:
         (self.source / "stack.yaml").write_text("local edit\n", encoding="utf-8")
-        result = SelfUpdateManager(self.paths).update(profile="minimal", check_only=True)
+        result = SelfUpdateManager(self.paths).update(
+            profile="minimal", check_only=True
+        )
         self.assertEqual(result["state"], "current")
         self.assertEqual((self.source / "stack.yaml").read_text(), "local edit\n")
 
@@ -241,7 +245,9 @@ class SelfUpdateManagerTests(unittest.TestCase):
                 SelfUpdateManager(self.paths).update(profile="minimal")
         self.assertFalse((self.source / ".git/FETCH_HEAD").exists())
 
-    def test_check_reports_remote_update_without_changing_source_or_workspace(self) -> None:
+    def test_check_reports_remote_update_without_changing_source_or_workspace(
+        self,
+    ) -> None:
         remote_commit = self._publish_update()
         before = self._git(self.source, "rev-parse", "HEAD")
 
@@ -261,9 +267,7 @@ class SelfUpdateManagerTests(unittest.TestCase):
         remote_commit = self._publish_update()
         before = self._git(self.source, "rev-parse", "HEAD")
 
-        result = SelfUpdateManager(self.paths).update(
-            profile="minimal", dry_run=True
-        )
+        result = SelfUpdateManager(self.paths).update(profile="minimal", dry_run=True)
 
         self.assertEqual(result["state"], "remote_differs")
         self.assertEqual(result["relationship"], "unknown_without_fetch")
@@ -272,7 +276,9 @@ class SelfUpdateManagerTests(unittest.TestCase):
         self.assertFalse((self.source / ".git/FETCH_HEAD").exists())
         self.assertFalse((self.paths.config_home / "bootstrap.log").exists())
 
-    def test_fast_forwards_then_runs_the_updated_bootstrap_in_a_child_process(self) -> None:
+    def test_fast_forwards_then_runs_the_updated_bootstrap_in_a_child_process(
+        self,
+    ) -> None:
         remote_commit = self._publish_update()
 
         result = SelfUpdateManager(self.paths).update(profile="minimal")
@@ -354,7 +360,9 @@ class SelfUpdateManagerTests(unittest.TestCase):
         with (
             patch(
                 "bb_stack.self_update.subprocess.run",
-                side_effect=subprocess.TimeoutExpired(["bootstrap"], BOOTSTRAP_TIMEOUT_SECONDS),
+                side_effect=subprocess.TimeoutExpired(
+                    ["bootstrap"], BOOTSTRAP_TIMEOUT_SECONDS
+                ),
             ) as run,
             self.assertRaisesRegex(CommandError, "bootstrap timed out"),
         ):

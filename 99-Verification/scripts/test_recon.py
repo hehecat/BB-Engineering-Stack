@@ -139,7 +139,9 @@ class ReconManagerTests(unittest.TestCase):
         with self.assertRaisesRegex(ValidationError, "lifecycle is paused"):
             self.manager.run(self.engagement)
 
-    def test_run_creates_deterministic_artifacts_and_visible_optional_gaps(self) -> None:
+    def test_run_creates_deterministic_artifacts_and_visible_optional_gaps(
+        self,
+    ) -> None:
         required = set(self.manager.required_providers())
         with (
             patch.object(
@@ -179,9 +181,7 @@ class ReconManagerTests(unittest.TestCase):
         ):
             self.assertTrue((self.engagement / "recon" / relative).is_dir())
         status = (self.engagement / "STATUS.md").read_text(encoding="utf-8")
-        handoff = (self.engagement / "SESSION-HANDOFF.md").read_text(
-            encoding="utf-8"
-        )
+        handoff = (self.engagement / "SESSION-HANDOFF.md").read_text(encoding="utf-8")
         self.assertIn("<!-- bb-recon:start -->", status)
         self.assertIn("Recon coverage", handoff)
 
@@ -214,11 +214,21 @@ class ReconManagerTests(unittest.TestCase):
             report = self.manager.status(self.engagement)
 
         actions = report["recommended_actions"]
-        providers = {item.get("provider") for item in actions if item["action"] == "install-provider"}
-        self.assertTrue({"arjun", "gau", "naabu", "puredns", "waybackurls"}.issubset(providers))
-        self.assertNotIn("arjun", {item["provider"] for item in report["coverage_gaps"]})
+        providers = {
+            item.get("provider")
+            for item in actions
+            if item["action"] == "install-provider"
+        }
+        self.assertTrue(
+            {"arjun", "gau", "naabu", "puredns", "waybackurls"}.issubset(providers)
+        )
+        self.assertNotIn(
+            "arjun", {item["provider"] for item in report["coverage_gaps"]}
+        )
 
-    def test_status_recommends_missing_required_provider_without_running_stage(self) -> None:
+    def test_status_recommends_missing_required_provider_without_running_stage(
+        self,
+    ) -> None:
         with patch.object(
             self.manager,
             "_provider_available",
@@ -229,13 +239,16 @@ class ReconManagerTests(unittest.TestCase):
         actions = [
             item
             for item in report["recommended_actions"]
-            if item["action"] == "install-provider" and item.get("provider") == "subfinder"
+            if item["action"] == "install-provider"
+            and item.get("provider") == "subfinder"
         ]
         self.assertEqual(len(actions), 1)
         self.assertTrue(actions[0]["required"])
         self.assertIn("passive-assets", actions[0]["stages"])
 
-    def test_status_recommends_search_key_configuration_without_install_action(self) -> None:
+    def test_status_recommends_search_key_configuration_without_install_action(
+        self,
+    ) -> None:
         with patch.object(self.manager, "_provider_available", return_value=False):
             report = self.manager.status(self.engagement)
 
@@ -246,12 +259,17 @@ class ReconManagerTests(unittest.TestCase):
         }
         self.assertEqual(actions["exa"]["environment_variable"], "EXA_API_KEY")
         self.assertEqual(actions["tavily"]["environment_variable"], "TAVILY_API_KEY")
-        self.assertEqual(actions["brave"]["environment_variable"], "BRAVE_SEARCH_API_KEY")
-        self.assertNotIn("exa", {
-            item.get("provider")
-            for item in report["recommended_actions"]
-            if item["action"] == "install-provider"
-        })
+        self.assertEqual(
+            actions["brave"]["environment_variable"], "BRAVE_SEARCH_API_KEY"
+        )
+        self.assertNotIn(
+            "exa",
+            {
+                item.get("provider")
+                for item in report["recommended_actions"]
+                if item["action"] == "install-provider"
+            },
+        )
 
     def test_resume_only_retries_unfinished_work(self) -> None:
         available = set(self.manager.required_providers()) - {"subfinder"}
@@ -293,7 +311,9 @@ class ReconManagerTests(unittest.TestCase):
             self.assertEqual(calls.count(provider), completed_before.count(provider))
         self.assertEqual(calls.count("subfinder"), 1)
 
-    def test_rerun_cascades_to_dependents_without_repeating_unrelated_stages(self) -> None:
+    def test_rerun_cascades_to_dependents_without_repeating_unrelated_stages(
+        self,
+    ) -> None:
         required = set(self.manager.required_providers())
         with (
             patch.object(
@@ -340,7 +360,10 @@ class ReconManagerTests(unittest.TestCase):
         ):
             self.manager.run(self.engagement)
 
-        calls = {(call.args[0], tuple(call.args[1])) for call in self.data.ensure.call_args_list}
+        calls = {
+            (call.args[0], tuple(call.args[1]))
+            for call in self.data.ensure.call_args_list
+        }
         self.assertIn(("seclists", ("dns",)), calls)
         self.assertIn(("seclists", ("web",)), calls)
         self.assertIn(("trickest-wordlists", ("recon",)), calls)
@@ -352,8 +375,7 @@ class ReconManagerTests(unittest.TestCase):
             "example.invalid\nsecond.example.net\n", encoding="utf-8"
         )
         (recon / "urls/urls.txt").write_text(
-            "https://example.invalid/app.js\n"
-            "https://example.invalid/index.html\n",
+            "https://example.invalid/app.js\nhttps://example.invalid/index.html\n",
             encoding="utf-8",
         )
         output = recon / "inventory/provider.out"
@@ -510,7 +532,6 @@ class ReconManagerTests(unittest.TestCase):
             self.assertFalse(self.manager._provider_available("puredns"))
             self.assertFalse(self.manager._provider_available("subfinder"))
 
-
     def test_open_pipe_stdin_is_reserved_for_providers_that_are_fed(self) -> None:
         # An open-but-empty pipe reads as EOF, and a tool that accepts both a
         # list file and stdin then prefers the pipe and reports no input --
@@ -582,7 +603,9 @@ class ReconManagerTests(unittest.TestCase):
         self.assertEqual(result["error"], "BBOT did not create output.json")
         self.assertFalse(output.exists())
 
-    def test_subfinder_timeout_promotes_only_the_current_attempt_as_partial(self) -> None:
+    def test_subfinder_timeout_promotes_only_the_current_attempt_as_partial(
+        self,
+    ) -> None:
         self.manager._ensure_layout(self.engagement)
         recon = self.engagement / "recon"
         output = recon / "inventory/passive-assets.subfinder.txt"
@@ -674,9 +697,7 @@ class ReconManagerTests(unittest.TestCase):
             return FakeProviderProcess(stdout="fresh.example.invalid\n")
 
         with patch("bb_stack.recon.subprocess.Popen", side_effect=fake_popen):
-            result = self.manager._execute_provider(
-                "assetfinder", command, output, log
-            )
+            result = self.manager._execute_provider("assetfinder", command, output, log)
 
         self.assertEqual(result["state"], "completed")
         self.assertEqual(len(launches), 1)
@@ -1008,7 +1029,9 @@ class ReconManagerTests(unittest.TestCase):
                 signal_id=signal["id"],
             )
         updated = self.manager.status(self.engagement)
-        consumed = next(item for item in updated["signals"] if item["id"] == signal["id"])
+        consumed = next(
+            item for item in updated["signals"] if item["id"] == signal["id"]
+        )
         self.assertEqual(consumed["state"], "expanded")
         self.assertEqual(consumed["branch_id"], branch["id"])
 

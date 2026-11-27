@@ -27,6 +27,19 @@ class BrowserRuntimeManager:
         self.paths = paths
 
     @staticmethod
+    def _log_excerpt(log_path: Path, max_lines: int = 20, max_chars: int = 2000) -> str:
+        try:
+            content = log_path.read_text(encoding="utf-8", errors="replace").strip()
+        except OSError:
+            return ""
+        if not content:
+            return ""
+        tail = "\n".join(content.splitlines()[-max_lines:])
+        if len(tail) > max_chars:
+            tail = tail[-max_chars:]
+        return tail
+
+    @staticmethod
     def _state_path(engagement: Path) -> Path:
         return engagement / ".bb-stack" / "browser" / "runtime.json"
 
@@ -43,8 +56,14 @@ class BrowserRuntimeManager:
 
         env = self.paths.environment(engagement / "artifacts")
         env["PATH"] = self.paths.runtime_path()
+        configured_browser = env.get("BB_CHROMIUM_BIN", "").strip()
         chromium = (
-            shutil.which("chromium", path=env["PATH"])
+            (
+                shutil.which(configured_browser, path=env["PATH"])
+                if configured_browser
+                else None
+            )
+            or shutil.which("chromium", path=env["PATH"])
             or shutil.which("chromium-browser", path=env["PATH"])
             or shutil.which("google-chrome", path=env["PATH"])
         )
@@ -53,6 +72,7 @@ class BrowserRuntimeManager:
                 "Chromium or Chrome is required for managed browser work"
             )
 
+        self.paths.home.mkdir(parents=True, exist_ok=True)
         runtime_dir = engagement / ".bb-stack" / "browser"
         profile_dir = runtime_dir / "profile"
         log_path = engagement / "artifacts" / "browser" / "chromium-cdp.log"
@@ -86,12 +106,14 @@ class BrowserRuntimeManager:
                 if self._endpoint_ready(port):
                     break
                 if self._child_exited(pid):
-                    raise CommandError(f"Chromium CDP exited early; inspect {log_path}")
+                    excerpt = self._log_excerpt(log_path)
+                    message = f"Chromium CDP exited early; inspect {log_path}"
+                    raise CommandError(f"{message}\n{excerpt}" if excerpt else message)
                 time.sleep(0.2)
             else:
-                raise CommandError(
-                    f"Chromium CDP did not become ready; inspect {log_path}"
-                )
+                excerpt = self._log_excerpt(log_path)
+                message = f"Chromium CDP did not become ready; inspect {log_path}"
+                raise CommandError(f"{message}\n{excerpt}" if excerpt else message)
 
             browser_url = f"http://{self.HOST}:{port}"
             state = {
@@ -108,6 +130,8 @@ class BrowserRuntimeManager:
         except Exception:
             state_path.unlink(missing_ok=True)
             self._terminate_owned(pid)
+            if hasattr(process, "poll"):
+                process.poll()
             raise
         return self.status(engagement) | {"state": "started"}
 

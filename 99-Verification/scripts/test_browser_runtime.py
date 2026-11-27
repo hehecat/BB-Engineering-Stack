@@ -26,6 +26,7 @@ class BrowserRuntimeTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory(prefix="bb-browser-runtime-")
         base = Path(self.temporary.name)
+        (base / "home").mkdir(parents=True, exist_ok=True)
         self.paths = StackPaths(
             ROOT,
             base / "home",
@@ -290,6 +291,40 @@ class BrowserRuntimeTests(unittest.TestCase):
         terminate.assert_called_once_with(43210)
         self.assertFalse(manager._state_path(engagement).exists())
 
+    def test_start_respects_bb_chromium_bin_and_includes_log_excerpt(self) -> None:
+        engagement = EngagementManager(self.paths).create(
+            "browser-env-bin", "https://env.invalid", workflow="analysis"
+        )
+        manager = BrowserRuntimeManager(self.paths)
+        log_path = engagement / "artifacts" / "browser" / "chromium-cdp.log"
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        log_path.write_text("line1\nFATAL: sandbox blocked\n", encoding="utf-8")
+
+        def fake_which(command: str, path: str | None = None) -> str | None:
+            if command == "custom-chrome":
+                return "/opt/custom/chrome"
+            return None
+
+        with (
+            patch.dict(os.environ, {"BB_CHROMIUM_BIN": "custom-chrome"}, clear=False),
+            patch("bb_stack.browser.shutil.which", side_effect=fake_which),
+            patch(
+                "bb_stack.browser.ConfigurationManager.effective",
+                return_value={"BB_PROXY_MODE": "none", "BB_HTTP_PROXY": ""},
+            ),
+            patch.object(manager, "_allocate_port", return_value=49152),
+            patch(
+                "bb_stack.browser.subprocess.Popen",
+                return_value=SimpleNamespace(pid=43210),
+            ) as popen,
+            patch.object(manager, "_endpoint_ready", return_value=False),
+            patch.object(manager, "_child_exited", return_value=True),
+            patch.object(manager, "_terminate_owned"),
+            self.assertRaisesRegex(CommandError, "FATAL: sandbox blocked"),
+        ):
+            manager.start(engagement)
+        self.assertEqual(popen.call_args.args[0][0], "/opt/custom/chrome")
+
     def test_global_status_and_stop_aggregate_managed_instances(self) -> None:
         first = EngagementManager(self.paths).create(
             "browser-global-one", "https://one.invalid", workflow="analysis"
@@ -352,9 +387,11 @@ class BrowserRuntimeTests(unittest.TestCase):
     def test_managed_cdp_serves_real_cli_calls(self) -> None:
         env = self.paths.environment()
         env["PATH"] = self.paths.runtime_path()
+        configured = env.get("BB_CHROMIUM_BIN", "").strip()
+        candidates = (configured,) if configured else ()
         if not any(
             shutil.which(name, path=env["PATH"])
-            for name in ("chromium", "chromium-browser", "google-chrome")
+            for name in (*candidates, "chromium", "chromium-browser", "google-chrome")
         ):
             self.skipTest("Chromium is unavailable")
         cli = ROOT / ".runtime" / "node_modules" / ".bin" / "chrome-devtools"

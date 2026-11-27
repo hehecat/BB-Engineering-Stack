@@ -11,15 +11,16 @@ import shutil
 import signal
 import subprocess
 import time
+from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any
 from urllib.parse import urljoin, urlparse
 
 from .configuration import ConfigurationManager
 from .data import DataManager
-from .engagement import EngagementManager, PROTECTED_WORKFLOWS
+from .engagement import PROTECTED_WORKFLOWS, EngagementManager
 from .errors import CommandError, ValidationError
 from .io import atomic_write, dump_json, load_json, load_yaml
 from .paths import StackPaths
@@ -114,7 +115,9 @@ def _asnmap_resolver_args() -> list[str]:
     for value in _resolver_values():
         # A DoH URL without a scheme is what dnsx takes; asnmap needs the
         # prefix. Anything already prefixed passes through untouched.
-        values.append(f"doh:{value}" if value.startswith(("https://", "http://")) else value)
+        values.append(
+            f"doh:{value}" if value.startswith(("https://", "http://")) else value
+        )
     return ["-r", *values] if values else []
 
 
@@ -128,9 +131,7 @@ class ReconManager:
         self.paths = paths
         self.data_manager = data_manager or DataManager(paths)
         self.config_path = paths.root / "00-L0-Runtime" / "config" / "recon.yaml"
-        self.schema_path = (
-            paths.root / "00-L0-Runtime" / "config" / "recon.schema.json"
-        )
+        self.schema_path = paths.root / "00-L0-Runtime" / "config" / "recon.schema.json"
         self.config = load_yaml(self.config_path)
         validate(self.config, self.schema_path, "recon pipeline")
         # The machine's proxy decision, read once: every provider command is
@@ -156,7 +157,9 @@ class ReconManager:
         with self._lock(root):
             state = self._load_or_initialize(root, engagement_state, mode=mode)
             if state.get("closed_at"):
-                raise ValidationError("recon is closed; start a new Engagement to run again")
+                raise ValidationError(
+                    "recon is closed; start a new Engagement to run again"
+                )
             state["mode"] = mode
             state["state"] = "running"
             state["updated_at"] = _now()
@@ -262,10 +265,11 @@ class ReconManager:
                 if selected_signal is None:
                     raise ValidationError(f"unknown adaptive signal id: {signal_id}")
                 if selected_signal["state"] != "open":
-                    raise ValidationError(
-                        f"adaptive signal is not open: {signal_id}"
-                    )
-                if selected_signal["area"] != area or selected_signal["value"] != target:
+                    raise ValidationError(f"adaptive signal is not open: {signal_id}")
+                if (
+                    selected_signal["area"] != area
+                    or selected_signal["value"] != target
+                ):
                     raise ValidationError(
                         f"expansion does not match adaptive signal: {signal_id}"
                     )
@@ -303,7 +307,9 @@ class ReconManager:
                     "state": provider_state,
                     "command": result["command"],
                     "error": result["error"],
-                    "artifact": self._relative(root, output) if output.exists() else None,
+                    "artifact": self._relative(root, output)
+                    if output.exists()
+                    else None,
                     "log": self._relative(root, log),
                 }
                 if output.exists():
@@ -374,9 +380,7 @@ class ReconManager:
                     + ", ".join(sorted(unaccepted))
                 )
             open_signals = {
-                item["id"]
-                for item in state["signals"]
-                if item.get("state") == "open"
+                item["id"] for item in state["signals"] if item.get("state") == "open"
             }
             accepted_signals = set(accept_signals or [])
             unknown_signals = accepted_signals - open_signals
@@ -442,7 +446,9 @@ class ReconManager:
             stage = state["stages"][spec["id"]]
             if stage["state"] in TERMINAL_STAGE_STATES:
                 continue
-            dependencies = [state["stages"][name]["state"] for name in spec["depends_on"]]
+            dependencies = [
+                state["stages"][name]["state"] for name in spec["depends_on"]
+            ]
             if not all(item in TERMINAL_STAGE_STATES for item in dependencies):
                 stage["state"] = "pending"
                 continue
@@ -524,8 +530,8 @@ class ReconManager:
                 "completed" if result["returncode"] == 0 else "failed",
             )
             succeeded = provider_state == "completed"
-            usable_partial = (
-                provider_state == "partial" and result.get("artifact_usable", False)
+            usable_partial = provider_state == "partial" and result.get(
+                "artifact_usable", False
             )
             if not succeeded and not usable_partial:
                 stage["errors"].append(f"{provider}: {result['error']}")
@@ -662,9 +668,7 @@ class ReconManager:
         if process.returncode == 0:
             if uses_attempt and attempt.exists():
                 os.replace(attempt, output)
-            elif uses_attempt:
-                atomic_write(output, stdout)
-            elif provider != "bbot":
+            elif uses_attempt or provider != "bbot":
                 atomic_write(output, stdout)
         else:
             attempt.unlink(missing_ok=True)
@@ -731,7 +735,9 @@ class ReconManager:
         return True
 
     @staticmethod
-    def _reap_provider(process: subprocess.Popen[str], *, blocking: bool = False) -> None:
+    def _reap_provider(
+        process: subprocess.Popen[str], *, blocking: bool = False
+    ) -> None:
         if blocking:
             process.wait()
             return
@@ -783,7 +789,9 @@ class ReconManager:
         output: Path,
     ) -> list[str]:
         host = self._target_host(target)
-        base_url = target if target.startswith(("http://", "https://")) else f"https://{host}"
+        base_url = (
+            target if target.startswith(("http://", "https://")) else f"https://{host}"
+        )
         candidates = recon_root / "dns" / "candidates.txt"
         live_urls = recon_root / "services" / "live-urls.txt"
         scope_hosts = recon_root / "inventory" / "scope-hosts.txt"
@@ -1067,17 +1075,15 @@ class ReconManager:
         scope: dict[str, Any],
     ) -> None:
         scope_hosts = {
-            host
-            for target in targets
-            if (host := self._target_host(target))
+            host for target in targets if (host := self._target_host(target))
         }
         scope_urls = {
-            target
-            for target in targets
-            if target.startswith(("http://", "https://"))
+            target for target in targets if target.startswith(("http://", "https://"))
         }
         if stage == "scope":
-            self._write_lines(recon_root / "inventory" / "scope-targets.txt", set(targets))
+            self._write_lines(
+                recon_root / "inventory" / "scope-targets.txt", set(targets)
+            )
             self._write_lines(recon_root / "inventory" / "scope-hosts.txt", scope_hosts)
             self._write_lines(recon_root / "inventory" / "scope-urls.txt", scope_urls)
         if stage in {"dns-active", "dns-resolution", "web-probe", "network-services"}:
@@ -1091,7 +1097,9 @@ class ReconManager:
         if stage in {"crawl-archives", "javascript-api", "templates"}:
             live = recon_root / "services" / "live-urls.txt"
             if not live.exists():
-                fallback_urls = scope_urls or {f"https://{host}" for host in scope_hosts}
+                fallback_urls = scope_urls or {
+                    f"https://{host}" for host in scope_hosts
+                }
                 self._write_lines(live, fallback_urls)
 
     def _finalize_stage_artifacts(
@@ -1104,7 +1112,9 @@ class ReconManager:
         targets: list[str],
     ) -> None:
         outputs = [
-            Path(artifact) if Path(artifact).is_absolute() else recon_root.parent / artifact
+            Path(artifact)
+            if Path(artifact).is_absolute()
+            else recon_root.parent / artifact
             for artifact in stage["artifacts"]
         ]
         if stage_id == "passive-assets":
@@ -1134,9 +1144,7 @@ class ReconManager:
             in_scope = self._partition_discoveries(
                 recon_root, discovered, scope, source="dns-active"
             )
-            self._write_lines(
-                recon_root / "dns" / "active.txt", in_scope
-            )
+            self._write_lines(recon_root / "dns" / "active.txt", in_scope)
         elif stage_id == "web-probe":
             urls: set[str] = set()
             for path in outputs:
@@ -1153,7 +1161,9 @@ class ReconManager:
             for path in outputs:
                 if path.suffix == ".jsonl":
                     for item in self._read_json_lines(path):
-                        value = item.get("url") or item.get("request", {}).get("endpoint")
+                        value = item.get("url") or item.get("request", {}).get(
+                            "endpoint"
+                        )
                         if isinstance(value, str):
                             urls.add(value)
                 else:
@@ -1253,7 +1263,9 @@ class ReconManager:
             return "websocket", "api"
         if re.search(r"(?:^|[/_.-])graphql(?:[/?#]|$)", lowered):
             return "graphql-endpoint", "graphql"
-        if re.search(r"/(?:openapi|swagger)(?:[.-][^/?#]+)?\.(?:json|ya?ml)(?:[?#]|$)", lowered):
+        if re.search(
+            r"/(?:openapi|swagger)(?:[.-][^/?#]+)?\.(?:json|ya?ml)(?:[?#]|$)", lowered
+        ):
             return "api-schema", "api"
         if re.search(r"\.js\.map(?:[?#]|$)", lowered):
             return "source-map", "javascript"
@@ -1308,9 +1320,20 @@ class ReconManager:
     @staticmethod
     def _state_needs_migration(state: dict[str, Any]) -> bool:
         required = {
-            "schema_version", "engagement", "mode", "state", "created_at",
-            "updated_at", "closed_at", "close_reason", "stages", "branches",
-            "signals", "scope_candidates", "coverage_gaps", "recommended_actions",
+            "schema_version",
+            "engagement",
+            "mode",
+            "state",
+            "created_at",
+            "updated_at",
+            "closed_at",
+            "close_reason",
+            "stages",
+            "branches",
+            "signals",
+            "scope_candidates",
+            "coverage_gaps",
+            "recommended_actions",
         }
         if state.get("schema_version") != 1 or not required.issubset(state):
             return True
@@ -1319,10 +1342,15 @@ class ReconManager:
             stage_id not in stages for stage_id in BASELINE_STAGE_IDS
         ):
             return True
-        for signal in state.get("signals", []):
-            if not isinstance(signal, dict) or not {
-                "id", "type", "area", "value", "state", "source"
-            }.issubset(signal):
+        for entry in state.get("signals", []):
+            if not isinstance(entry, dict) or not {
+                "id",
+                "type",
+                "area",
+                "value",
+                "state",
+                "source",
+            }.issubset(entry):
                 return True
         return False
 
@@ -1356,38 +1384,72 @@ class ReconManager:
         state: dict[str, Any] = {
             "schema_version": 1,
             "engagement": str(legacy.get("engagement") or engagement_state["slug"]),
-            "mode": legacy.get("mode") if legacy.get("mode") in {"baseline", "adaptive"} else mode,
-            "state": legacy.get("state") if legacy.get("state") in {
-                "pending", "running", "blocked", "needs_agent_decision",
-                "baseline_completed", "completed", "closed_with_gaps",
-            } else "pending",
+            "mode": legacy.get("mode")
+            if legacy.get("mode") in {"baseline", "adaptive"}
+            else mode,
+            "state": legacy.get("state")
+            if legacy.get("state")
+            in {
+                "pending",
+                "running",
+                "blocked",
+                "needs_agent_decision",
+                "baseline_completed",
+                "completed",
+                "closed_with_gaps",
+            }
+            else "pending",
             "created_at": legacy.get("created_at") or timestamp,
             "updated_at": legacy.get("updated_at") or timestamp,
             "closed_at": legacy.get("closed_at"),
             "close_reason": legacy.get("close_reason"),
             "stages": {},
-            "branches": legacy.get("branches") if isinstance(legacy.get("branches"), list) else [],
+            "branches": legacy.get("branches")
+            if isinstance(legacy.get("branches"), list)
+            else [],
             "signals": [],
             "scope_candidates": [],
             "coverage_gaps": [],
             "recommended_actions": [],
         }
-        old_stages = legacy.get("stages") if isinstance(legacy.get("stages"), dict) else {}
+        old_stages = (
+            legacy.get("stages") if isinstance(legacy.get("stages"), dict) else {}
+        )
         for spec in self.config["stages"]:
             old = old_stages.get(spec["id"])
             if not isinstance(old, dict):
                 state["stages"][spec["id"]] = self._new_stages()[spec["id"]]
                 continue
             current = self._new_stages()[spec["id"]]
-            if old.get("state") in {"pending", "running", "completed", "partial", "blocked", "skipped"}:
+            if old.get("state") in {
+                "pending",
+                "running",
+                "completed",
+                "partial",
+                "blocked",
+                "skipped",
+            }:
                 current["state"] = old["state"]
-            current["attempts"] = old.get("attempts", 0) if isinstance(old.get("attempts", 0), int) and old.get("attempts", 0) >= 0 else 0
+            current["attempts"] = (
+                old.get("attempts", 0)
+                if isinstance(old.get("attempts", 0), int)
+                and old.get("attempts", 0) >= 0
+                else 0
+            )
             current["started_at"] = old.get("started_at")
             current["completed_at"] = old.get("completed_at")
-            current["missing"] = [item for item in old.get("missing", []) if isinstance(item, str)]
-            current["errors"] = [item for item in old.get("errors", []) if isinstance(item, str)]
-            current["artifacts"] = [item for item in old.get("artifacts", []) if isinstance(item, str)]
-            providers = old.get("providers") if isinstance(old.get("providers"), dict) else {}
+            current["missing"] = [
+                item for item in old.get("missing", []) if isinstance(item, str)
+            ]
+            current["errors"] = [
+                item for item in old.get("errors", []) if isinstance(item, str)
+            ]
+            current["artifacts"] = [
+                item for item in old.get("artifacts", []) if isinstance(item, str)
+            ]
+            providers = (
+                old.get("providers") if isinstance(old.get("providers"), dict) else {}
+            )
             for provider, detail in providers.items():
                 if not isinstance(provider, str) or not isinstance(detail, dict):
                     continue
@@ -1396,67 +1458,106 @@ class ReconManager:
                     provider_state = "failed"
                 item: dict[str, Any] = {
                     "state": provider_state,
-                    "error": detail.get("error") if isinstance(detail.get("error"), (str, type(None))) else str(detail.get("error")),
+                    "error": detail.get("error")
+                    if isinstance(detail.get("error"), (str, type(None)))
+                    else str(detail.get("error")),
                 }
                 if isinstance(detail.get("required"), bool):
                     item["required"] = detail["required"]
-                if isinstance(detail.get("command"), list) and all(isinstance(value, str) for value in detail["command"]):
+                if isinstance(detail.get("command"), list) and all(
+                    isinstance(value, str) for value in detail["command"]
+                ):
                     item["command"] = detail["command"]
-                if "artifact" in detail and isinstance(detail.get("artifact"), (str, type(None))):
+                if "artifact" in detail and isinstance(
+                    detail.get("artifact"), (str, type(None))
+                ):
                     item["artifact"] = detail.get("artifact")
                 if isinstance(detail.get("log"), str):
                     item["log"] = detail["log"]
                 current["providers"][provider] = item
             state["stages"][spec["id"]] = current
 
-        for index, signal in enumerate(legacy.get("signals", []), start=1):
-            if not isinstance(signal, dict):
+        for index, entry in enumerate(legacy.get("signals", []), start=1):
+            if not isinstance(entry, dict):
                 continue
-            value = signal.get("value", signal.get("target"))
-            signal_type = signal.get("type", signal.get("kind"))
-            if not isinstance(value, str) or not value or not isinstance(signal_type, str) or not signal_type:
+            value = entry.get("value", entry.get("target"))
+            signal_type = entry.get("type", entry.get("kind"))
+            if (
+                not isinstance(value, str)
+                or not value
+                or not isinstance(signal_type, str)
+                or not signal_type
+            ):
                 continue
-            state["signals"].append({
-                "id": str(signal.get("id") or f"S-{index:03d}"),
-                "type": signal_type,
-                "area": str(signal.get("area") or "web"),
-                "value": value,
-                "state": signal.get("state") if signal.get("state") in {"open", "expanded", "accepted"} else "open",
-                "source": str(signal.get("source") or "recon/state.json"),
-            })
+            state["signals"].append(
+                {
+                    "id": str(entry.get("id") or f"S-{index:03d}"),
+                    "type": signal_type,
+                    "area": str(entry.get("area") or "web"),
+                    "value": value,
+                    "state": entry.get("state")
+                    if entry.get("state") in {"open", "expanded", "accepted"}
+                    else "open",
+                    "source": str(entry.get("source") or "recon/state.json"),
+                }
+            )
         candidates = legacy.get("scope_candidates", [])
         if isinstance(candidates, list):
             for candidate in candidates:
-                if not isinstance(candidate, dict) or not isinstance(candidate.get("value"), str):
+                if not isinstance(candidate, dict) or not isinstance(
+                    candidate.get("value"), str
+                ):
                     continue
                 value = candidate["value"]
-                source = str(candidate.get("source") or "recon/inventory/candidates.jsonl")
+                source = str(
+                    candidate.get("source") or "recon/inventory/candidates.jsonl"
+                )
                 digest = hashlib.sha256(f"{value}\0{source}".encode()).hexdigest()[:12]
-                state["scope_candidates"].append({
-                    "id": str(candidate.get("id") or f"C-{digest}"),
-                    "value": value,
-                    "kind": candidate.get("kind") if candidate.get("kind") in {"host", "url", "other"} else ("url" if self._is_url(value) else "host"),
-                    "state": candidate.get("state") if candidate.get("state") in {"candidate", "accepted"} else "candidate",
-                    "source": source,
-                })
+                state["scope_candidates"].append(
+                    {
+                        "id": str(candidate.get("id") or f"C-{digest}"),
+                        "value": value,
+                        "kind": candidate.get("kind")
+                        if candidate.get("kind") in {"host", "url", "other"}
+                        else ("url" if self._is_url(value) else "host"),
+                        "state": candidate.get("state")
+                        if candidate.get("state") in {"candidate", "accepted"}
+                        else "candidate",
+                        "source": source,
+                    }
+                )
         for gap in legacy.get("coverage_gaps", []):
-            if not isinstance(gap, dict) or not all(isinstance(gap.get(key), str) for key in ("id", "stage", "provider")):
+            if not isinstance(gap, dict) or not all(
+                isinstance(gap.get(key), str) for key in ("id", "stage", "provider")
+            ):
                 continue
-            state["coverage_gaps"].append({
-                "id": gap["id"],
-                "stage": gap["stage"],
-                "provider": gap["provider"],
-                "impact": str(gap.get("impact") or "optional enrichment was not completed"),
-                "accepted": bool(gap.get("accepted", False)),
-            })
+            state["coverage_gaps"].append(
+                {
+                    "id": gap["id"],
+                    "stage": gap["stage"],
+                    "provider": gap["provider"],
+                    "impact": str(
+                        gap.get("impact") or "optional enrichment was not completed"
+                    ),
+                    "accepted": bool(gap.get("accepted", False)),
+                }
+            )
         actions = legacy.get("recommended_actions", [])
         if isinstance(actions, list):
             state["recommended_actions"] = [
-                {"action": item["action"], "reason": item["reason"], **{
-                    key: value for key, value in item.items() if key not in {"action", "reason"}
-                }}
+                {
+                    "action": item["action"],
+                    "reason": item["reason"],
+                    **{
+                        key: value
+                        for key, value in item.items()
+                        if key not in {"action", "reason"}
+                    },
+                }
                 for item in actions
-                if isinstance(item, dict) and isinstance(item.get("action"), str) and isinstance(item.get("reason"), str)
+                if isinstance(item, dict)
+                and isinstance(item.get("action"), str)
+                and isinstance(item.get("reason"), str)
             ]
         return state
 
@@ -1644,9 +1745,7 @@ class ReconManager:
         self._sync_control_files(root, state)
         return state
 
-    def _execution_gate(
-        self, engagement: Path
-    ) -> tuple[Path, dict[str, Any]]:
+    def _execution_gate(self, engagement: Path) -> tuple[Path, dict[str, Any]]:
         root = self.paths.engagement(engagement)
         state = EngagementManager(self.paths).validate(root)
         if state["workflow"] not in PROTECTED_WORKFLOWS:
@@ -1660,7 +1759,9 @@ class ReconManager:
     def _validate_pipeline(self) -> None:
         ids = [stage["id"] for stage in self.config["stages"]]
         if tuple(ids) != BASELINE_STAGE_IDS:
-            raise ValidationError("recon stage order does not match the baseline contract")
+            raise ValidationError(
+                "recon stage order does not match the baseline contract"
+            )
         if len(ids) != len(set(ids)):
             raise ValidationError("recon pipeline contains duplicate stage ids")
         seen: set[str] = set()
@@ -1787,9 +1888,7 @@ class ReconManager:
     def _replace_control_block(path: Path, block: str) -> None:
         content = path.read_text(encoding="utf-8")
         pattern = re.compile(
-            re.escape(CONTROL_BLOCK_START)
-            + r".*?"
-            + re.escape(CONTROL_BLOCK_END),
+            re.escape(CONTROL_BLOCK_START) + r".*?" + re.escape(CONTROL_BLOCK_END),
             flags=re.DOTALL,
         )
         if pattern.search(content):
@@ -1834,10 +1933,7 @@ class ReconManager:
 
     @staticmethod
     def _targets(engagement_state: dict[str, Any]) -> list[str]:
-        return [
-            str(item["pattern"])
-            for item in engagement_state["scope"]["in_scope"]
-        ]
+        return [str(item["pattern"]) for item in engagement_state["scope"]["in_scope"]]
 
     @staticmethod
     def _target_host(target: str) -> str:

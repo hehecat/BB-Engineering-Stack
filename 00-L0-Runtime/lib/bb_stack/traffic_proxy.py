@@ -194,7 +194,7 @@ def _body(message: Any, tapped: bytearray | None = None) -> tuple[bytes, bool]:
 def _duration_ms(start: Any, end: Any) -> int | None:
     if not isinstance(start, (int, float)) or not isinstance(end, (int, float)):
         return None
-    return max(0, int(round((float(end) - float(start)) * 1000)))
+    return max(0, round((float(end) - float(start)) * 1000))
 
 
 def _iso(timestamp: Any) -> str:
@@ -345,7 +345,7 @@ class TrafficRecorder:
             return default
         try:
             value = getattr(ctx.options, name, None)
-        except Exception:
+        except Exception:  # noqa: BLE001 - mitmproxy option access must not break proxy flow handling
             return default
         return value.strip() if isinstance(value, str) else default
 
@@ -391,7 +391,7 @@ class TrafficRecorder:
                     store = TrafficStore(Path(path).expanduser())
                 else:
                     store = store_for(StackPaths.discover(), slug)
-            except Exception as error:  # a bad path must not stop the proxy
+            except Exception as error:  # noqa: BLE001 - a bad path must not stop the proxy
                 self._disabled = f"cannot open traffic store: {error}"
                 LOG.error("traffic recording disabled: %s", self._disabled)
                 return None

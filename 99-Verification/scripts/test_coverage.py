@@ -75,7 +75,9 @@ class CoverageTests(unittest.TestCase):
 
     # -- helpers ---------------------------------------------------------
 
-    def write_inventory(self, rows: list[tuple[str, str]], *, name: str = "asset-inventory.md") -> None:
+    def write_inventory(
+        self, rows: list[tuple[str, str]], *, name: str = "asset-inventory.md"
+    ) -> None:
         lines = [INVENTORY_HEADER]
         for host, status in rows:
             lines.append(f"| `{host}` | {status} | title | note |\n")
@@ -86,7 +88,9 @@ class CoverageTests(unittest.TestCase):
     def write_findings(self, rows: list[tuple[str, str, str]]) -> None:
         lines = [FINDINGS_HEADER]
         for identifier, state, asset in rows:
-            lines.append(f"| {identifier} | {state} | title | {asset} | impact | ev | next |\n")
+            lines.append(
+                f"| {identifier} | {state} | title | {asset} | impact | ev | next |\n"
+            )
         notes = self.engagement / "notes"
         notes.mkdir(parents=True, exist_ok=True)
         (notes / "findings-live.md").write_text("".join(lines), encoding="utf-8")
@@ -142,9 +146,7 @@ class CoverageTests(unittest.TestCase):
     # -- inventory only --------------------------------------------------
 
     def test_inventory_only_is_all_untouched(self) -> None:
-        self.write_inventory(
-            [("www.example.test", "200"), ("api.example.test", "401")]
-        )
+        self.write_inventory([("www.example.test", "200"), ("api.example.test", "401")])
         report = assess(self.paths, self.slug)
         self.assertEqual(
             self.status_by_host(report),
@@ -182,9 +184,7 @@ class CoverageTests(unittest.TestCase):
     # -- traffic ---------------------------------------------------------
 
     def test_traffic_marks_asset_touched(self) -> None:
-        self.write_inventory(
-            [("www.example.test", "200"), ("api.example.test", "401")]
-        )
+        self.write_inventory([("www.example.test", "200"), ("api.example.test", "401")])
         self.record_flow("www.example.test")
         report = assess(self.paths, self.slug)
         self.assertEqual(
@@ -229,7 +229,10 @@ class CoverageTests(unittest.TestCase):
         )
         self.record_flow("live.example.test")
         self.write_leads(
-            [("H-001", "killed", "killed.example.test"), ("H-002", "queued", "live.example.test")]
+            [
+                ("H-001", "killed", "killed.example.test"),
+                ("H-002", "queued", "live.example.test"),
+            ]
         )
         report = assess(self.paths, self.slug)
         self.assertEqual(
@@ -238,9 +241,7 @@ class CoverageTests(unittest.TestCase):
         )
 
     def test_host_boundary_avoids_partial_matches(self) -> None:
-        self.write_inventory(
-            [("example.test", "200"), ("www.example.test", "200")]
-        )
+        self.write_inventory([("example.test", "200"), ("www.example.test", "200")])
         self.write_findings([("F-001", "closed", "sub.example.test")])
         report = assess(self.paths, self.slug)
         # `sub.example.test` must not conclude `example.test` (suffix) nor
@@ -299,9 +300,7 @@ class CoverageTests(unittest.TestCase):
         )
 
     def test_unresolved_lists_everything_not_concluded(self) -> None:
-        self.write_inventory(
-            [("www.example.test", "200"), ("api.example.test", "401")]
-        )
+        self.write_inventory([("www.example.test", "200"), ("api.example.test", "401")])
         self.record_flow("api.example.test")
         report = assess(self.paths, self.slug)
         self.assertEqual(
@@ -345,9 +344,13 @@ class CoverageTests(unittest.TestCase):
         db = self.engagement / "traffic" / "flows.db"
         digest = hashlib.sha256(db.read_bytes()).hexdigest()
 
-        before = sorted(p.relative_to(self.engagement) for p in self.engagement.rglob("*"))
+        before = sorted(
+            p.relative_to(self.engagement) for p in self.engagement.rglob("*")
+        )
         assess(self.paths, self.slug)
-        after = sorted(p.relative_to(self.engagement) for p in self.engagement.rglob("*"))
+        after = sorted(
+            p.relative_to(self.engagement) for p in self.engagement.rglob("*")
+        )
 
         self.assertEqual(before, after)
         self.assertEqual(hashlib.sha256(db.read_bytes()).hexdigest(), digest)
@@ -372,9 +375,7 @@ class CoverageTests(unittest.TestCase):
         self.assertEqual(result["report"], assess(self.paths, self.slug))
 
     def test_gate_evidenced_ratio_boundary_is_inclusive(self) -> None:
-        self.write_inventory(
-            [("www.example.test", "200"), ("api.example.test", "401")]
-        )
+        self.write_inventory([("www.example.test", "200"), ("api.example.test", "401")])
         self.record_flow("www.example.test")  # evidenced_ratio == 0.5
         meeting = gate(self.paths, self.slug, min_evidenced_ratio=0.5)
         self.assertTrue(meeting["passed"])
@@ -391,9 +392,7 @@ class CoverageTests(unittest.TestCase):
         self.assertIn("below", missed["failing"][0]["why"])
 
     def test_gate_max_untouched_boundary_is_inclusive(self) -> None:
-        self.write_inventory(
-            [("a.example.test", "200"), ("b.example.test", "200")]
-        )
+        self.write_inventory([("a.example.test", "200"), ("b.example.test", "200")])
         self.assertTrue(gate(self.paths, self.slug, max_untouched=2)["passed"])
         missed = gate(self.paths, self.slug, max_untouched=1)
         self.assertFalse(missed["passed"])
@@ -403,9 +402,7 @@ class CoverageTests(unittest.TestCase):
     def test_gate_max_unresolved_leads_counts_every_unconcluded_asset(self) -> None:
         # `unresolved` is broader than `untouched`: a touched-but-unconcluded
         # asset counts against the lead budget yet not against untouched.
-        self.write_inventory(
-            [("www.example.test", "200"), ("api.example.test", "401")]
-        )
+        self.write_inventory([("www.example.test", "200"), ("api.example.test", "401")])
         self.record_flow("www.example.test")
         self.assertTrue(gate(self.paths, self.slug, max_untouched=1)["passed"])
         missed = gate(self.paths, self.slug, max_unresolved_leads=1)
@@ -429,9 +426,7 @@ class CoverageTests(unittest.TestCase):
         self.assertIn("absent from the inventory", drift["checks"][0]["why"])
 
     def test_gate_fails_only_the_missed_checks(self) -> None:
-        self.write_inventory(
-            [("www.example.test", "200"), ("api.example.test", "401")]
-        )
+        self.write_inventory([("www.example.test", "200"), ("api.example.test", "401")])
         self.record_flow("www.example.test")
         result = gate(
             self.paths,
@@ -464,9 +459,8 @@ class CoverageTests(unittest.TestCase):
             {"max_incomplete_stages": -1},
             {"require_no_unmatched": "yes"},
         ):
-            with self.subTest(kwargs=kwargs):
-                with self.assertRaises(ValidationError):
-                    gate(self.paths, self.slug, **kwargs)
+            with self.subTest(kwargs=kwargs), self.assertRaises(ValidationError):
+                gate(self.paths, self.slug, **kwargs)
         with self.assertRaisesRegex(ValidationError, "unknown gate parameter"):
             gate(self.paths, self.slug, min_ratio=0.5)
 

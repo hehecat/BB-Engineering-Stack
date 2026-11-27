@@ -539,9 +539,7 @@ class UpdateManager:
                 raise ValidationError(
                     "candidate requires manual review and cannot be promoted"
                 )
-            validation["digest"] = self._candidate_content_digest(
-                component, candidate
-            )
+            validation["digest"] = self._candidate_content_digest(component, candidate)
             manifest["validation"] = validation
             manifest["state"] = "validated"
             manifest["validated_at"] = self._now()
@@ -606,7 +604,10 @@ class UpdateManager:
                 f"candidate {name} changed after approval; validate and approve it again"
             )
         validation = manifest.get("validation")
-        if not isinstance(validation, dict) or validation.get("digest") != content_digest:
+        if (
+            not isinstance(validation, dict)
+            or validation.get("digest") != content_digest
+        ):
             raise ValidationError(
                 f"candidate {name} validation record does not match the approved "
                 "content; validate and approve it again"
@@ -667,9 +668,7 @@ class UpdateManager:
                 f"candidate {name} backup is missing the Skill payload"
             )
         if component["checker"] == "npm" and not (backup / "package.json").is_file():
-            raise ValidationError(
-                f"candidate {name} backup is missing package.json"
-            )
+            raise ValidationError(f"candidate {name} backup is missing package.json")
         manifest["state"] = "rolling-back"
         dump_json(manifest_path, manifest)
         try:
@@ -952,7 +951,7 @@ class UpdateManager:
             re.MULTILINE,
         )
         updated, count = pattern.subn(
-            lambda match: match.group(0)[: -40] + revision, text
+            lambda match: match.group(0)[:-40] + revision, text
         )
         if count:
             path.write_text(updated, encoding="utf-8")

@@ -152,7 +152,9 @@ class EngagementManager:
         )
         authorization_status = authorization_status or "exempt"
         if authorization_status not in AUTHORIZATION_STATUSES:
-            raise ValidationError(f"unsupported authorization status: {authorization_status}")
+            raise ValidationError(
+                f"unsupported authorization status: {authorization_status}"
+            )
         state: dict[str, Any] = {
             "schema_version": 1,
             "slug": slug,
@@ -661,19 +663,17 @@ class EngagementManager:
     def validate(self, root: Path) -> dict[str, Any]:
         return self._load_engagement(root, check_slug=True)
 
-    def _load_engagement(
-        self, root: Path, *, check_slug: bool
-    ) -> dict[str, Any]:
+    def _load_engagement(self, root: Path, *, check_slug: bool) -> dict[str, Any]:
         root = root.expanduser().resolve()
         state_path = root / "engagement.yaml"
         if not state_path.is_file():
             raise ValidationError(f"missing engagement.yaml: {root}")
         state = load_yaml(state_path)
         authorization = state.get("authorization") or {}
-        if (
-            authorization.get("status") in {"user-asserted", "verified"}
-            and not authorization.get("source")
-        ):
+        if authorization.get("status") in {
+            "user-asserted",
+            "verified",
+        } and not authorization.get("source"):
             raise ValidationError(
                 f"engagement {state.get('slug', root.name)} requires an "
                 "authorization source for authorization status "
@@ -717,9 +717,7 @@ class EngagementManager:
             state = self.validate(root)
             if status not in AUTHORIZATION_STATUSES:
                 raise ValidationError(f"unsupported authorization status: {status}")
-            source = (
-                _validated_text(source, "authorization source") if source else None
-            )
+            source = _validated_text(source, "authorization source") if source else None
             if status in {"user-asserted", "verified"} and not source:
                 raise ValidationError(
                     f"authorization source is required for status {status}"

@@ -28,8 +28,8 @@ from bb_stack.policy import (
     BYPASS_MODE,
     DEFAULT_MODE,
     DENY,
-    Decision,
     READ_ONLY_MODE,
+    Decision,
     Rule,
     ToolPolicy,
     policy_for,
@@ -170,9 +170,7 @@ class ToolPatternTests(PolicyTestBase):
 
     def test_glob_pattern_matches(self) -> None:
         policy = ToolPolicy.from_mapping({"allow": ["mcp__traffic__*"]})
-        self.assertEqual(
-            policy.evaluate("mcp__traffic__read_flow", {}).behavior, ALLOW
-        )
+        self.assertEqual(policy.evaluate("mcp__traffic__read_flow", {}).behavior, ALLOW)
 
     def test_non_matching_pattern_falls_through_to_deny(self) -> None:
         policy = ToolPolicy.from_mapping({"allow": ["web(...)"]})
@@ -196,14 +194,16 @@ class ArgumentConditionTests(PolicyTestBase):
         policy = ToolPolicy.from_mapping(
             {"allow": [{"tool": "http", "when": {"arg_equals": {"method": "GET"}}}]}
         )
-        self.assertEqual(
-            policy.evaluate("http", {"method": "GET"}).behavior, ALLOW
-        )
+        self.assertEqual(policy.evaluate("http", {"method": "GET"}).behavior, ALLOW)
         self.assertEqual(policy.evaluate("http", {"method": "POST"}).behavior, DENY)
 
     def test_arg_in(self) -> None:
         policy = ToolPolicy.from_mapping(
-            {"allow": [{"tool": "http", "when": {"arg_in": {"scheme": ["http", "https"]}}}]}
+            {
+                "allow": [
+                    {"tool": "http", "when": {"arg_in": {"scheme": ["http", "https"]}}}
+                ]
+            }
         )
         self.assertEqual(policy.evaluate("http", {"scheme": "https"}).behavior, ALLOW)
         self.assertEqual(policy.evaluate("http", {"scheme": "ftp"}).behavior, DENY)
@@ -230,7 +230,9 @@ class ArgumentConditionTests(PolicyTestBase):
                 ]
             }
         )
-        self.assertEqual(policy.evaluate("http", {"method": "GET", "id": 1}).behavior, ALLOW)
+        self.assertEqual(
+            policy.evaluate("http", {"method": "GET", "id": 1}).behavior, ALLOW
+        )
         self.assertEqual(policy.evaluate("http", {"method": "GET"}).behavior, DENY)
 
 
@@ -248,9 +250,7 @@ class UpdatedInputTests(PolicyTestBase):
         )
         decision = policy.evaluate("shell", {"force": "--force", "cmd": "ls"})
         self.assertEqual(decision.behavior, ALLOW)
-        self.assertEqual(
-            decision.updated_input, {"cmd": "ls", "audit": True}
-        )
+        self.assertEqual(decision.updated_input, {"cmd": "ls", "audit": True})
 
     def test_original_arguments_are_not_mutated(self) -> None:
         policy = ToolPolicy.from_mapping(
@@ -313,7 +313,9 @@ class ConfirmationTests(PolicyTestBase):
         decision = policy.evaluate(
             "mutating_tool",
             {},
-            can_use_tool=lambda name, args: Decision(ALLOW, updated_input={"safe": True}),
+            can_use_tool=lambda name, args: Decision(
+                ALLOW, updated_input={"safe": True}
+            ),
         )
         self.assertEqual(decision.behavior, ALLOW)
         self.assertEqual(decision.updated_input, {"safe": True})
@@ -358,7 +360,9 @@ class FileLoadingTests(PolicyTestBase):
             "  - http\n"
         )
         policy = policy_for(self.paths, self.slug)
-        self.assertEqual(Path(policy.source).resolve(), (self.engagement / "policy.yaml").resolve())
+        self.assertEqual(
+            Path(policy.source).resolve(), (self.engagement / "policy.yaml").resolve()
+        )
         self.assertEqual(
             policy.evaluate("fetch", {"url": "http://x/admin"}).behavior, DENY
         )

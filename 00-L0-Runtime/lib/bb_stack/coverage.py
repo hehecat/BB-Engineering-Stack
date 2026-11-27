@@ -154,10 +154,8 @@ class _Record:
 
 def _split_row(line: str) -> list[str]:
     body = line.strip()
-    if body.startswith("|"):
-        body = body[1:]
-    if body.endswith("|"):
-        body = body[:-1]
+    body = body.removeprefix("|")
+    body = body.removesuffix("|")
     return [cell.strip() for cell in body.split("|")]
 
 
@@ -535,9 +533,7 @@ def assess(paths: StackPaths, slug: str) -> dict[str, Any]:
 def _gate_ratio(value: Any, name: str) -> float:
     """A declared ratio threshold, rejected unless it lies in ``[0, 1]``."""
     if isinstance(value, bool) or not isinstance(value, (int, float)):
-        raise ValidationError(
-            f"{name} must be a number in [0,1], got {value!r}"
-        )
+        raise ValidationError(f"{name} must be a number in [0,1], got {value!r}")
     number = float(value)
     if not 0.0 <= number <= 1.0:
         raise ValidationError(f"{name} must be in [0,1], got {value!r}")
@@ -547,9 +543,7 @@ def _gate_ratio(value: Any, name: str) -> float:
 def _gate_count(value: Any, name: str) -> int:
     """A declared count threshold, rejected unless it is non-negative."""
     if isinstance(value, bool) or not isinstance(value, int):
-        raise ValidationError(
-            f"{name} must be a non-negative integer, got {value!r}"
-        )
+        raise ValidationError(f"{name} must be a non-negative integer, got {value!r}")
     if value < 0:
         raise ValidationError(f"{name} must be non-negative, got {value!r}")
     return value
@@ -593,8 +587,7 @@ def gate(
     if unknown:
         names = ", ".join(sorted(unknown))
         raise ValidationError(
-            f"unknown gate parameter(s): {names}; known: "
-            + ", ".join(GATE_PARAMETERS)
+            f"unknown gate parameter(s): {names}; known: " + ", ".join(GATE_PARAMETERS)
         )
 
     report = assess(paths, slug)

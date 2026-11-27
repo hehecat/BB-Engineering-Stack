@@ -565,9 +565,7 @@ class EvaluationTests(unittest.TestCase):
         self.assertTrue(covered)
         for target in (
             SCORER_SOURCE,
-            Path(self.paths.root)
-            / "schema"
-            / "agent-evaluation-result.schema.json",
+            Path(self.paths.root) / "schema" / "agent-evaluation-result.schema.json",
             Path(self.paths.root) / "04-L4-Skills" / "skills.yaml",
         ):
             with self.subTest(target=str(target)):

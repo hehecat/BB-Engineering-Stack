@@ -22,7 +22,7 @@ import threading
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Self
 
 from .errors import ValidationError
 from .paths import StackPaths
@@ -162,7 +162,13 @@ def _decode_body(body: bytes, content_type: str) -> str:
     lowered = (content_type or "").lower()
     if any(
         marker in lowered
-        for marker in ("application/octet-stream", "image/", "video/", "audio/", "font/")
+        for marker in (
+            "application/octet-stream",
+            "image/",
+            "video/",
+            "audio/",
+            "font/",
+        )
     ):
         return ""
     for encoding in ("utf-8", "latin-1"):
@@ -326,7 +332,9 @@ class TrafficStore:
             parameters.append(until)
         where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
         query = (
-            "SELECT flows.* FROM flows" + joins + where
+            "SELECT flows.* FROM flows"
+            + joins
+            + where
             + " ORDER BY flows.started_at DESC, flows.id DESC LIMIT ?"
         )
         parameters.append(min(limit, 1000))
@@ -447,9 +455,7 @@ class TrafficStore:
             "hosts": totals["hosts"],
             "pending": totals["pending"],
             "by_client": {row["client"]: row["flows"] for row in per_client},
-            "by_status": {
-                str(row["status"]): row["flows"] for row in per_status
-            },
+            "by_status": {str(row["status"]): row["flows"] for row in per_status},
         }
 
     def diff(self, first_id: int, second_id: int) -> dict[str, Any]:
@@ -491,7 +497,7 @@ class TrafficStore:
         with self._lock:
             self._connection.close()
 
-    def __enter__(self) -> TrafficStore:
+    def __enter__(self) -> Self:
         return self
 
     def __exit__(self, *_: object) -> None:

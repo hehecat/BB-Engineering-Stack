@@ -151,8 +151,9 @@ class StatusTests(unittest.TestCase):
         clean["HTTP_PROXY"] = "http://127.0.0.1:7890"
         clean["HTTPS_PROXY"] = "http://127.0.0.1:7890"
         actions: list[dict[str, str]] = []
-        with patch.dict(os.environ, clean, clear=False), patch.object(
-            StackStatus, "_tcp_ready", return_value=True
+        with (
+            patch.dict(os.environ, clean, clear=False),
+            patch.object(StackStatus, "_tcp_ready", return_value=True),
         ):
             report = self.manager._proxy(
                 {"BB_PROXY_MODE": "http", "BB_HTTP_PROXY": "http://127.0.0.1:7890"},

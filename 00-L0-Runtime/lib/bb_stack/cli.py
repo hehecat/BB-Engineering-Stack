@@ -11,12 +11,13 @@ from pathlib import Path
 from typing import Any
 
 from . import __version__
-from .backends import BackendRegistry
 from .agents import AgentRoster
+from .backends import BackendRegistry
 from .browser import BrowserRuntimeManager
 from .capabilities import CapabilityRegistry
 from .configuration import ConfigurationManager
-from .continuous import STOP_FILE_NAME, run as continuous_run
+from .continuous import STOP_FILE_NAME
+from .continuous import run as continuous_run
 from .coverage import assess, gate
 from .data import DataManager
 from .engagement import EngagementManager
@@ -27,8 +28,10 @@ from .graph import (
     NODE_KINDS,
     SOURCE_NAMES,
     GraphStore,
-    build as build_graph,
     graph_for,
+)
+from .graph import (
+    build as build_graph,
 )
 from .io import load_yaml
 from .keysmith import KeysmithAdapter
@@ -39,9 +42,9 @@ from .portable import PortableManager
 from .profiles import ProfileRegistry
 from .proxy import (
     PROXY_MODES,
+)
+from .proxy import (
     check as proxy_check,
-    describe as proxy_describe,
-    environment as proxy_environment,
 )
 from .recon import BASELINE_STAGE_IDS, ReconManager
 from .runtime import RuntimeManager
@@ -227,8 +230,7 @@ def _format_guide(document: Mapping[str, Any]) -> str:
             lines.append("")
         lines.append(section["title"])
         lines.extend(
-            f"  {entry['command']} — {entry['when']}"
-            for entry in section["entries"]
+            f"  {entry['command']} — {entry['when']}" for entry in section["entries"]
         )
     return "\n".join(lines)
 
@@ -270,8 +272,10 @@ def _format_coverage(report: Mapping[str, Any]) -> str:
     """Least-covered-first ranking, one line per asset, then the totals."""
     totals = report["totals"]
     lines = [
-        f"{report['engagement']}: {totals['assets']} inventoried assets, "
-        f"{totals['traffic_hosts']} hosts seen in traffic"
+        (
+            f"{report['engagement']}: {totals['assets']} inventoried assets, "
+            f"{totals['traffic_hosts']} hosts seen in traffic"
+        )
     ]
     rows = [
         (
@@ -362,8 +366,7 @@ def _format_coverage_gate(result: Mapping[str, Any]) -> str:
     )
     if recon:
         reported += (
-            f" recon_stages={recon['stages']}"
-            f" recon_incomplete={recon['incomplete']}"
+            f" recon_stages={recon['stages']} recon_incomplete={recon['incomplete']}"
         )
     lines.append(reported)
     return "\n".join(lines)
@@ -377,8 +380,10 @@ def _suggest_targets(result: Mapping[str, Any]) -> str:
     that no role was inferred, because coverage carries no domain information.
     """
     lines = [
-        f"{result['engagement']}: {len(result['candidates'])} candidate target(s) "
-        f"of {result['available']} available, max_parallel={result['max_parallel']}"
+        (
+            f"{result['engagement']}: {len(result['candidates'])} candidate target(s) "
+            f"of {result['available']} available, max_parallel={result['max_parallel']}"
+        )
     ]
     for candidate in result["candidates"]:
         lines.append(
@@ -399,8 +404,10 @@ def _format_continuous(result: Mapping[str, Any]) -> str:
     has between rounds -- a prompt saying "until I say stop" has nowhere to land.
     """
     lines = [
-        f"{result['engagement']}: {result['round_count']} round(s) via "
-        f"{result['profile']} ({result['backend'] or 'default backend'})"
+        (
+            f"{result['engagement']}: {result['round_count']} round(s) via "
+            f"{result['profile']} ({result['backend'] or 'default backend'})"
+        )
     ]
     for record in result["rounds"]:
         if record.get("dry_run"):
@@ -409,7 +416,9 @@ def _format_continuous(result: Mapping[str, Any]) -> str:
             )
             continue
         status = (
-            "ok" if record.get("returncode") == 0 else f"exit {record.get('returncode')}"
+            "ok"
+            if record.get("returncode") == 0
+            else f"exit {record.get('returncode')}"
         )
         lines.append(
             f"  round {record['round']:<3} {status:<8} {record['seconds']:>6}s  "
@@ -788,7 +797,9 @@ def build_parser() -> argparse.ArgumentParser:
     recon_sub = recon.add_subparsers(dest="recon_command", required=True)
     recon_run = recon_sub.add_parser("run")
     recon_run.add_argument("engagement", nargs="?")
-    recon_run.add_argument("--mode", choices=["baseline", "adaptive"], default="adaptive")
+    recon_run.add_argument(
+        "--mode", choices=["baseline", "adaptive"], default="adaptive"
+    )
     recon_run.add_argument("--json", action="store_true")
     for action in ("resume", "status"):
         recon_action = recon_sub.add_parser(action)
@@ -1136,7 +1147,9 @@ def build_parser() -> argparse.ArgumentParser:
         help=f"marker whose presence stops the loop (default: <engagement>/{STOP_FILE_NAME})",
     )
     continuous.add_argument(
-        "--dry-run", action="store_true", help="print the first round's command, run nothing"
+        "--dry-run",
+        action="store_true",
+        help="print the first round's command, run nothing",
     )
     continuous.add_argument("--json", action="store_true")
 
@@ -1745,7 +1758,9 @@ def command(args: argparse.Namespace, paths: StackPaths) -> int:
             elif args.traffic_command == "diff":
                 emit(store.diff(args.first, args.second), args.json)
             else:
-                raise StackError(f"unhandled traffic subcommand: {args.traffic_command}")
+                raise StackError(
+                    f"unhandled traffic subcommand: {args.traffic_command}"
+                )
         return 0
     if args.command == "graph":
         if args.graph_command == "build":
