@@ -65,7 +65,9 @@ locks serialize stage, validate, approve, promote, and rollback operations.
 GitHub tree checks compare only the registered Skill subdirectory. A commit to
 another directory does not create an update. Git commit and release checks use
 the Git transport; API-backed future channels may use `GITHUB_TOKEN` or
-`GH_TOKEN` when present.
+`GH_TOKEN` when present. When a GitHub component declares `mirrors`, update
+checks and candidate archive staging query the primary `repository` first and
+automatically fall back to `mirrors` if the upstream repository is unavailable.
 
 Automatic stage, validation, promotion, and rollback currently cover:
 

@@ -268,6 +268,23 @@ class DataManagerTests(unittest.TestCase):
         self.assertIsNone(self.manager._git_output(self.paths.home, ["status"]))
         self.assertEqual(self.manager._sparse_paths(self.paths.home), [])
 
+    def test_mirror_fallback_for_install_and_update_check(self) -> None:
+        missing_primary = str(Path(self.temporary.name) / "missing-upstream.git")
+        self.document["datasets"]["demo"]["repository"] = missing_primary
+        self.document["datasets"]["demo"]["mirrors"] = [str(self.source)]
+
+        installed = self.manager.ensure("demo", ["alpha"])
+        self.assertEqual(installed["state"], "installed")
+        status = self.manager.dataset_status("demo", ["alpha"])
+        self.assertEqual(status["state"], "ready")
+        self.assertTrue(status["managed_source"])
+        self.assertEqual(status["mirrors"], [str(self.source)])
+
+        checked = self.manager.update_check("demo")
+        self.assertFalse(checked["items"]["demo"]["update_available"])
+        self.assertTrue(checked["items"]["demo"]["mirror_used"])
+        self.assertEqual(checked["items"]["demo"]["source"], str(self.source))
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

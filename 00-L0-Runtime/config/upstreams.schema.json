@@ -23,6 +23,11 @@
         "target": {"type": "string", "minLength": 1},
         "checker": {"enum": ["github-tree", "github-commit", "npm"]},
         "repository": {"type": "string", "format": "uri"},
+        "mirrors": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "string", "format": "uri"}
+        },
         "branch": {"type": "string", "minLength": 1},
         "subpath": {"type": "string", "minLength": 1},
         "current_revision": {"type": "string", "pattern": "^[0-9a-f]{40}$"},

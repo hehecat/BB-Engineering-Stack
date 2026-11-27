@@ -1082,6 +1082,71 @@ class RuntimeInstallerTests(unittest.TestCase):
                 "analysis", engagement=None, platform=None, claude_args=[], dry_run=True
             )
 
+    def test_git_data_and_archive_mirror_fallbacks(self) -> None:
+        mirror_repo = Path(self.temporary.name) / "mirror-repo"
+        mirror_repo.mkdir()
+        subprocess.run(
+            ["git", "-C", str(mirror_repo), "init", "--quiet", "--initial-branch=main"],
+            check=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(mirror_repo), "config", "user.name", "Test"],
+            check=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(mirror_repo), "config", "user.email", "t@example.invalid"],
+            check=True,
+        )
+        (mirror_repo / "README.md").write_text("ok\n", encoding="utf-8")
+        subprocess.run(["git", "-C", str(mirror_repo), "add", "."], check=True)
+        subprocess.run(
+            ["git", "-C", str(mirror_repo), "commit", "--quiet", "-m", "init"],
+            check=True,
+        )
+        revision = subprocess.check_output(
+            ["git", "-C", str(mirror_repo), "rev-parse", "HEAD"], text=True
+        ).strip()
+        destination = self.paths.runtime / "tools" / "mirror-git"
+        git_spec = {
+            "kind": "git-data",
+            "checks": [],
+            "repository": str(Path(self.temporary.name) / "missing-primary.git"),
+            "mirrors": [str(mirror_repo)],
+            "revision": revision,
+            "destination": str(destination),
+            "retry_attempts": 1,
+        }
+        self.manager._install_git_data(
+            "mirror-git", git_spec, {"PATH": self.paths.runtime_path()}
+        )
+        self.assertTrue((destination / "README.md").is_file())
+
+        mirror_dir = Path(self.temporary.name) / "artifact-mirror"
+        mirror_dir.mkdir()
+        payload = b"verified-archive-bytes"
+        sha256 = __import__("hashlib").sha256(payload).hexdigest()
+        (mirror_dir / "demo-1.0.tar.gz").write_bytes(payload)
+        bad_mirror = Path(self.temporary.name) / "bad-mirror"
+        bad_mirror.mkdir()
+        (bad_mirror / "demo-1.0.tar.gz").write_bytes(b"tampered")
+        arch = __import__("platform").machine()
+        archive_spec = {
+            "kind": "archive-binary",
+            "checks": ["demo"],
+            "binary": "demo",
+            "files": {
+                arch: {
+                    "archive": "demo-1.0.tar.gz",
+                    "url": (Path(self.temporary.name) / "missing.tar.gz").as_uri(),
+                    "mirrors": [(bad_mirror / "demo-1.0.tar.gz").as_uri()],
+                    "sha256": sha256,
+                }
+            },
+        }
+        with patch.dict(os.environ, {"BB_ARTIFACT_MIRROR": str(mirror_dir)}):
+            cached = self.manager._download_tool_archive("demo", archive_spec)
+        self.assertEqual(cached.read_bytes(), payload)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

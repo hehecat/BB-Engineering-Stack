@@ -15,6 +15,7 @@ skills:
     source: vendor/community/android-reverse-engineering
     provenance: simoneavogadro-snapshot
     repository: https://github.com/SimoneAvogadro/android-reverse-engineering-skill
+    mirrors: [https://github.com/hehecat/android-reverse-engineering-skill]
     revision: e8dde9d058badbd5a62265d5d23e81f0ea8f04dd
     license: Apache-2.0
   api-hacking: {role: specialist, source: vendor/community/api-hacking, provenance: local-snapshot}
@@ -30,7 +31,8 @@ skills:
     source: vendor/community/ctf-web
     provenance: ljagiello-ctf-skills-snapshot
     repository: https://github.com/ljagiello/ctf-skills
-    revision: c332c7be1b27cb64639a20124ac55ba916adef92
+    mirrors: [https://github.com/hehecat/ctf-skills]
+    revision: 20d182d9377f0467830f314bb0f843cae4dbf55e
   ctf-writeup: {role: delivery, source: vendor/community/ctf-writeup, provenance: local-snapshot}
   dast-automation: {role: automation, source: vendor/community/dast-automation, provenance: local-snapshot}
   file-reading: {role: specialist, source: vendor/community/file-reading, provenance: local-snapshot}
@@ -44,48 +46,56 @@ skills:
     source: vendor/community/ios-pentest
     provenance: ai-security-arsenal-snapshot
     repository: https://github.com/hardw00t/ai-security-arsenal
+    mirrors: [https://github.com/hehecat/ai-security-arsenal]
     revision: a1a68f7010a9c97b22336dcbcfde539c492a7109
   network-pentest:
     role: specialist
     source: vendor/community/network-pentest
     provenance: ai-security-arsenal-snapshot
     repository: https://github.com/hardw00t/ai-security-arsenal
+    mirrors: [https://github.com/hehecat/ai-security-arsenal]
     revision: a1a68f7010a9c97b22336dcbcfde539c492a7109
   cloud-security:
     role: specialist
     source: vendor/community/cloud-security
     provenance: ai-security-arsenal-snapshot
     repository: https://github.com/hardw00t/ai-security-arsenal
+    mirrors: [https://github.com/hehecat/ai-security-arsenal]
     revision: a1a68f7010a9c97b22336dcbcfde539c492a7109
   sast-orchestration:
     role: automation
     source: vendor/community/sast-orchestration
     provenance: ai-security-arsenal-snapshot
     repository: https://github.com/hardw00t/ai-security-arsenal
+    mirrors: [https://github.com/hehecat/ai-security-arsenal]
     revision: a1a68f7010a9c97b22336dcbcfde539c492a7109
   iac-security:
     role: specialist
     source: vendor/community/iac-security
     provenance: ai-security-arsenal-snapshot
     repository: https://github.com/hardw00t/ai-security-arsenal
+    mirrors: [https://github.com/hehecat/ai-security-arsenal]
     revision: a1a68f7010a9c97b22336dcbcfde539c492a7109
   container-security:
     role: specialist
     source: vendor/community/container-security
     provenance: ai-security-arsenal-snapshot
     repository: https://github.com/hardw00t/ai-security-arsenal
+    mirrors: [https://github.com/hehecat/ai-security-arsenal]
     revision: a1a68f7010a9c97b22336dcbcfde539c492a7109
   sca-security:
     role: specialist
     source: vendor/community/sca-security
     provenance: ai-security-arsenal-snapshot
     repository: https://github.com/hardw00t/ai-security-arsenal
+    mirrors: [https://github.com/hehecat/ai-security-arsenal]
     revision: a1a68f7010a9c97b22336dcbcfde539c492a7109
   threat-modeling:
     role: methodology
     source: vendor/community/threat-modeling
     provenance: ai-security-arsenal-snapshot
     repository: https://github.com/hardw00t/ai-security-arsenal
+    mirrors: [https://github.com/hehecat/ai-security-arsenal]
     revision: a1a68f7010a9c97b22336dcbcfde539c492a7109
   llm-security: {role: specialist, source: vendor/community/llm-security, provenance: local-snapshot}
   mfa-bypass: {role: specialist, source: vendor/community/mfa-bypass, provenance: local-snapshot}

@@ -49,11 +49,21 @@
               "properties": {
                 "archive": {"type": "string"},
                 "url": {"type": "string", "format": "uri"},
+                "mirrors": {
+                  "type": "array",
+                  "uniqueItems": true,
+                  "items": {"type": "string", "format": "uri"}
+                },
                 "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
               }
             }
           },
           "repository": {"type": "string"},
+          "mirrors": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {"type": "string", "format": "uri"}
+          },
           "revision": {"type": "string"},
           "destination": {"type": "string"},
           "sparse_paths": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},

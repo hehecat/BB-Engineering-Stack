@@ -884,6 +884,58 @@ class UpdateManagerTests(unittest.TestCase):
         )
         self.assertRegex(str(manifest["candidate_digest"]), r"^[0-9a-f]{64}$")
 
+    def test_github_check_and_stage_fall_back_to_mirrors(self) -> None:
+        component = self.component(
+            "github-commit",
+            repository="https://github.com/dead/upstream",
+            mirrors=["https://github.com/hehecat/mirror"],
+            branch="main",
+            current="a" * 40,
+        )
+
+        def remote_rev(repo: str, _branch: str) -> str:
+            if "dead/upstream" in repo:
+                raise StackError("upstream 404")
+            return "b" * 40
+
+        with patch.object(self.manager, "_git_remote_revision", side_effect=remote_rev):
+            checked = self.manager._check_one(component)
+        self.assertEqual(checked["status"], "update-available")
+        self.assertTrue(checked["mirror_used"])
+        self.assertEqual(checked["upstream"], "https://github.com/hehecat/mirror")
+
+        archive = Path(self.temporary.name) / "mirror-skill.tar.gz"
+        payload = b"---\nname: fixture\ndescription: fixture\n---\n\nFixture.\n"
+        with tarfile.open(archive, "w:gz") as handle:
+            info = tarfile.TarInfo("mirror-revision/skill/SKILL.md")
+            info.size = len(payload)
+            handle.addfile(info, BytesIO(payload))
+        candidate = Path(self.temporary.name) / "mirror-candidate"
+        candidate.mkdir()
+        tree_component = self.component(
+            "github-tree",
+            name="skill.fixture",
+            target="fixture",
+            repository="https://github.com/dead/upstream",
+            mirrors=["https://github.com/hehecat/mirror"],
+            subpath="skill",
+        )
+        manifest: dict[str, object] = {}
+
+        def download_with_fallback(url: str, destination: Path) -> None:
+            if "dead/upstream" in url:
+                raise OSError("upstream 404")
+            destination.write_bytes(archive.read_bytes())
+
+        with patch.object(self.manager, "_download", side_effect=download_with_fallback):
+            self.manager._stage_github_tree(
+                tree_component, "a" * 40, candidate, manifest
+            )
+        self.assertEqual(
+            manifest["source"],
+            "https://github.com/hehecat/mirror/tree/" + "a" * 40 + "/skill",
+        )
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
