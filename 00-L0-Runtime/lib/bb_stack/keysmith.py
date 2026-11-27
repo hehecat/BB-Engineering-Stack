@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import shutil
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -42,8 +43,25 @@ class KeysmithAdapter:
                     "Keysmith source is not cached; run keysmith install"
                 )
             source.parent.mkdir(parents=True, exist_ok=True)
-            self._run(["git", "clone", self.config["repository"], str(source)])
-            self._run(["git", "-C", str(source), "checkout", self.config["revision"]])
+            candidates = list(
+                dict.fromkeys(
+                    [self.config["repository"], *self.config.get("mirrors", [])]
+                )
+            )
+            last_error: CommandError | None = None
+            for repo_url in candidates:
+                try:
+                    self._run(["git", "clone", repo_url, str(source)])
+                    self._run(
+                        ["git", "-C", str(source), "checkout", self.config["revision"]]
+                    )
+                    last_error = None
+                    break
+                except CommandError as error:
+                    last_error = error
+                    shutil.rmtree(source, ignore_errors=True)
+            if last_error is not None:
+                raise last_error
         self._verify_source(source, require_revision=True)
         return source
 

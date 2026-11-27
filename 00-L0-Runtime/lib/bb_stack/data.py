@@ -129,10 +129,12 @@ class DataManager:
         revision = (
             self._git_output(destination, ["rev-parse", "HEAD"]) if managed else None
         )
+        allowed_remotes = {
+            self._normalize_repository(url)
+            for url in self._candidate_repositories(spec)
+        }
         remote_matches = bool(
-            remote
-            and self._normalize_repository(remote)
-            == self._normalize_repository(spec["repository"])
+            remote and self._normalize_repository(remote) in allowed_remotes
         )
         revision_matches = revision == spec["revision"]
         sparse_paths = self._sparse_paths(destination) if managed else []
@@ -162,6 +164,7 @@ class DataManager:
             "state": state,
             "destination": str(destination),
             "repository": spec["repository"],
+            "mirrors": list(spec.get("mirrors", [])),
             "expected_revision": spec["revision"],
             "current_revision": revision,
             "source_ready": source_ready,
@@ -270,26 +273,44 @@ class DataManager:
         items: dict[str, dict[str, Any]] = {}
         for name in selected:
             spec = self._dataset_spec(name, document)
-            output = self._run_capture(
-                [
-                    "git",
-                    "ls-remote",
-                    "--exit-code",
-                    spec["repository"],
-                    f"refs/heads/{spec['branch']}",
-                ],
-                timeout=int(spec.get("network_timeout_seconds", 600)),
-            )
+            timeout = int(spec.get("network_timeout_seconds", 600))
+            output: str | None = None
+            used_repo = spec["repository"]
+            last_error: CommandError | None = None
+            for candidate_repo in self._candidate_repositories(spec):
+                try:
+                    output = self._run_capture(
+                        [
+                            "git",
+                            "ls-remote",
+                            "--exit-code",
+                            candidate_repo,
+                            f"refs/heads/{spec['branch']}",
+                        ],
+                        timeout=timeout,
+                    )
+                    used_repo = candidate_repo
+                    last_error = None
+                    break
+                except CommandError as error:
+                    last_error = error
+            if last_error is not None or output is None:
+                assert last_error is not None
+                raise last_error
             fields = output.split()
             if len(fields) < 2 or len(fields[0]) != 40:
                 raise CommandError(f"unexpected git ls-remote output for {name}")
             latest = fields[0]
-            items[name] = {
+            entry: dict[str, Any] = {
                 "pinned_revision": spec["revision"],
                 "latest_revision": latest,
                 "update_available": latest != spec["revision"],
                 "branch": spec["branch"],
             }
+            if used_repo != spec["repository"]:
+                entry["source"] = used_repo
+                entry["mirror_used"] = True
+            items[name] = entry
         return {"schema_version": 1, "items": items}
 
     def _install(
@@ -306,6 +327,7 @@ class DataManager:
         backup = destination.with_name(f".{destination.name}.backup-{os.getpid()}")
         timeout = int(spec.get("network_timeout_seconds", 600))
         attempts = int(spec.get("retry_attempts", 3))
+        candidates = self._candidate_repositories(spec)
         try:
             self._run(["git", "init", "--quiet", str(stage)], timeout=30)
             self._run(
@@ -316,7 +338,7 @@ class DataManager:
                     "remote",
                     "add",
                     "origin",
-                    spec["repository"],
+                    candidates[0],
                 ],
                 timeout=30,
             )
@@ -339,29 +361,45 @@ class DataManager:
                     timeout=30,
                 )
             last_error: CommandError | None = None
-            for attempt in range(attempts):
-                try:
+            for index, candidate_repo in enumerate(candidates):
+                if index > 0:
                     self._run(
                         [
                             "git",
                             "-C",
                             str(stage),
-                            "fetch",
-                            "--quiet",
-                            "--depth",
-                            "1",
-                            "--filter=blob:none",
+                            "remote",
+                            "set-url",
                             "origin",
-                            spec["revision"],
+                            candidate_repo,
                         ],
-                        timeout=timeout,
+                        timeout=30,
                     )
-                    last_error = None
+                for attempt in range(attempts):
+                    try:
+                        self._run(
+                            [
+                                "git",
+                                "-C",
+                                str(stage),
+                                "fetch",
+                                "--quiet",
+                                "--depth",
+                                "1",
+                                "--filter=blob:none",
+                                "origin",
+                                spec["revision"],
+                            ],
+                            timeout=timeout,
+                        )
+                        last_error = None
+                        break
+                    except CommandError as error:
+                        last_error = error
+                        if attempt + 1 < attempts:
+                            time.sleep(min(2**attempt, 4))
+                if last_error is None:
                     break
-                except CommandError as error:
-                    last_error = error
-                    if attempt + 1 < attempts:
-                        time.sleep(min(2**attempt, 4))
             if last_error:
                 raise last_error
             self._run(
@@ -442,6 +480,10 @@ class DataManager:
         return sorted(
             {path for bundle in bundles for path in spec["bundles"][bundle]["paths"]}
         )
+
+    @staticmethod
+    def _candidate_repositories(spec: dict[str, Any]) -> list[str]:
+        return list(dict.fromkeys([spec["repository"], *spec.get("mirrors", [])]))
 
     @staticmethod
     def _normalize_repository(value: str) -> str:

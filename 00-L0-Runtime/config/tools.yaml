@@ -221,6 +221,8 @@ installers:
     checks: [massdns]
     brew: [massdns]
     repository: https://github.com/blechschmidt/massdns.git
+    mirrors:
+      - https://github.com/hehecat/massdns.git
     revision: ca8114164361f6a296399d8160bb07d55bdc4843
     destination: "${BB_STACK_ROOT}/.runtime/tools/massdns-1.1.0"
     build: [make]

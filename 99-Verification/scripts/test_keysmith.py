@@ -266,6 +266,37 @@ class KeysmithAdapterTests(unittest.TestCase):
             "user changed",
         )
 
+    def test_source_falls_back_to_configured_mirror(self) -> None:
+        cache = self.paths.config_home / "mirror-keysmith-cache"
+        self.adapter.config["cache_dir"] = str(cache)
+        self.adapter.config["repository"] = "https://example.invalid/dead.git"
+        self.adapter.config["mirrors"] = [
+            "https://github.com/hehecat/claude-keysmith.git"
+        ]
+        revision = self.adapter.config["revision"]
+
+        def run(command: list[str], *, capture: bool = False) -> object:
+            del capture
+            if command[1] == "clone":
+                if "dead.git" in command[2]:
+                    raise CommandError("primary repository unreachable")
+                cache.mkdir(parents=True)
+                (cache / "claude-instruct.py").write_text(
+                    "#!/usr/bin/env python3\n", encoding="utf-8"
+                )
+            return subprocess.CompletedProcess(command, 0)
+
+        completed = subprocess.CompletedProcess(
+            ["git"], 0, stdout=f"{revision}\n", stderr=""
+        )
+        with (
+            patch.dict(os.environ, {}, clear=True),
+            patch.object(self.adapter, "_run", side_effect=run),
+            patch("bb_stack.keysmith.subprocess.run", return_value=completed),
+        ):
+            fetched = self.adapter.source(fetch=True)
+        self.assertEqual(fetched, cache)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

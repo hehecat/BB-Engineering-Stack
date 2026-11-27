@@ -236,7 +236,7 @@ providers:
     kind: mcp
     locator:
       type: path
-      value: "${BB_STACK_ROOT}/.runtime/node_modules/chrome-devtools-mcp/build/src/bin/chrome-devtools-mcp.js"
+      value: "${BB_STACK_ROOT}/.runtime/node_modules/.bin/chrome-devtools-mcp"
       interpreter: node
     placement: shared-main
     side_effects: [network-request, browser-action, local-write]
@@ -248,7 +248,7 @@ providers:
       transport: stdio
       command: node
       args:
-        - "${BB_STACK_ROOT}/.runtime/node_modules/chrome-devtools-mcp/build/src/bin/chrome-devtools-mcp.js"
+        - "${BB_STACK_ROOT}/.runtime/node_modules/.bin/chrome-devtools-mcp"
         - "--browser-url=${BB_BROWSER_URL}"
         - --category-performance=false
         - --performance-crux=false
@@ -265,11 +265,16 @@ providers:
       interpreter: "${BB_STACK_ROOT}/.runtime/venv/bin/python"
     placement: shared-main
     side_effects: [local-read]
+    configuration:
+      required: true
+      env_all: [BB_TRAFFIC_DB]
     mcp:
       name: traffic
       transport: stdio
       command: "${BB_STACK_ROOT}/.runtime/venv/bin/python"
       args: ["${BB_STACK_ROOT}/05-L5-MCP-CLI/lib/traffic_mcp.py"]
+      env:
+        BB_TRAFFIC_DB: "${BB_TRAFFIC_DB}"
 
   webcrack:
     kind: cli

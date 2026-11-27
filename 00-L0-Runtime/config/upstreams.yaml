@@ -14,16 +14,20 @@ components:
     target: ctf-web
     checker: github-tree
     repository: https://github.com/ljagiello/ctf-skills
+    mirrors:
+      - https://github.com/hehecat/ctf-skills
     branch: main
     subpath: ctf-web
-    current_revision: c332c7be1b27cb64639a20124ac55ba916adef92
-    current_digest: a273727309d4e2dcc7fb23de04fbdffbdadd1255c84c1addeb0f655bc3e22ef8
+    current_revision: 20d182d9377f0467830f314bb0f843cae4dbf55e
+    current_digest: 0ecdd5492dfb2e01e11ebb4005ca0c061d49475d82d9a0866cad00d3fe183205
     license: MIT
   skill.ios-pentest:
     category: skills
     target: ios-pentest
     checker: github-tree
     repository: https://github.com/hardw00t/ai-security-arsenal
+    mirrors:
+      - https://github.com/hehecat/ai-security-arsenal
     branch: main
     subpath: skills/ios-pentest
     current_revision: a1a68f7010a9c97b22336dcbcfde539c492a7109
@@ -34,6 +38,8 @@ components:
     target: network-pentest
     checker: github-tree
     repository: https://github.com/hardw00t/ai-security-arsenal
+    mirrors:
+      - https://github.com/hehecat/ai-security-arsenal
     branch: main
     subpath: skills/network-pentest
     current_revision: a1a68f7010a9c97b22336dcbcfde539c492a7109
@@ -44,6 +50,8 @@ components:
     target: cloud-security
     checker: github-tree
     repository: https://github.com/hardw00t/ai-security-arsenal
+    mirrors:
+      - https://github.com/hehecat/ai-security-arsenal
     branch: main
     subpath: skills/cloud-security
     current_revision: a1a68f7010a9c97b22336dcbcfde539c492a7109
@@ -54,6 +62,8 @@ components:
     target: sast-orchestration
     checker: github-tree
     repository: https://github.com/hardw00t/ai-security-arsenal
+    mirrors:
+      - https://github.com/hehecat/ai-security-arsenal
     branch: main
     subpath: skills/sast-orchestration
     current_revision: a1a68f7010a9c97b22336dcbcfde539c492a7109
@@ -64,6 +74,8 @@ components:
     target: iac-security
     checker: github-tree
     repository: https://github.com/hardw00t/ai-security-arsenal
+    mirrors:
+      - https://github.com/hehecat/ai-security-arsenal
     branch: main
     subpath: skills/iac-security
     current_revision: a1a68f7010a9c97b22336dcbcfde539c492a7109
@@ -74,6 +86,8 @@ components:
     target: container-security
     checker: github-tree
     repository: https://github.com/hardw00t/ai-security-arsenal
+    mirrors:
+      - https://github.com/hehecat/ai-security-arsenal
     branch: main
     subpath: skills/container-security
     current_revision: a1a68f7010a9c97b22336dcbcfde539c492a7109
@@ -84,6 +98,8 @@ components:
     target: sca-security
     checker: github-tree
     repository: https://github.com/hardw00t/ai-security-arsenal
+    mirrors:
+      - https://github.com/hehecat/ai-security-arsenal
     branch: main
     subpath: skills/sca-security
     current_revision: a1a68f7010a9c97b22336dcbcfde539c492a7109
@@ -94,6 +110,8 @@ components:
     target: threat-modeling
     checker: github-tree
     repository: https://github.com/hardw00t/ai-security-arsenal
+    mirrors:
+      - https://github.com/hehecat/ai-security-arsenal
     branch: main
     subpath: skills/threat-modeling
     current_revision: a1a68f7010a9c97b22336dcbcfde539c492a7109
@@ -138,6 +156,8 @@ components:
     target: keysmith
     checker: github-commit
     repository: https://github.com/Jia-Ethan/claude-keysmith
+    mirrors:
+      - https://github.com/hehecat/claude-keysmith
     branch: main
-    current_revision: b3d8cc25331e8bbf2b9ccfdbdb658ee01f351663
+    current_revision: 4fbc7089673ec413e52259f51a15337a1038eaa0
     license: NOASSERTION

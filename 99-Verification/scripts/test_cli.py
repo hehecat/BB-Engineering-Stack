@@ -266,13 +266,47 @@ class CliTests(unittest.TestCase):
                 self.assertEqual(self.run_command(arguments), 0)
 
         browser = MagicMock()
+        browser.start.return_value = {"state": "started", "traffic_recording": True}
         browser.status.return_value = {"state": "stopped"}
         browser.stop.return_value = {"state": "stopped"}
-        with patch("bb_stack.cli.BrowserRuntimeManager", return_value=browser):
+        with (
+            patch("bb_stack.cli.BrowserRuntimeManager", return_value=browser),
+            patch(
+                "bb_stack.cli.StackPaths.engagement",
+                return_value=Path("/tmp/engaged"),
+            ),
+        ):
+            self.assertEqual(
+                self.run_command(
+                    ["browser", "start", "--engagement", "engaged", "--record-traffic"]
+                ),
+                0,
+            )
             self.assertEqual(self.run_command(["browser", "status"]), 0)
             self.assertEqual(self.run_command(["browser", "stop"]), 0)
+        browser.start.assert_called_once_with(Path("/tmp/engaged"), record_traffic=True)
         browser.status.assert_called_once_with(None)
         browser.stop.assert_called_once_with(None)
+
+        with patch(
+            "bb_stack.cli.inspect_artifact",
+            return_value={"schema_version": 1, "primary_format": "elf"},
+        ) as inspect_mock:
+            self.assertEqual(
+                self.run_command(
+                    [
+                        "artifact",
+                        "inspect",
+                        "/tmp/sample.bin",
+                        "--output",
+                        "/tmp/out",
+                        "--extract",
+                        "--json",
+                    ]
+                ),
+                0,
+            )
+        inspect_mock.assert_called_once()
 
     def test_recon_dispatch_covers_every_action(self) -> None:
         manager = MagicMock()
@@ -1308,6 +1342,8 @@ class CommandGuideTests(unittest.TestCase):
             "bb-stack data status",
             "bb-stack data ensure",
             "bb-stack skills install",
+            "bb-stack browser start",
+            "bb-stack artifact inspect",
         )
         for family in families:
             with self.subTest(family=family):

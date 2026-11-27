@@ -105,6 +105,19 @@ class CapabilityRegistry:
                 env["BB_CHROMIUM_BIN"] = chromium
         if artifact_root:
             engagement = artifact_root.resolve().parent
+            if (engagement / "engagement.yaml").is_file():
+                if not env.get("BB_ENGAGEMENT_ROOT"):
+                    env["BB_ENGAGEMENT_ROOT"] = str(engagement)
+                if not env.get("BB_TRAFFIC_DB"):
+                    env["BB_TRAFFIC_DB"] = str(engagement / "traffic" / "flows.db")
+                if not env.get("BB_ENGAGEMENT"):
+                    try:
+                        slug = load_yaml(engagement / "engagement.yaml").get("slug")
+                    except ValidationError:
+                        slug = None
+                    env["BB_ENGAGEMENT"] = (
+                        slug if isinstance(slug, str) and slug else engagement.name
+                    )
             state_path = engagement / ".bb-stack" / "browser" / "runtime.json"
             if state_path.is_file():
                 try:
@@ -114,6 +127,15 @@ class CapabilityRegistry:
                 browser_url = state.get("browser_url")
                 if isinstance(browser_url, str):
                     env["BB_BROWSER_URL"] = browser_url
+        if not env.get("BB_TRAFFIC_DB"):
+            target = env.get("BB_ENGAGEMENT") or env.get("BB_ENGAGEMENT_ROOT")
+            if target:
+                try:
+                    resolved = self.paths.engagement(target)
+                except Exception:  # noqa: BLE001 - invalid external env stays unset
+                    resolved = None
+                if resolved is not None:
+                    env["BB_TRAFFIC_DB"] = str(resolved / "traffic" / "flows.db")
         return env
 
     def provider_status(
@@ -286,6 +308,8 @@ class CapabilityRegistry:
                     "command": mcp["command"],
                     "args": mcp["args"],
                 }
+                if mcp.get("env"):
+                    server["env"] = dict(mcp["env"])
                 servers[mcp["name"]] = server
         document = {"mcpServers": servers}
         dump_json(output, document)
@@ -304,10 +328,15 @@ class CapabilityRegistry:
         results: dict[str, Any] = {}
         for name, server in servers.items():
             launch = {"command": server["command"], "args": server.get("args", [])}
+            probe_env = dict(env)
+            if isinstance(server.get("env"), dict):
+                probe_env.update(
+                    {str(key): str(value) for key, value in server["env"].items()}
+                )
             try:
                 completed = subprocess.run(
                     [node, str(probe), json.dumps(launch)],
-                    env=env,
+                    env=probe_env,
                     text=True,
                     capture_output=True,
                     timeout=timeout,

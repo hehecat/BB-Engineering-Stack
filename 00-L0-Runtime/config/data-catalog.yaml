@@ -3,7 +3,9 @@ schema_version: 1
 datasets:
   seclists:
     repository: https://github.com/danielmiessler/SecLists.git
-    revision: bfa9146e6d9d3ebb3d5d4a8096c60182da009204
+    mirrors:
+      - https://github.com/hehecat/SecLists.git
+    revision: 01bd31a91d11025e37c776b01edfe61c58dba784
     branch: master
     destination: "${BB_DATA_ROOT}/seclists"
     license: MIT
@@ -44,7 +46,9 @@ datasets:
 
   payloads-all-the-things:
     repository: https://github.com/swisskyrepo/PayloadsAllTheThings.git
-    revision: 83630e74eb354db306bddd4e665f00e662c18f97
+    mirrors:
+      - https://github.com/hehecat/PayloadsAllTheThings.git
+    revision: 08ea40e77db3f42ef8f20c65196f3936a19b6c86
     branch: master
     destination: "${BB_DATA_ROOT}/payloads-all-the-things"
     license: MIT
@@ -84,7 +88,9 @@ datasets:
 
   trickest-wordlists:
     repository: https://github.com/trickest/wordlists.git
-    revision: 673ce83a611bb564c4a9c2f1da1969f77a7004c1
+    mirrors:
+      - https://github.com/hehecat/wordlists.git
+    revision: d8a5a22d1f27948120a106690063384de9155025
     branch: main
     destination: "${BB_DATA_ROOT}/trickest-wordlists"
     license: MIT

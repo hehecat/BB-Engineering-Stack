@@ -10,6 +10,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 from . import __version__
+from .backends import BackendRegistry
 from .capabilities import CapabilityRegistry
 from .configuration import ConfigurationManager
 from .engagement import EngagementManager, normalize_target
@@ -240,6 +241,7 @@ class WorkspaceManager:
     def managed_paths(self) -> dict[str, Path]:
         return {
             "CLAUDE.md": self.paths.work_root / "CLAUDE.md",
+            "AGENTS.md": self.paths.work_root / "AGENTS.md",
             ".mcp.json": self.paths.work_root / ".mcp.json",
             ".claude/settings.json": (
                 self.paths.work_root / ".claude" / "settings.json"
@@ -374,9 +376,11 @@ class WorkspaceManager:
         mode: str | None,
         authorization_source: str | None = None,
         authorization_status: str | None = None,
+        backend: str | None = None,
     ) -> dict[str, Any]:
         if kind is not None and kind not in ROUTES:
             raise ValidationError(f"unknown workspace route kind: {kind}")
+        selected_backend = BackendRegistry(self.paths).selected(backend)
         manager = EngagementManager(self.paths)
         root: Path | None = None
         state: dict[str, Any] | None = None
@@ -472,7 +476,9 @@ class WorkspaceManager:
             rendered.l5_profile, root / "artifacts"
         )
         skill_registry = SkillRegistry(self.paths)
-        skill_status = skill_registry.status(rendered.skill_profile, "claude")
+        skill_status = skill_registry.status(
+            rendered.skill_profile, selected_backend.name
+        )
         required_skills = set(
             skill_registry.profile(rendered.skill_profile)["required"]
         )
@@ -485,9 +491,16 @@ class WorkspaceManager:
         repair_commands: list[str] = []
         # Task-first edition: the authorization field is informational only.
         # It never produces a repair command and never blocks routing.
-        if missing_skills or not capability_status["ready"]:
+        if not capability_status["ready"] or (
+            missing_skills and selected_backend.name == "claude"
+        ):
             repair_commands.append(
                 f"bb-stack bootstrap --profile {shlex.quote(rendered.skill_profile)}"
+            )
+        if missing_skills and selected_backend.name != "claude":
+            repair_commands.append(
+                f"bb-stack skills install --profile {shlex.quote(rendered.skill_profile)} "
+                f"--agent {shlex.quote(selected_backend.name)}"
             )
         workspace_status = self.status()
         if not workspace_status["ready"]:
@@ -498,10 +511,17 @@ class WorkspaceManager:
             root / "SESSION-HANDOFF.md",
             root / "STATUS.md",
         ]
+        strict_launch = (
+            f"bb-stack launch --profile {shlex.quote(profile_name)} "
+            f"--engagement {shlex.quote(state['slug'])}"
+        )
+        if selected_backend.name != "claude":
+            strict_launch += f" --backend {shlex.quote(selected_backend.name)}"
         return {
             "schema_version": 1,
             "ready": not repair_commands,
             "kind": kind,
+            "backend": selected_backend.name,
             "created": created,
             "engagement": str(root),
             "slug": state["slug"],
@@ -519,10 +539,7 @@ class WorkspaceManager:
             "project_mcp_servers": workspace_status["mcp_servers"],
             "profile_mcp_config": str(profile_mcp),
             "repair_commands": repair_commands,
-            "strict_launch": (
-                f"bb-stack launch --profile {shlex.quote(profile_name)} "
-                f"--engagement {shlex.quote(state['slug'])}"
-            ),
+            "strict_launch": strict_launch,
             "browser_start": (
                 "bb-stack browser start --engagement " + shlex.quote(state["slug"])
             ),
@@ -581,6 +598,7 @@ class WorkspaceManager:
             )
         return {
             "CLAUDE.md": router,
+            "AGENTS.md": router,
             ".mcp.json": json.dumps(mcp, indent=2, ensure_ascii=True) + "\n",
             ".claude/settings.json": (
                 json.dumps(settings, indent=2, ensure_ascii=True) + "\n"

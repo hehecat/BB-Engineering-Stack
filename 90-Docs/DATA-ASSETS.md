@@ -42,14 +42,16 @@ remain explicit.
 ## Preserve Integrity
 
 - Keep destinations below `$BB_DATA_ROOT`.
-- Keep repository URLs and 40-character revisions in `data-catalog.yaml`.
+- Keep repository URLs, optional fallback `mirrors`, and 40-character revisions in `data-catalog.yaml`.
 - Add one or more stable file sentinels for every bundle.
 - Run `bb-stack data update --check`; do not move pins in the background.
 - Review a new upstream revision and its sentinel paths before changing a pin.
 - Run `test_data.py`, `bb-stack validate`, and the full verification suite.
 
 Installations use a per-dataset file lock, a fresh staged checkout, and atomic
-directory replacement. A failed download or validation leaves the preceding
-managed checkout in place. Additional sparse bundles are unioned with the
-already installed paths; `complete` disables sparse checkout and retrieves the
-whole repository.
+directory replacement. If the primary `repository` times out or returns 404,
+`data ensure` and `data update --check` automatically retry against configured
+`mirrors` while still enforcing the pinned 40-character commit SHA and bundle
+sentinels. A failed download or validation leaves the preceding managed checkout
+in place. Additional sparse bundles are unioned with the already installed paths;
+`complete` disables sparse checkout and retrieves the whole repository.

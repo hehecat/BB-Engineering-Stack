@@ -82,6 +82,11 @@
         "args": {
           "type": "array",
           "items": {"type": "string"}
+        },
+        "env": {
+          "type": "object",
+          "propertyNames": {"$ref": "#/$defs/envName"},
+          "additionalProperties": {"type": "string"}
         }
       }
     },

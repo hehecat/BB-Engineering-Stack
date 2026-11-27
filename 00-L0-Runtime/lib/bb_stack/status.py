@@ -113,6 +113,11 @@ class StackStatus:
             capability_registry,
             probe_mcp=probe_mcp,
             include_high_context=include_high_context_mcp,
+            engagement_root=(
+                Path(selected_engagement["path"])
+                if selected_engagement and engagement_report["profile_matches"]
+                else None
+            ),
             actions=actions,
         )
         personal_report = self._personal(
@@ -712,9 +717,14 @@ class StackStatus:
         *,
         probe_mcp: bool,
         include_high_context: bool,
+        engagement_root: Path | None = None,
         actions: list[dict[str, str]],
     ) -> dict[str, Any]:
-        artifact_root = self.paths.generated / "status" / profile / "artifacts"
+        artifact_root = (
+            engagement_root / "artifacts"
+            if engagement_root is not None
+            else self.paths.generated / "status" / profile / "artifacts"
+        )
         report = registry.doctor(profile, artifact_root)
         if not report["ready"]:
             self._action(

@@ -124,6 +124,11 @@
       "required": ["repository", "revision", "cache_dir"],
       "properties": {
         "repository": {"type": "string", "format": "uri"},
+        "mirrors": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "string", "format": "uri"}
+        },
         "revision": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
         "cache_dir": {"type": "string", "minLength": 1}
       }

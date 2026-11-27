@@ -30,10 +30,14 @@ from pathlib import Path
 from typing import Any
 
 from .backends import BackendRegistry
+from .configuration import ConfigurationManager
 from .engagement import EngagementManager
 from .errors import StackError, ValidationError
 from .paths import StackPaths
+from .profiles import ProfileRegistry
+from .proxy import apply as proxy_apply
 from .runtime import RuntimeManager
+from .workspace import ROUTES, WorkspaceManager
 
 # One action per round, then a checkpoint, so a killed process costs at most that
 # action and the next round resumes from STATUS.md rather than from a
@@ -75,6 +79,43 @@ def _profile_for(paths: StackPaths, workflow: str) -> str:
     return profile
 
 
+def _profile_for_state(paths: StackPaths, state: dict[str, Any]) -> str:
+    """Resolve the concrete L2 profile for *state*, preserving routed domains."""
+    workflow = str(state["workflow"])
+    fallback = _profile_for(paths, workflow)
+    kind = (state.get("routing") or {}).get("kind")
+    if not kind and (state.get("scope") or {}).get("in_scope"):
+        kind = WorkspaceManager._infer_kind(state)
+    base_name = str(ROUTES[kind]["profile"]) if kind in ROUTES else fallback
+    if state.get("mode") != "continuous":
+        return base_name
+    registry = ProfileRegistry(paths)
+    base = registry.load(base_name)
+    matches = sorted(
+        name
+        for name in registry.names()
+        if (definition := registry.load(name))["default_mode"] == "continuous"
+        and definition["workflow"] == base["workflow"]
+        and definition["l5_profile"] == base["l5_profile"]
+    )
+    return matches[0] if len(matches) == 1 else base_name
+
+
+def _fallback_round_env(
+    paths: StackPaths, engagement: Path, slug: str, state: dict[str, Any]
+) -> dict[str, str]:
+    env = paths.environment(engagement / "artifacts")
+    machine = ConfigurationManager(paths).effective()
+    proxy_apply(env, machine)
+    env["PATH"] = paths.runtime_path(machine.get("BB_EXTRA_PATH", ""))
+    env["BB_ENGAGEMENT"] = slug
+    env["BB_ENGAGEMENT_ROOT"] = str(engagement)
+    env["BB_TRAFFIC_DB"] = str(engagement / "traffic" / "flows.db")
+    env["BB_ENGAGEMENT_WORKFLOW"] = str(state["workflow"])
+    env["BB_AUTHORIZATION_STATUS"] = str(state["authorization"]["status"])
+    return env
+
+
 def run(
     paths: StackPaths,
     slug: str,
@@ -113,7 +154,8 @@ def run(
     failures = 0
     reason: str | None = None
     state = manager.validate(engagement)
-    chosen = profile or _profile_for(paths, state["workflow"])
+    chosen = profile or _profile_for_state(paths, state)
+    l5_profile = ProfileRegistry(paths).load(chosen)["l5_profile"]
 
     for number in range(1, max_rounds + 1):
         state = manager.validate(engagement)
@@ -124,9 +166,20 @@ def run(
             reason = f"stop file present: {marker}"
             break
 
+        if (
+            not dry_run
+            and l5_profile == "browser-js"
+            and state["authorization"]["status"]
+            in {"verified", "user-asserted", "exempt"}
+        ):
+            from .browser import BrowserRuntimeManager
+
+            BrowserRuntimeManager(paths).start(engagement)
+
         # Re-derived every round on purpose: this is where the authorization
         # basis, the installed Skills and the required capabilities are checked,
         # so a round can never run on a stale approval.
+        round_env: dict[str, str] = {}
         plan = runtime.launch(
             chosen,
             engagement=engagement,
@@ -134,6 +187,7 @@ def run(
             backend_args=None,
             dry_run=True,
             backend=backend,
+            env_out=round_env,
         )
         agent = registry.selected(plan.get("backend") or backend)
         command = [
@@ -156,12 +210,13 @@ def run(
             reason = "dry run"
             break
 
+        effective_env = round_env or _fallback_round_env(paths, engagement, slug, state)
         started = time.monotonic()
         try:
             completed = runner(
                 command,
                 cwd=plan["cwd"],
-                env=paths.environment(engagement / "artifacts"),
+                env=effective_env,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,

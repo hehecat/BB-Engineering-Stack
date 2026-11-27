@@ -332,7 +332,7 @@ class EngagementManager:
             "Start the first concrete action immediately; infer missing details and record "
             "your assumptions while working. "
         )
-        (root / "CLAUDE.md").write_text(
+        work_unit_context = (
             "# Active Work Unit\n\n"
             "Read `engagement.yaml`, `notes/SCOPE.md`, `SESSION-HANDOFF.md`, and "
             "`STATUS.md` before acting. Treat lifecycle as a checkpoint: if it is "
@@ -342,9 +342,10 @@ class EngagementManager:
             + "Keep evidence and generated output in this work unit. Never put credentials "
             "or complete tokens in Prompt, reports, shared artifacts, or version control. "
             + boundary_rule
-            + findings_rule,
-            encoding="utf-8",
+            + findings_rule
         )
+        (root / "CLAUDE.md").write_text(work_unit_context, encoding="utf-8")
+        (root / "AGENTS.md").write_text(work_unit_context, encoding="utf-8")
         (root / "notes" / "SCOPE.md").write_text(
             self._scope_markdown(state, target, timestamp), encoding="utf-8"
         )

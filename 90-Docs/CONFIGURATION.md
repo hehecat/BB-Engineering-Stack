@@ -272,6 +272,12 @@ The value must be an HTTP(S) URL without embedded credentials, query, or
 fragment; a trailing `/simple` path is allowed. It is machine-specific and is
 never exported by `bb-stack portable`.
 
+`BB_ARTIFACT_MIRROR` provides an optional comma-separated fallback base URL or
+local cache directory (for example `https://mirror.example/bb-stack-artifacts` or
+`/srv/bb-cache`) for pinned release archives (`uv`, `jadx`, `radare2`,
+`trufflehog`) when upstream GitHub Releases time out or return 404. Downloaded
+files are still verified against the SHA-256 digests pinned in `tools.yaml`.
+
 ## Proxy Routing
 
 `BB_PROXY_MODE` decides which proxy variables a session carries. One module

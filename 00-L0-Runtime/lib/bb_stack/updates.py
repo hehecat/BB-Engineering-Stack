@@ -234,6 +234,8 @@ class UpdateManager:
                 }
                 if metadata.get("repository"):
                     items[component_name]["repository"] = metadata["repository"]
+                if metadata.get("mirrors"):
+                    items[component_name]["mirrors"] = list(metadata["mirrors"])
                 if metadata.get("revision"):
                     items[component_name]["current"] = metadata["revision"]
 
@@ -297,6 +299,8 @@ class UpdateManager:
                 branch="HEAD",
                 current=spec["revision"],
             )
+            if spec.get("mirrors"):
+                item["mirrors"] = list(spec["mirrors"])
         elif kind in {"archive-binary", "archive-tree", "deb"}:
             urls = [entry["url"] for entry in spec["files"].values()]
             match = re.search(
@@ -368,24 +372,24 @@ class UpdateManager:
 
         current = component.get("current") or component.get("current_revision")
         if checker == "github-tree":
-            slug = self._github_slug(component["repository"])
-            latest = self._git_remote_revision(
-                component["repository"], component["branch"]
-            )
+            latest, source_repo = self._resolve_git_remote_revision(component)
+            slug = self._github_slug(source_repo)
             result["upstream"] = (
                 f"https://github.com/{slug}/tree/{component['branch']}/"
                 f"{component['subpath']}"
             )
+            if source_repo != component["repository"]:
+                result["mirror_used"] = True
             if latest == component["current_revision"]:
                 result["upstream_digest"] = component["current_digest"]
             else:
                 result["upstream_digest"] = self._github_tree_digest(component, latest)
         elif checker == "github-commit":
-            slug = self._github_slug(component["repository"])
-            latest = self._git_remote_revision(
-                component["repository"], component["branch"]
-            )
+            latest, source_repo = self._resolve_git_remote_revision(component)
+            slug = self._github_slug(source_repo)
             result["upstream"] = f"https://github.com/{slug}"
+            if source_repo != component["repository"]:
+                result["mirror_used"] = True
         elif checker == "github-release":
             slug = self._github_slug(component["repository"])
             latest = self._git_latest_tag(component["repository"])
@@ -698,9 +702,8 @@ class UpdateManager:
         candidate: Path,
         manifest: dict[str, Any],
     ) -> None:
-        slug = self._github_slug(component["repository"])
         archive = candidate / "upstream.tar.gz"
-        self._download(f"https://codeload.github.com/{slug}/tar.gz/{revision}", archive)
+        slug = self._download_github_tree_archive(component, revision, archive)
         extracted = candidate / "extracted"
         extracted.mkdir()
         with tarfile.open(archive) as handle:
@@ -1292,6 +1295,43 @@ class UpdateManager:
             )
         return max(tags)[1]
 
+    def _resolve_git_remote_revision(
+        self, component: dict[str, Any]
+    ) -> tuple[str, str]:
+        candidates = list(
+            dict.fromkeys([component["repository"], *component.get("mirrors", [])])
+        )
+        last_error: Exception | None = None
+        for repo_url in candidates:
+            try:
+                return self._git_remote_revision(
+                    repo_url, component["branch"]
+                ), repo_url
+            except (OSError, StackError, ValidationError) as error:
+                last_error = error
+        assert last_error is not None
+        raise last_error
+
+    def _download_github_tree_archive(
+        self, component: dict[str, Any], revision: str, destination: Path
+    ) -> str:
+        candidates = list(
+            dict.fromkeys([component["repository"], *component.get("mirrors", [])])
+        )
+        last_error: Exception | None = None
+        for repo_url in candidates:
+            slug = self._github_slug(repo_url)
+            try:
+                self._download(
+                    f"https://codeload.github.com/{slug}/tar.gz/{revision}",
+                    destination,
+                )
+                return slug
+            except (OSError, HTTPError, StackError) as error:
+                last_error = error
+        assert last_error is not None
+        raise last_error
+
     def _github_tree_digest(self, component: dict[str, Any], revision: str) -> str:
         cache_root = self.paths.runtime / "update-cache" / "github-tree"
         cache_root.mkdir(parents=True, exist_ok=True)
@@ -1303,13 +1343,10 @@ class UpdateManager:
             ):
                 return str(cached["digest"])
 
-        slug = self._github_slug(component["repository"])
         with tempfile.TemporaryDirectory(prefix="github-tree-", dir=cache_root) as raw:
             temporary = Path(raw)
             archive = temporary / "upstream.tar.gz"
-            self._download(
-                f"https://codeload.github.com/{slug}/tar.gz/{revision}", archive
-            )
+            self._download_github_tree_archive(component, revision, archive)
             extracted = temporary / "extracted"
             extracted.mkdir()
             with tarfile.open(archive) as handle:
@@ -1379,6 +1416,7 @@ class UpdateManager:
             "license",
             "provenance",
             "repository",
+            "mirrors",
             "local_digest",
         )
         return {key: component[key] for key in keys if key in component}

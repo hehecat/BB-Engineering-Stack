@@ -119,6 +119,16 @@ class RuntimeManager:
                     include_optional=include_optional,
                     force=False,
                 )
+                active_agent = BackendRegistry(self.paths).selected(None).name
+                if active_agent != "claude":
+                    installed.extend(
+                        SkillRegistry(self.paths).install(
+                            profile,
+                            agent=active_agent,
+                            include_optional=include_optional,
+                            force=False,
+                        )
+                    )
                 actions.append(
                     {
                         "component": "skills",
@@ -1274,28 +1284,7 @@ class RuntimeManager:
                 spec["revision"] + "\n",
             )
         elif kind == "archive-binary":
-            _, file_spec = self._select_platform_file(
-                spec["files"], name, "archive installer"
-            )
-            cache = self.paths.runtime / "cache"
-            cache.mkdir(parents=True, exist_ok=True)
-            archive = cache / file_spec["archive"]
-            if not archive.is_file() or self._sha256(archive) != file_spec["sha256"]:
-                temporary = archive.with_suffix(archive.suffix + ".part")
-                try:
-                    with (
-                        urlopen(file_spec["url"], timeout=120) as response,
-                        temporary.open("wb") as handle,
-                    ):
-                        shutil.copyfileobj(response, handle)
-                    if self._sha256(temporary) != file_spec["sha256"]:
-                        raise CommandError(
-                            f"checksum mismatch for {file_spec['archive']}"
-                        )
-                    os.replace(temporary, archive)
-                finally:
-                    if temporary.exists():
-                        temporary.unlink()
+            archive = self._download_tool_archive(name, spec)
             with tempfile.TemporaryDirectory(
                 prefix=f"{name}-extract-", dir=self.paths.runtime
             ) as temporary_dir:
@@ -1384,103 +1373,128 @@ class RuntimeManager:
         destination = Path(spec["destination"])
         destination.parent.mkdir(parents=True, exist_ok=True)
         marker = destination.with_name(f".{destination.name}.bb-stack-installing")
-        repository = spec["repository"]
+        candidates = list(dict.fromkeys([spec["repository"], *spec.get("mirrors", [])]))
 
         if destination.exists():
             marker_repository = (
                 marker.read_text(encoding="utf-8").strip() if marker.is_file() else None
             )
-            if marker_repository != repository:
+            if marker_repository not in set(candidates):
                 raise CommandError(
                     f"non-managed data destination already exists: {destination}"
                 )
             shutil.rmtree(destination)
 
-        atomic_write(marker, repository + "\n")
         attempts = int(spec.get("retry_attempts", 3))
         timeout = int(spec.get("network_timeout_seconds", 600))
         sparse_paths = list(spec.get("sparse_paths", []))
+        last_error: CommandError | None = None
 
-        for attempt in range(1, attempts + 1):
-            try:
-                transport = [
-                    "git",
-                    "-c",
-                    "protocol.version=2",
-                    "-c",
-                    "http.lowSpeedLimit=1024",
-                    "-c",
-                    "http.lowSpeedTime=60",
-                ]
-                if attempt == 2:
-                    transport.extend(["-c", "http.version=HTTP/1.1"])
-                self._run(
-                    [*transport, "init", "--quiet", str(destination)],
-                    env=env,
-                    timeout=timeout,
-                )
-                self._run(
-                    [
-                        *transport,
-                        "-C",
-                        str(destination),
-                        "remote",
-                        "add",
-                        "origin",
-                        repository,
-                    ],
-                    env=env,
-                    timeout=timeout,
-                )
-                if sparse_paths:
+        for repository in candidates:
+            atomic_write(marker, repository + "\n")
+            for attempt in range(1, attempts + 1):
+                try:
+                    transport = [
+                        "git",
+                        "-c",
+                        "protocol.version=2",
+                        "-c",
+                        "http.lowSpeedLimit=1024",
+                        "-c",
+                        "http.lowSpeedTime=60",
+                    ]
+                    if attempt == 2:
+                        transport.extend(["-c", "http.version=HTTP/1.1"])
+                    self._run(
+                        [*transport, "init", "--quiet", str(destination)],
+                        env=env,
+                        timeout=timeout,
+                    )
                     self._run(
                         [
                             *transport,
                             "-C",
                             str(destination),
-                            "sparse-checkout",
-                            "set",
-                            *sparse_paths,
+                            "remote",
+                            "add",
+                            "origin",
+                            repository,
                         ],
                         env=env,
                         timeout=timeout,
                     )
-                self._run(
-                    [
-                        *transport,
-                        "-C",
-                        str(destination),
-                        "fetch",
-                        "--depth",
-                        "1",
-                        "--filter=blob:none",
-                        "--no-tags",
-                        "origin",
-                        spec["revision"],
-                    ],
-                    env=env,
-                    timeout=timeout,
-                )
-                self._run(
-                    [
-                        *transport,
-                        "-C",
-                        str(destination),
-                        "checkout",
-                        "--detach",
-                        "FETCH_HEAD",
-                    ],
-                    env=env,
-                    timeout=timeout,
-                )
-            except CommandError:
-                shutil.rmtree(destination, ignore_errors=True)
-                if attempt == attempts:
-                    raise
-                time.sleep(attempt * 2)
-                continue
-            marker.unlink(missing_ok=True)
-            return
+                    if sparse_paths:
+                        self._run(
+                            [
+                                *transport,
+                                "-C",
+                                str(destination),
+                                "sparse-checkout",
+                                "set",
+                                *sparse_paths,
+                            ],
+                            env=env,
+                            timeout=timeout,
+                        )
+                    self._run(
+                        [
+                            *transport,
+                            "-C",
+                            str(destination),
+                            "fetch",
+                            "--depth",
+                            "1",
+                            "--filter=blob:none",
+                            "--no-tags",
+                            "origin",
+                            spec["revision"],
+                        ],
+                        env=env,
+                        timeout=timeout,
+                    )
+                    self._run(
+                        [
+                            *transport,
+                            "-C",
+                            str(destination),
+                            "checkout",
+                            "--detach",
+                            "FETCH_HEAD",
+                        ],
+                        env=env,
+                        timeout=timeout,
+                    )
+                except CommandError as error:
+                    last_error = error
+                    shutil.rmtree(destination, ignore_errors=True)
+                    if attempt < attempts:
+                        time.sleep(attempt * 2)
+                    continue
+                marker.unlink(missing_ok=True)
+                return
+        if last_error is not None:
+            raise last_error
+
+    def _candidate_archive_urls(
+        self, name: str, file_spec: dict[str, Any]
+    ) -> list[str]:
+        urls = [file_spec["url"], *file_spec.get("mirrors", [])]
+        mirror_setting = os.environ.get("BB_ARTIFACT_MIRROR", "").strip()
+        if not mirror_setting:
+            values, invalid = load_machine_config(self.paths.config_home / "config.env")
+            if not invalid:
+                mirror_setting = values.get("BB_ARTIFACT_MIRROR", "").strip()
+        archive_name = file_spec["archive"]
+        if mirror_setting:
+            for raw in mirror_setting.split(","):
+                entry = raw.strip().rstrip("/")
+                if not entry:
+                    continue
+                if not entry.startswith(("http://", "https://", "file://")):
+                    entry = Path(entry).expanduser().resolve().as_uri().rstrip("/")
+                urls.append(f"{entry}/{archive_name}")
+                urls.append(f"{entry}/{name}/{archive_name}")
+        return list(dict.fromkeys(urls))
 
     def _download_tool_archive(self, name: str, spec: dict[str, Any]) -> Path:
         _, file_spec = self._select_platform_file(
@@ -1492,19 +1506,27 @@ class RuntimeManager:
         if archive.is_file() and self._sha256(archive) == file_spec["sha256"]:
             return archive
         temporary = archive.with_suffix(archive.suffix + ".part")
-        try:
-            with (
-                urlopen(file_spec["url"], timeout=600) as response,
-                temporary.open("wb") as handle,
-            ):
-                shutil.copyfileobj(response, handle)
-            if self._sha256(temporary) != file_spec["sha256"]:
-                raise CommandError(f"checksum mismatch for {file_spec['archive']}")
-            os.replace(temporary, archive)
-        finally:
-            if temporary.exists():
-                temporary.unlink()
-        return archive
+        errors: list[str] = []
+        for url in self._candidate_archive_urls(name, file_spec):
+            try:
+                with (
+                    urlopen(url, timeout=600) as response,
+                    temporary.open("wb") as handle,
+                ):
+                    shutil.copyfileobj(response, handle)
+                if self._sha256(temporary) != file_spec["sha256"]:
+                    raise CommandError(f"checksum mismatch for {file_spec['archive']}")
+                os.replace(temporary, archive)
+                return archive
+            except (OSError, URLError, HTTPError, CommandError) as error:
+                errors.append(f"{url}: {error}")
+            finally:
+                if temporary.exists():
+                    temporary.unlink()
+        raise CommandError(
+            f"failed to download {file_spec['archive']} for {name}: "
+            + "; ".join(errors)
+        )
 
     def launch(
         self,
@@ -1517,6 +1539,7 @@ class RuntimeManager:
         include_high_context_mcp: bool = False,
         backend: str | None = None,
         claude_args: list[str] | None = None,
+        env_out: dict[str, str] | None = None,
     ) -> dict[str, Any]:
         # `claude_args` is the deprecated spelling of `backend_args`: the extra
         # arguments are forwarded verbatim to whichever agent backend runs.
@@ -1586,17 +1609,22 @@ class RuntimeManager:
             artifact_root=artifact_root,
             include_high_context=include_high_context_mcp,
         )
-        binary = agent.binary(self.paths.runtime_path())
+        machine = ConfigurationManager(self.paths).effective()
+        runtime_path = self.paths.runtime_path(machine.get("BB_EXTRA_PATH", ""))
+        binary = agent.binary(runtime_path)
         if not binary:
             raise CommandError(
                 f"{agent.label} CLI was not found "
                 f"(agent backend {agent.name!r}; binary {agent.command!r})"
             )
         env = self.paths.environment(artifact_root)
-        env["PATH"] = self.paths.runtime_path()
+        proxy_apply(env, machine)
+        env["PATH"] = runtime_path
         env["BB_SELECTED_SIDE_EFFECTS"] = ",".join(side_effects)
         if engagement is not None and engagement_state is not None:
+            env["BB_ENGAGEMENT"] = engagement_state["slug"]
             env["BB_ENGAGEMENT_ROOT"] = str(engagement)
+            env["BB_TRAFFIC_DB"] = str(engagement / "traffic" / "flows.db")
             env["BB_ENGAGEMENT_WORKFLOW"] = engagement_state["workflow"]
             env["BB_AUTHORIZATION_STATUS"] = engagement_state["authorization"]["status"]
         command = [binary]
@@ -1615,6 +1643,9 @@ class RuntimeManager:
             work_dir=cwd,
         )
         command.extend(extra_args)
+        if env_out is not None:
+            env_out.clear()
+            env_out.update(env)
         result = {
             "schema_version": 1,
             "profile": profile_name,

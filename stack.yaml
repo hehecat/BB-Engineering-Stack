@@ -63,5 +63,7 @@ registries:
 
 keysmith:
   repository: https://github.com/Jia-Ethan/claude-keysmith.git
-  revision: b3d8cc25331e8bbf2b9ccfdbdb658ee01f351663
+  mirrors:
+    - https://github.com/hehecat/claude-keysmith.git
+  revision: 4fbc7089673ec413e52259f51a15337a1038eaa0
   cache_dir: "${BB_CONFIG_HOME}/vendor/claude-keysmith"

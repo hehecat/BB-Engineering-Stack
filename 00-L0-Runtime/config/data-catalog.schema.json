@@ -15,6 +15,11 @@
         "required": ["repository", "revision", "branch", "destination", "license", "bundles"],
         "properties": {
           "repository": {"type": "string", "format": "uri", "pattern": "^https://"},
+          "mirrors": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {"type": "string", "format": "uri", "pattern": "^https://"}
+          },
           "revision": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
           "branch": {"type": "string", "minLength": 1},
           "destination": {"type": "string", "pattern": "^\\$\\{BB_DATA_ROOT\\}/[a-z0-9][a-z0-9-]*$"},
