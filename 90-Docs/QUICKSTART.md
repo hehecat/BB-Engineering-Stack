@@ -81,7 +81,7 @@ dynamic analysis is needed.
 The Reverse profile installs pinned Radare2; JADX and Apktool remain optional
 mixed-artifact providers.
 
-## Authorized Security Assessment
+## Security Assessment
 
 Use normal conversation; the router distinguishes workflow and domain:
 
@@ -90,7 +90,7 @@ Use normal conversation; the router distinguishes workflow and domain:
 反编译 library.apk 并还原算法，不做漏洞测试
 对 service.elf 做 native 组件安全评估
 对 10.20.0.0/24 做内网和 AD 安全评估
-审计授权 AWS 账户的 IAM 和存储配置
+审计 AWS 账户的 IAM 和存储配置
 测试 RAG Agent 的 Prompt Injection、MCP 和 Memory 边界
 审计 repository 的源码、IaC、容器和依赖安全
 ```
@@ -107,15 +107,11 @@ bb-stack bootstrap --profile assessment-llm
 bb-stack bootstrap --profile assessment-source
 ```
 
-For an explicitly scoped native artifact, record the authorization basis and
-route it into the assessment workflow before any dynamic action. The default is
-`user-asserted`: record the user's own statement (own asset, provided artifact,
-or named program) in `notes/SCOPE.md`, no external letter needed. `verified`
-applies when a written authorization document is on file:
+Route a native artifact into the assessment workflow and start immediately; no
+authorization flags or pre-work basis are needed:
 
 ```bash
-bb-stack workspace route --kind reverse-assessment --target ./service.elf \
-  --authorization-status user-asserted --authorization-source "user statement: own artifact"
+bb-stack workspace route --kind reverse-assessment --target ./service.elf
 bb-stack launch --profile assessment-reverse --engagement service-native
 ```
 
@@ -133,22 +129,18 @@ source "$HOME/.config/bb-stack/env.sh"
 bb-stack status --profile web --strict --probe-mcp
 
 bb-stack new example-bb https://example.com \
-  --workflow bug-bounty --platform generic-vdp --mode interactive \
-  --authorization-status user-asserted \
-  --authorization-source "user statement: own program"
+  --workflow bug-bounty --platform generic-vdp --mode interactive
 bb-recon run example-bb --json
 bb-stack launch --profile bb-interactive --engagement example-bb
 ```
 
-A protected Bug Bounty or assessment Engagement without a recorded basis stays
-`pending`, and both `bb-recon run` and `bb-stack launch` refuse to start it.
-Record the basis at creation with `--authorization-status user-asserted
---authorization-source ...`, or later with `bb-stack engagement authorize
-example-bb --status user-asserted --source "user statement: own program"`.
+Bug Bounty and assessment Engagements start with `authorization: exempt` and run
+immediately. `bb-recon run` and `bb-stack launch` never wait for a recorded
+basis or authorization flag.
 
 For HackerOne, run `bb-stack configure --h1-username NAME`, create with
-`--platform hackerone` and the same authorization flags, then copy current
-written program rules into `notes/SCOPE.md` before testing. For Butian use
+`--platform hackerone`, then copy current program rules into `notes/SCOPE.md`
+when useful; testing starts immediately. For Butian use
 `--platform butian`; it does not inherit HackerOne identity or report fields.
 
 For a continuous engagement, create it with `--mode continuous`, inspect it
@@ -198,8 +190,6 @@ bb-stack mail test
 
 ```bash
 bb-stack engagement validate example-bb
-bb-stack engagement authorize example-bb --status user-asserted \
-  --source 'User statement: own application under test'
 bb-stack launch --profile bb-interactive --engagement example-bb
 bb-stack engagement checkpoint example-bb
 bb-stack engagement pause example-bb --reason 'switching machine'

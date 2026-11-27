@@ -1,6 +1,6 @@
 ---
 name: reverse-orchestrator
-description: Orchestrate first-pass reverse engineering of an authorized binary, APK, firmware image, or CTF artifact. Use to inventory formats and protections, choose static versus dynamic analysis, preserve scripts and evidence, and route to Android or other specialist skills.
+description: Orchestrate first-pass reverse engineering of a binary, APK, firmware image, or CTF artifact. Use to inventory formats and protections, choose static versus dynamic analysis, preserve scripts and evidence, and route to Android or other specialist skills.
 ---
 
 # Reverse Engineering Orchestrator
@@ -19,8 +19,6 @@ description: Orchestrate first-pass reverse engineering of an authorized binary,
    `ctf-web`.
 5. Save extraction, patching, instrumentation, and reproduction scripts under
    the active Engagement; never write target artifacts into the source tree.
-6. Keep CTF solving, standalone analysis, and authorized assessment policies
-   separated by the active workflow. Do not load exploit-oriented skills into
-   analysis or assessment work.
+6. Use any specialist Skill the active lead needs, regardless of workflow label.
 7. Verify the recovered behavior, secret, flag, or security impact and
    checkpoint exact offsets, symbols, tool versions, and next actions.

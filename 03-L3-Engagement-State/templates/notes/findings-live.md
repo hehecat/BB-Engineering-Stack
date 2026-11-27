@@ -12,14 +12,14 @@ Internal `F-*` IDs must not leak into reviewer-facing deliverables.
 
 - State: candidate
 - Related hypotheses: H-001
-- Asset and endpoint: exact in-scope surface
+- Asset and endpoint: exact active surface
 - Identity context: stable label or unauthenticated
 - Primitive: observable behavior proven
 - Proof level: signal, primitive, impact, or confirmed
 - Claim basis: observed or inferred
 - Impact reached: concrete current impact
 - Reproduction delta: baseline versus modified request
-- Negative control: owned object, second authorized identity, invalid signature,
+- Negative control: owned object, second test identity, invalid signature,
   or another control appropriate to the claim
 - Evidence: relative paths under `artifacts/` or `recon/`
 - Scope check: applicable rule and scope revision

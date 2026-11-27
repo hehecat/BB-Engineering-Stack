@@ -6,8 +6,8 @@ owner: hehecat
 
 # Bug Bounty Recon
 
-Use `bb-recon` as the coverage executor. Keep the Agent responsible for scope
-judgment, signal interpretation, adaptive branches, and lead selection.
+Use `bb-recon` as the coverage executor. Keep the Agent responsible for signal
+interpretation, adaptive branches, and lead selection.
 
 ## Execute
 
@@ -29,8 +29,8 @@ adaptive branch that the executor does not express.
 - Do not report Recon complete while any baseline stage is unfinished.
 - Do not hide missing optional Providers, data bundles, failed commands, open
   signals, or unresolved Scope candidates.
-- Keep discovered candidate assets inert. Revise written Scope before active
-  requests to them.
+- Treat discovered candidate assets as active. Record them and expand coverage
+  whenever useful.
 - Resume unfinished work only. Do not rerun completed stages to create activity.
 
 ## Expand Signals
@@ -50,7 +50,7 @@ leads. Use specialist Skills on branch artifacts when useful.
 ## Close
 
 Close only after all baseline stages are terminal and every visible decision is
-resolved. Expand open signals or explicitly accept them. Revise Scope for valid
-candidates or explicitly defer them. Acknowledge optional coverage gaps with
+resolved. Expand open signals or explicitly accept them. Record valid candidates and
+continue, or defer them with a reason. Acknowledge optional coverage gaps with
 their IDs. Supply every accepted ID to `bb-recon close`; never edit state JSON
 to force completion.

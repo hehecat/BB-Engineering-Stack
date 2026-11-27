@@ -88,47 +88,44 @@ run_grep() {
 # the tree, counts bucketed by tag — running 8 separate greps was too slow.
 if [[ "$SEARCH_ALL" == true ]]; then
   section "Summary (counted in a single pass)"
-  declare -A H=(
-    [retrofit]=0 [okhttp]=0 [ktor]=0 [apollo]=0 [volley]=0
-    [hilt]=0 [koin]=0 [bearer]=0 [hmac]=0
-  )
+  retrofit=0 okhttp=0 ktor=0 apollo=0 volley=0 hilt=0 koin=0 bearer=0 hmac=0
   while IFS= read -r line; do
     case "$line" in
-      *"@GET("*|*"@POST("*|*"@PUT("*|*"@DELETE("*|*"@PATCH("*|*"@HTTP("*) H[retrofit]=$((H[retrofit]+1));;
+      *"@GET("*|*"@POST("*|*"@PUT("*|*"@DELETE("*|*"@PATCH("*|*"@HTTP("*) retrofit=$((retrofit+1));;
     esac
     case "$line" in
-      *"Request.Builder"*|*"HttpUrl"*|*".newCall("*) H[okhttp]=$((H[okhttp]+1));;
+      *"Request.Builder"*|*"HttpUrl"*|*".newCall("*) okhttp=$((okhttp+1));;
     esac
     case "$line" in
-      *"BearerTokens"*|*"defaultRequest {"*|*"client.get("*|*"client.post("*|*"httpClient.get("*|*"httpClient.post("*|*"HttpClient.get("*) H[ktor]=$((H[ktor]+1));;
+      *"BearerTokens"*|*"defaultRequest {"*|*"client.get("*|*"client.post("*|*"httpClient.get("*|*"httpClient.post("*|*"HttpClient.get("*) ktor=$((ktor+1));;
     esac
     case "$line" in
-      *"ApolloClient"*|*".serverUrl("*) H[apollo]=$((H[apollo]+1));;
+      *"ApolloClient"*|*".serverUrl("*) apollo=$((apollo+1));;
     esac
     case "$line" in
-      *"StringRequest"*|*"JsonObjectRequest"*|*"RequestQueue"*) H[volley]=$((H[volley]+1));;
+      *"StringRequest"*|*"JsonObjectRequest"*|*"RequestQueue"*) volley=$((volley+1));;
     esac
     case "$line" in
-      *"@HiltAndroidApp"*|*"@AndroidEntryPoint"*|*"@HiltViewModel"*|*"@Provides"*|*"@Binds"*) H[hilt]=$((H[hilt]+1));;
+      *"@HiltAndroidApp"*|*"@AndroidEntryPoint"*|*"@HiltViewModel"*|*"@Provides"*|*"@Binds"*) hilt=$((hilt+1));;
     esac
     case "$line" in
-      *"org.koin."*|*"module {"*|*"single<"*|*"factory<"*|*"singleOf("*|*"factoryOf("*) H[koin]=$((H[koin]+1));;
+      *"org.koin."*|*"module {"*|*"single<"*|*"factory<"*|*"singleOf("*|*"factoryOf("*) koin=$((koin+1));;
     esac
     case "$line" in
-      *'"Bearer '*|*'"bearer '*|*"BearerTokens"*) H[bearer]=$((H[bearer]+1));;
+      *'"Bearer '*|*'"bearer '*|*"BearerTokens"*) bearer=$((bearer+1));;
     esac
     case "$line" in
-      *"HmacSHA"*|*'Mac.getInstance("Hmac'*) H[hmac]=$((H[hmac]+1));;
+      *"HmacSHA"*|*'Mac.getInstance("Hmac'*) hmac=$((hmac+1));;
     esac
   done < <(grep -rEh --include='*.java' --include='*.kt' \
       '@(GET|POST|PUT|DELETE|PATCH|HTTP)\(|Request\.Builder|HttpUrl|\.newCall\(|BearerTokens|defaultRequest \{|client\.(get|post)\(|httpClient\.(get|post)\(|ApolloClient|\.serverUrl\(|StringRequest|JsonObjectRequest|RequestQueue|@HiltAndroidApp|@AndroidEntryPoint|@HiltViewModel|@Provides|@Binds|org\.koin\.|module \{|single<|factory<|"[Bb]earer |HmacSHA|Mac\.getInstance' \
       "$SOURCE_DIR" 2>/dev/null || true)
   printf '  HTTP framework:   Retrofit=%-5s OkHttp=%-5s Ktor=%-5s Apollo=%-5s Volley=%-5s\n' \
-      "${H[retrofit]}" "${H[okhttp]}" "${H[ktor]}" "${H[apollo]}" "${H[volley]}"
+      "$retrofit" "$okhttp" "$ktor" "$apollo" "$volley"
   printf '  DI framework:     Hilt/Dagger=%-5s Koin=%-5s\n' \
-      "${H[hilt]}" "${H[koin]}"
+      "$hilt" "$koin"
   printf '  Auth signals:     Bearer=%-5s HMAC/Sign=%-5s\n' \
-      "${H[bearer]}" "${H[hmac]}"
+      "$bearer" "$hmac"
   echo
   echo "  Run with one of --retrofit / --okhttp / --ktor / --apollo / --volley /"
   echo "  --paths / --urls / --auth to inspect a single section."
@@ -251,8 +248,8 @@ if [[ "$SEARCH_ALL" == true || "$SEARCH_URLS" == true ]]; then
       | sort -u \
       | awk '
           { rest=$0; sub(/^https?:\/\//,"",rest)
-            host=rest; sub(/[/:].*/,"",host)
-            haspathport = (rest ~ /[/:]/)
+            host=rest; sub(/[\/:].*/,"",host)
+            haspathport = (rest ~ /[\/:]/)
             if (host ~ /^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$/) { print; next }   # IPv4
             n = split(host, a, ".")
             if (n >= 3)      { print; next }                                 # sub.domain.tld

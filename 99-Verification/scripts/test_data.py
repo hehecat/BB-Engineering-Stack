@@ -220,7 +220,10 @@ class DataManagerTests(unittest.TestCase):
 
     def test_status_and_profile_ensure_variants(self) -> None:
         with patch("bb_stack.data.load_yaml", return_value=self.document):
-            self.assertEqual(self.manager.path("demo"), self.paths.data_root / "demo")
+            self.assertEqual(
+            self.manager.path("demo").resolve(),
+            (self.paths.data_root / "demo").resolve(),
+        )
         self.assertFalse(self.manager.status("demo")["ready"])
         self.assertFalse(self.manager.status()["ready"])
         required = self.manager.ensure_profile("demo")

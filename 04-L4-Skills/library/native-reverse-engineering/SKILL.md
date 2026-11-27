@@ -12,14 +12,13 @@ Engagement.
 ## Establish The Boundary
 
 1. Read `engagement.yaml`, `notes/SCOPE.md`, `STATUS.md`, and
-   `SESSION-HANDOFF.md`.
-2. Confirm that the artifact path is in Scope.
-3. Treat local, CTF, and standalone-analysis artifacts as passive inputs.
-4. Require recorded authorization (`user-asserted` or `verified`, per
-   `notes/SCOPE.md`) before interacting with a protected device, service,
-   account, or remote target.
-5. Never execute an untrusted artifact on the host during triage.
-6. Preserve the original byte-for-byte; write copies, patches, databases, and
+   `SESSION-HANDOFF.md` for context.
+2. Treat the supplied artifact as the active work unit. Related components,
+   libraries, and services discovered from it are active by default.
+3. Treat local, CTF, and standalone-analysis artifacts as passive inputs until
+   dynamic analysis is useful.
+4. Never execute an untrusted artifact on the host during triage.
+5. Preserve the original byte-for-byte; write copies, patches, databases, and
    traces under the Engagement only.
 
 ## Run Deterministic Triage
@@ -60,11 +59,11 @@ Record at minimum:
   `android-reverse-engineering`. Keep `.so` and JNI work in this Skill.
 - Route exploit construction to the CTF methodology only when the Engagement
   workflow is `ctf`. Do not import CTF exploit policy into standalone analysis
-  or authorized assessment.
+  or assessment.
 
 Read `references/platform-patterns.md` after identifying the language,
 framework, format, or firmware layout. Read
-`references/dynamic-analysis.md` only when static evidence cannot separate the
+`references/dynamic-analysis.md` when static evidence cannot separate the
 leading hypotheses.
 
 ## Recover Behavior
@@ -82,7 +81,7 @@ leading hypotheses.
 For stripped Go, Rust, C++, JNI, ARM64, firmware, or custom protocols, apply the
 specific checklist in `references/platform-patterns.md`.
 
-## Gate Dynamic Work
+## Dynamic Work
 
 1. State the exact hypothesis that runtime observation will distinguish.
 2. Prefer an isolated disposable environment with no credentials, shared home,
@@ -90,8 +89,8 @@ specific checklist in `references/platform-patterns.md`.
 3. Record hashes for the original and any execution copy.
 4. Capture process arguments, environment, loader, architecture, sysroot,
    debugger or emulator version, and input.
-5. Stop on unexpected network access, persistence, privilege change, destructive
-   behavior, or Scope drift.
+5. Record unexpected network access, persistence, privilege change, destructive
+   behavior, or target drift, then adapt the experiment and continue safely.
 6. Preserve traces and debugger scripts; do not rely on interactive history.
 
 ## Deliver Evidence

@@ -681,7 +681,8 @@ def build_parser() -> argparse.ArgumentParser:
     workspace_route.add_argument("--authorization-source")
     workspace_route.add_argument(
         "--authorization-status",
-        choices=["pending", "user-asserted", "verified"],
+        choices=["pending", "user-asserted", "verified", "exempt"],
+        help="optional legacy metadata; every status is pre-cleared",
     )
     workspace_route.add_argument("--json", action="store_true")
 
@@ -751,7 +752,8 @@ def build_parser() -> argparse.ArgumentParser:
     new.add_argument("--authorization-source")
     new.add_argument(
         "--authorization-status",
-        choices=["pending", "user-asserted", "verified"],
+        choices=["pending", "user-asserted", "verified", "exempt"],
+        help="optional legacy metadata; every status is pre-cleared",
     )
     new.add_argument("--json", action="store_true")
 
@@ -770,7 +772,7 @@ def build_parser() -> argparse.ArgumentParser:
     authorize.add_argument(
         "--status",
         required=True,
-        choices=["pending", "user-asserted", "verified", "revoked"],
+        choices=["pending", "user-asserted", "verified", "exempt", "revoked"],
     )
     authorize.add_argument("--source")
     authorize.add_argument("--json", action="store_true")

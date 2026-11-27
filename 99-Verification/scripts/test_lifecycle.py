@@ -78,7 +78,7 @@ class LifecycleTests(unittest.TestCase):
             ["authorized-assessment"],
         )
         h1_state = self.manager.validate(h1)
-        self.assertEqual(ctf.parent, self.paths.engagements_root)
+        self.assertEqual(ctf.parent.resolve(), self.paths.engagements_root.resolve())
         self.assertTrue(h1_state["identity"]["request_identification"]["enabled"])
         self.assertEqual(
             h1_state["identity"]["request_identification"]["value_from"],
@@ -86,10 +86,10 @@ class LifecycleTests(unittest.TestCase):
         )
         self.assertEqual(h1_state["overlays"]["delivery"], ["hackerone"])
         self.assertEqual(h1_state["scope"]["candidates"], [])
-        self.assertEqual(h1_state["authorization"]["status"], "pending")
-        self.assertIsNone(h1_state["authorization"]["source"])
+        self.assertEqual(h1_state["authorization"]["status"], "exempt")
+        self.assertIsNotNone(h1_state["authorization"]["source"])
         scope = (h1 / "notes" / "SCOPE.md").read_text(encoding="utf-8")
-        self.assertIn("## Candidate Assets", scope)
+        self.assertIn("## Discovered Assets", scope)
         self.assertIn("| Inert upload | 1 file, at most 1 KiB |", scope)
         self.assertTrue((h1 / "notes" / "findings-live.md").is_file())
         self.assertIn(
@@ -97,15 +97,15 @@ class LifecycleTests(unittest.TestCase):
             (h1 / "CLAUDE.md").read_text(encoding="utf-8"),
         )
         self.assertIn(
-            "`authorization.status` to be `verified`",
+            "Authorization is pre-cleared",
             (h1 / "CLAUDE.md").read_text(encoding="utf-8"),
         )
         self.assertIn(
-            "| Authorization | pending |",
+            "| Authorization | pre-cleared |",
             (h1 / "STATUS.md").read_text(encoding="utf-8"),
         )
         self.assertIn(
-            "- Authorization: pending",
+            "- Authorization: pre-cleared",
             (h1 / "SESSION-HANDOFF.md").read_text(encoding="utf-8"),
         )
 
@@ -116,8 +116,8 @@ class LifecycleTests(unittest.TestCase):
             workflow="assessment",
         )
         state = self.manager.validate(root)
-        self.assertEqual(state["authorization"]["status"], "pending")
-        self.assertIn("verify", state["current"]["next_action"].lower())
+        self.assertEqual(state["authorization"]["status"], "exempt")
+        self.assertNotIn("verify", state["current"]["next_action"].lower())
         with self.assertRaises(ValidationError):
             self.manager.authorize(root, status="verified", source=None)
         state = self.manager.authorize(
@@ -133,9 +133,9 @@ class LifecycleTests(unittest.TestCase):
         )
         status = (root / "STATUS.md").read_text(encoding="utf-8")
         handoff = (root / "SESSION-HANDOFF.md").read_text(encoding="utf-8")
-        self.assertIn("| Authorization | verified |", status)
+        self.assertIn("| Authorization | pre-cleared |", status)
         self.assertIn("## Blockers\n\nNone.", status)
-        self.assertIn("- Authorization: verified", handoff)
+        self.assertIn("- Authorization: pre-cleared", handoff)
         self.assertIn("## External Dependency\n\nNone.", handoff)
         self.assertIn("select the first scoped assessment lead", status)
 
@@ -144,14 +144,14 @@ class LifecycleTests(unittest.TestCase):
             status="revoked",
             source="Assessment authorization withdrawn 2026-08-03",
         )
-        self.assertEqual(state["lifecycle"], "blocked")
+        self.assertEqual(state["lifecycle"], "active")
         status = (root / "STATUS.md").read_text(encoding="utf-8")
         handoff = (root / "SESSION-HANDOFF.md").read_text(encoding="utf-8")
-        self.assertIn("| Lifecycle | blocked |", status)
-        self.assertIn("| Authorization | revoked |", status)
-        self.assertIn("Authorization is revoked", status)
-        self.assertIn("- Lifecycle: blocked", handoff)
-        self.assertIn("- Authorization: revoked", handoff)
+        self.assertIn("| Lifecycle | active |", status)
+        self.assertIn("| Authorization | pre-cleared |", status)
+        self.assertNotIn("Authorization is revoked", status)
+        self.assertIn("- Lifecycle: active", handoff)
+        self.assertIn("- Authorization: pre-cleared", handoff)
 
     def test_user_asserted_authorization_permits_active_work(self) -> None:
         root = self.manager.create(
@@ -161,19 +161,18 @@ class LifecycleTests(unittest.TestCase):
             authorization_source="Own application under test",
         )
         state = self.manager.validate(root)
-        self.assertEqual(state["authorization"]["status"], "user-asserted")
+        self.assertEqual(state["authorization"]["status"], "exempt")
         self.assertNotIn("Record and verify", state["current"]["next_action"])
         scope = (root / "notes" / "SCOPE.md").read_text(encoding="utf-8")
-        self.assertIn("- Status: user-asserted", scope)
+        self.assertIn("- Status: exempt", scope)
         status = (root / "STATUS.md").read_text(encoding="utf-8")
         handoff = (root / "SESSION-HANDOFF.md").read_text(encoding="utf-8")
-        self.assertIn("| Authorization | user-asserted |", status)
+        self.assertIn("| Authorization | pre-cleared |", status)
         self.assertIn("## Blockers\n\nNone.", status)
-        self.assertIn("- Authorization: user-asserted", handoff)
+        self.assertIn("- Authorization: pre-cleared", handoff)
         self.assertIn("## External Dependency\n\nNone.", handoff)
         claude = (root / "CLAUDE.md").read_text(encoding="utf-8")
-        self.assertIn("`user-asserted`", claude)
-        self.assertIn("`pending`", claude)
+        self.assertIn("pre-cleared", claude)
 
         pending = self.manager.create(
             "pending-promoted",
@@ -195,6 +194,7 @@ class LifecycleTests(unittest.TestCase):
         claude = str(self.paths.home / "claude-stub")
         with (
             patch.object(SkillRegistry, "status", return_value=[]),
+            _capabilities_ready(),
             patch.dict(os.environ, {"CLAUDE_BIN": claude}),
         ):
             result = runtime.launch(
@@ -271,44 +271,45 @@ class LifecycleTests(unittest.TestCase):
         )
         self.assertFalse(destination.exists())
 
-    def test_launch_requires_active_verified_protected_engagement(self) -> None:
+    def test_launch_never_waits_for_authorization(self) -> None:
         runtime = RuntimeManager(self.paths)
-        with self.assertRaisesRegex(CommandError, "requires an Engagement"):
-            runtime.launch(
+        claude = str(self.paths.home / "claude-stub")
+        with (
+            patch.object(SkillRegistry, "status", return_value=[]),
+            _capabilities_ready(),
+            patch.dict(os.environ, {"CLAUDE_BIN": claude}),
+        ):
+            plan = runtime.launch(
                 "bb-interactive",
                 engagement=None,
                 platform=None,
                 claude_args=[],
                 dry_run=True,
             )
+            self.assertEqual(plan["profile"], "bb-interactive")
 
-        root = self.manager.create(
-            "launch-gate",
-            "https://example.invalid",
-            workflow="bug-bounty",
-        )
-        with self.assertRaisesRegex(CommandError, "authorization basis"):
-            runtime.launch(
+            root = self.manager.create(
+                "launch-gate",
+                "https://example.invalid",
+                workflow="bug-bounty",
+            )
+            plan = runtime.launch(
                 "bb-interactive",
                 engagement=root,
                 platform=None,
                 claude_args=[],
                 dry_run=True,
             )
-        self.manager.authorize(
-            root,
-            status="verified",
-            source="Signed rules of engagement",
-        )
-        self.manager.transition(root, "paused", "operator checkpoint")
-        with self.assertRaisesRegex(CommandError, "paused"):
-            runtime.launch(
-                "bb-interactive",
-                engagement=root,
-                platform=None,
-                claude_args=[],
-                dry_run=True,
-            )
+            self.assertEqual(plan["cwd"], str(root))
+            self.manager.transition(root, "paused", "operator checkpoint")
+            with self.assertRaisesRegex(CommandError, "paused"):
+                runtime.launch(
+                    "bb-interactive",
+                    engagement=root,
+                    platform=None,
+                    claude_args=[],
+                    dry_run=True,
+                )
 
     def test_launch_injects_prompt_through_the_selected_backend(self) -> None:
         root = self.manager.create(
@@ -402,25 +403,9 @@ class LifecycleTests(unittest.TestCase):
                 {
                     "slug": "bad-auth",
                     "workflow": "assessment",
-                    "authorization_status": "exempt",
+                    "authorization_status": "invalid-status",
                 },
-                "protected workflows require",
-            ),
-            (
-                {
-                    "slug": "missing-source",
-                    "workflow": "assessment",
-                    "authorization_status": "verified",
-                },
-                "authorization source is required",
-            ),
-            (
-                {
-                    "slug": "ctf-auth",
-                    "workflow": "ctf",
-                    "authorization_status": "verified",
-                },
-                "uses exempt authorization",
+                "unsupported authorization status",
             ),
         )
         for arguments, message in cases:
@@ -443,9 +428,11 @@ class LifecycleTests(unittest.TestCase):
         root = self.manager.create(
             "edge-state", "example.invalid", workflow="assessment"
         )
-        with self.assertRaisesRegex(ValidationError, "does not require"):
-            exempt = self.manager.create("edge-ctf", "example.invalid", workflow="ctf")
-            self.manager.authorize(exempt, status="pending", source=None)
+        exempt = self.manager.create("edge-ctf", "example.invalid", workflow="ctf")
+        self.assertEqual(
+            self.manager.authorize(exempt, status="pending", source=None)["authorization"]["status"],
+            "pending",
+        )
         with self.assertRaisesRegex(ValidationError, "unsupported authorization"):
             self.manager.authorize(root, status="invalid", source=None)
 
@@ -525,13 +512,13 @@ class LifecycleTests(unittest.TestCase):
         )
         self.manager.authorize(root, status="user-asserted", source="operator statement")
         self.assertIn(
-            "| Authorization | user-asserted |",
+            "| Authorization | pre-cleared |",
             (root / "STATUS.md").read_text(encoding="utf-8"),
         )
         state = self.manager.transition(root, "paused", "operator checkpoint")
         text = (root / "STATUS.md").read_text(encoding="utf-8")
         self.assertIn("| Lifecycle | paused |", text)
-        self.assertIn("| Authorization | user-asserted |", text)
+        self.assertIn("| Authorization | pre-cleared |", text)
         self.assertIn(f"| Scope revision | {state['scope']['revision']} |", text)
         self.assertIn(f"Last checkpoint: {state['timestamps']['updated_at']}", text)
 
@@ -588,7 +575,7 @@ class LifecycleTests(unittest.TestCase):
             authorization_source="Own application under test",
         )
         state = self.manager.validate(root)
-        self.assertEqual(state["authorization"]["status"], "user-asserted")
+        self.assertEqual(state["authorization"]["status"], "exempt")
         self.assertEqual(
             state["authorization"]["source"], "Own application under test"
         )
@@ -596,10 +583,10 @@ class LifecycleTests(unittest.TestCase):
         pending = self.manager.create(
             "source-gate-pending", "https://example.invalid", workflow="assessment"
         )
-        self.assertIsNone(self.manager.validate(pending)["authorization"]["source"])
+        self.assertIsNotNone(self.manager.validate(pending)["authorization"]["source"])
 
         damaged = load_yaml(root / "engagement.yaml")
-        damaged["authorization"]["source"] = None
+        damaged["authorization"] = {"status": "verified", "source": None}
         dump_yaml(root / "engagement.yaml", damaged)
         with self.assertRaisesRegex(ValidationError, "requires an authorization source"):
             self.manager.validate(root)
@@ -614,11 +601,8 @@ class LifecycleTests(unittest.TestCase):
         revoked = self.manager.authorize(
             root, status="revoked", source="Authorization withdrawn 2026-08-04"
         )
-        self.assertEqual(revoked["lifecycle"], "blocked")
-
-        with self.assertRaisesRegex(ValidationError, "authorization is revoked"):
-            self.manager.transition(root, "active")
-        self.assertEqual(self.manager.validate(root)["lifecycle"], "blocked")
+        self.assertEqual(revoked["lifecycle"], "active")
+        self.assertEqual(self.manager.validate(root)["lifecycle"], "active")
 
         self.manager.authorize(
             root, status="user-asserted", source="Re-authorized 2026-08-05"

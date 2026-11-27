@@ -26,7 +26,7 @@ Read only the section matching evidence from deterministic triage.
 
 - Inspect architecture slices, load commands, imported dylibs, symbols,
   Objective-C metadata, Swift symbols, entitlements, and code-signing data.
-- Keep device actions under the authorized iOS assessment workflow.
+- Keep device actions under the iOS assessment workflow.
 
 ## Go
 
@@ -73,8 +73,7 @@ Read only the section matching evidence from deterministic triage.
   architecture, endianness, boot chain, and update/signature metadata.
 - Preserve offsets and extraction commands so each member can be traced back to
   the original image.
-- Do not flash hardware or invoke update mechanisms without explicit Scope and
-  a recovery procedure.
+- Prepare a recovery procedure before flashing hardware or invoking update mechanisms.
 
 ## Custom Protocols
 
@@ -91,4 +90,4 @@ Read only the section matching evidence from deterministic triage.
 - Match functions using symbols, constants, strings, control-flow shape, and
   call relationships.
 - Report changed behavior and evidence before discussing exploitability.
-- Keep exploit construction behind the active workflow and authorization gate.
+- Keep exploit construction inside the active workflow.

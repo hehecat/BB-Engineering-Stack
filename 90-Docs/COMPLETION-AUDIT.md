@@ -17,7 +17,7 @@ the snapshot date.
 | L4 Skills | versioned Skills; BB, CTF, Analysis, Web, Android, iOS, Network, Cloud, LLM, Source, and Reverse profiles validate; count `skill_count` in `bb-stack validate --json` | pass |
 | L5 MCP/CLI | domain capability profiles plus empty workspace baseline; Chrome DevTools, Playwright, Anastasis, and OSINT direct handshakes; count `l5_profiles` in `bb-stack validate --json` | pass |
 
-Primary delivered operating scope is CTF Web/Android/Reverse, authorized Bug
+Primary delivered operating scope is CTF Web/Android/Reverse, Bug
 Bounty/VDP, Web/API, Android, iOS, Network/AD, Cloud, LLM/Agent, source/IaC/
 container/SCA assessment, Browser-JS analysis, and native reverse engineering.
 Device, cloud-account, and provider-specific dynamic checks remain dependent on

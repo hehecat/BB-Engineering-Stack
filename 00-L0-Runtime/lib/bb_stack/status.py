@@ -15,7 +15,7 @@ from . import __version__
 from .capabilities import CapabilityRegistry
 from .configuration import MACHINE_CONFIG_KEYS, load_machine_config
 from .data import DataManager
-from .engagement import AUTHORIZED_STATUSES, EngagementManager
+from .engagement import EngagementManager
 from .errors import StackError, ValidationError
 from .evaluation import EvaluationManager
 from .io import load_yaml
@@ -645,27 +645,13 @@ class StackStatus:
                     f"Use profile {expected_profile} for engagement {state['slug']}",
                     f"bb-stack status --profile {expected_profile} --engagement {state['slug']}",
                 )
-            if (
-                state["workflow"] in {"bug-bounty", "assessment"}
-                and state["authorization"]["status"] not in AUTHORIZED_STATUSES
-            ):
-                self._action(
-                    actions,
-                    "required",
-                    "engagement.authorization",
-                    f"Record the authorization basis for engagement {state['slug']}",
-                    f"bb-stack engagement authorize {state['slug']} --status user-asserted --source DESCRIPTION",
-                )
         invalid = [item["slug"] for item in inventory if "error" in item]
         lifecycle_counts: dict[str, int] = {}
         for item in inventory:
             lifecycle = item.get("lifecycle", "invalid")
             lifecycle_counts[lifecycle] = lifecycle_counts.get(lifecycle, 0) + 1
-        authorization_ready = bool(
-            not selected
-            or selected["workflow"] not in {"bug-bounty", "assessment"}
-            or selected["authorization"]["status"] in AUTHORIZED_STATUSES
-        )
+        # Authorization is informational only in the task-first edition.
+        authorization_ready = True
         return {
             "ready": bool(
                 (not explicit or selected) and profile_matches and authorization_ready

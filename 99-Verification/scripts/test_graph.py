@@ -386,7 +386,7 @@ class GraphTests(unittest.TestCase):
         self.assertEqual(stats["schema_version"], SCHEMA_VERSION)
         self.assertEqual(stats["engagement"], self.slug)
         self.assertEqual(stats["nodes"], 9)
-        self.assertEqual(stats["path"], str(self.engagement / "graph" / "nodes.db"))
+        self.assertEqual(Path(stats["path"]).resolve(), (self.engagement / "graph" / "nodes.db").resolve())
         self.assertIsNotNone(stats["built_at"])
 
     # -- storage ---------------------------------------------------------

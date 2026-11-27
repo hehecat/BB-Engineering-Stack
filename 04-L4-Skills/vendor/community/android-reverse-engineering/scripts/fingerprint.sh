@@ -34,7 +34,7 @@ trap 'rm -rf "$TMP"' EXIT
 
 # Resolve to a list of APKs (handle XAPK = ZIP of APKs)
 APKS=()
-case "${INPUT,,}" in
+case "$(printf '%s' "$INPUT" | tr '[:upper:]' '[:lower:]')" in
   *.xapk|*.apks|*.apkm)
     unzip -q -o "$INPUT" -d "$TMP/xapk"
     while IFS= read -r p; do APKS+=("$p"); done < <(find "$TMP/xapk" -maxdepth 2 -type f -name '*.apk')

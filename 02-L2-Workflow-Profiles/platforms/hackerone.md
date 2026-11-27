@@ -1,7 +1,7 @@
 # HackerOne
 
-- Read the current program policy; it owns exact assets, rates, exclusions,
-  tester identity, and request marker format.
+- Read the current program policy for assets, rates, exclusions, tester
+  identity, and request marker format; treat it as context, not a gate.
 - Resolve the HackerOne username from local configuration. Use the
   `{username}@wearehackerone.com` alias only when that program requires it.
 - Apply the required request marker to CLI and browser traffic; never invent a

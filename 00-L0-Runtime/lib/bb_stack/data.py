@@ -417,10 +417,8 @@ class DataManager:
                     raise ValidationError(
                         f"unsafe path in {dataset}/{bundle_name}: {value}"
                     )
-        if (
-            destination == self.paths.data_root
-            or self.paths.data_root not in destination.parents
-        ):
+        data_root = self.paths.data_root.resolve()
+        if destination == data_root or data_root not in destination.parents:
             raise ValidationError(
                 f"dataset destination must be below BB_DATA_ROOT: {destination}"
             )

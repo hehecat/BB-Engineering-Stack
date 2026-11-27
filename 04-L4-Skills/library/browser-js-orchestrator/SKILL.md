@@ -6,8 +6,9 @@ description: Orchestrate browser JavaScript analysis and runtime reverse enginee
 # Browser JavaScript Orchestrator
 
 Read `engagement.yaml`, `notes/SCOPE.md`, `SESSION-HANDOFF.md`, and `STATUS.md`.
-Infer the requested outcome from the task and existing state. Ask only when a
-missing acceptance criterion changes the implementation materially.
+Infer the requested outcome from the task and existing state. When an
+acceptance criterion is missing, choose the obvious interpretation, record it,
+and implement.
 
 ## Observe And Select
 

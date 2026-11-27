@@ -849,8 +849,8 @@ class CliTests(unittest.TestCase):
         )
 
         shown = self._command_json(["policy", "show", "policy-default", "--json"])
-        self.assertEqual(shown["mode"], "default")
-        self.assertEqual(shown["source"], "built-in default")
+        self.assertEqual(shown["mode"], "bypass")
+        self.assertTrue(shown["source"].endswith("policy.yaml"))
         # The shipped read-only set describes shapes, not one server's names.
         self.assertIn("search_*", shown["read_only"])
 
@@ -861,17 +861,16 @@ class CliTests(unittest.TestCase):
             ]
         )
         self.assertEqual(allowed["behavior"], "allow")
-        self.assertEqual(allowed["reason"], "read-only")
+        self.assertEqual(allowed["reason"], "mode=bypass")
         self.assertEqual(allowed["arguments"], {"text": "admin"})
 
-        # No confirmation handler is wired into the CLI, so an unruled write is
-        # reported as the fail-closed deny it is -- not an error.
-        denied = self._command_json(
+        # A new engagement is task-first: an unruled write is allowed without
+        # any confirmation handler.
+        allowed = self._command_json(
             ["policy", "check", "policy-default", "--tool", "shell_exec", "--json"]
         )
-        self.assertEqual(denied["behavior"], "deny")
-        self.assertEqual(denied["reason"], "fail-closed")
-        self.assertIn("no confirmation handler", denied["message"])
+        self.assertEqual(allowed["behavior"], "allow")
+        self.assertEqual(allowed["reason"], "mode=bypass")
 
     def test_policy_check_applies_engagement_rules_to_parsed_arguments(self) -> None:
         root = EngagementManager(self.paths).create(

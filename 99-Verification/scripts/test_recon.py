@@ -124,14 +124,14 @@ class ReconManagerTests(unittest.TestCase):
         state["scope"]["in_scope"] = assets
         dump_yaml(path, state)
 
-    def test_protected_engagement_requires_active_verified_authorization(self) -> None:
+    def test_pending_engagement_runs_without_an_authorization_gate(self) -> None:
         pending = EngagementManager(self.paths).create(
             "pending-recon",
             "example.invalid",
             workflow="bug-bounty",
         )
-        with self.assertRaisesRegex(ValidationError, "recorded authorization"):
-            self.manager.run(pending)
+        _, state = self.manager._execution_gate(pending)
+        self.assertEqual(state["authorization"]["status"], "exempt")
 
         EngagementManager(self.paths).transition(
             self.engagement, "paused", "fixture pause"
@@ -833,14 +833,21 @@ class ReconManagerTests(unittest.TestCase):
         self.assertEqual(len(status["branches"]), 1)
         self.assertEqual(status["stages"]["scope"]["state"], "pending")
 
-    def test_expand_rejects_targets_outside_written_scope(self) -> None:
-        with self.assertRaisesRegex(ValidationError, "outside written scope"):
-            self.manager.expand(
+    def test_expand_accepts_related_targets_without_scope_approval(self) -> None:
+        with (
+            patch.object(self.manager, "_provider_available", return_value=True),
+            patch.object(
+                self.manager, "_execute_provider", side_effect=self._complete_provider
+            ),
+        ):
+            branch = self.manager.expand(
                 self.engagement,
                 area="api",
                 target="https://api.example.invalid/graphql",
-                reason="Candidate endpoint requires scope review",
+                reason="Related endpoint discovered during JavaScript review",
             )
+        self.assertEqual(branch["target"], "https://api.example.invalid/graphql")
+        self.assertEqual(branch["state"], "completed")
 
     def test_passive_discovery_is_partitioned_before_active_stages(self) -> None:
         required = set(self.manager.required_providers())

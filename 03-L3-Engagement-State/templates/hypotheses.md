@@ -10,7 +10,7 @@ Internal states: `queued`, `active`, `validated`, `killed`, `deferred`.
 ### H-001: Descriptive hypothesis
 
 - State: queued
-- Scope state: in-scope, candidate, or out-of-scope
+- Asset state: active, candidate, or deferred
 - Surface: endpoint, page, component, or file
 - Class: vulnerability or challenge class
 - Signal: observation that justifies the hypothesis

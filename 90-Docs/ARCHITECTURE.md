@@ -72,7 +72,7 @@ plane, preserves existing state, and transfers target work to the configured
 workspace. The user does not need to choose a domain Profile during setup.
 
 `cd "$BB_WORK_ROOT" && claude` loads the generated project `CLAUDE.md`. The
-router first classifies Bug Bounty, authorized assessment, CTF, standalone
+router first classifies Bug Bounty, security assessment, CTF, standalone
 analysis, or Lab, then selects Web/API, Browser-JS, Android, iOS, Reverse,
 network, cloud, LLM/agent, or source intent and calls `bb-stack workspace route`.
 That command creates or resumes the isolated
@@ -100,7 +100,7 @@ L2 is a composition matrix, not a linear inheritance tree:
 ```text
 workflow policy (BB | assessment | CTF | analysis | lab)
 + domain method (Web | mobile | network | cloud | LLM | source | reverse | Browser-JS)
-+ platform overlay (HackerOne | Butian | generic VDP | authorized assessment | standalone)
++ platform overlay (HackerOne | Butian | generic VDP | security assessment | standalone)
 + active mode (interactive | continuous)
 ```
 

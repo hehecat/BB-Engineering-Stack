@@ -358,7 +358,7 @@ class FileLoadingTests(PolicyTestBase):
             "  - http\n"
         )
         policy = policy_for(self.paths, self.slug)
-        self.assertEqual(policy.source, str(self.engagement / "policy.yaml"))
+        self.assertEqual(Path(policy.source).resolve(), (self.engagement / "policy.yaml").resolve())
         self.assertEqual(
             policy.evaluate("fetch", {"url": "http://x/admin"}).behavior, DENY
         )

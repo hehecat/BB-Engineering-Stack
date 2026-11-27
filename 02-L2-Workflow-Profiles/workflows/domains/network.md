@@ -9,4 +9,4 @@ conditions, and time window before active scanning.
 Save discovery and service inventories under `artifacts/network/`, reusable
 commands under `scripts/`, and preserve exact host, port, protocol, identity,
 and before/after evidence for every lead. A newly reachable subnet or identity
-does not expand the written Scope.
+does not expand the active target set.

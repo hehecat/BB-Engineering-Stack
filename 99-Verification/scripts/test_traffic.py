@@ -319,15 +319,15 @@ class TrafficStoreTests(unittest.TestCase):
 
     def test_store_is_0600_file_in_0700_directory(self) -> None:
         expected = self.engagement / "traffic" / "flows.db"
-        self.assertEqual(self.store.path, expected)
+        self.assertEqual(self.store.path.resolve(), expected.resolve())
         self.assertTrue(expected.is_file())
         self.assertEqual(stat.S_IMODE(expected.stat().st_mode), 0o600)
         self.assertEqual(stat.S_IMODE(expected.parent.stat().st_mode), 0o700)
 
     def test_store_for_targets_the_engagement_traffic_directory(self) -> None:
         self.assertEqual(
-            store_for(self.paths, self.slug).path,
-            self.paths.engagement(self.slug) / "traffic" / "flows.db",
+            store_for(self.paths, self.slug).path.resolve(),
+            (self.paths.engagement(self.slug) / "traffic" / "flows.db").resolve(),
         )
 
     def test_missing_store_is_only_opened_explicitly(self) -> None:
@@ -394,7 +394,10 @@ class TrafficStoreTests(unittest.TestCase):
         self.assertEqual(stats["by_client"], {"agent": 1, "browser": 2})
         self.assertEqual(stats["by_status"], {"200": 1, "404": 1, "None": 1})
         self.assertEqual(stats["schema_version"], SCHEMA_VERSION)
-        self.assertEqual(stats["path"], str(self.engagement / "traffic" / "flows.db"))
+        self.assertEqual(
+            Path(stats["path"]).resolve(),
+            (self.engagement / "traffic" / "flows.db").resolve(),
+        )
 
 
 if __name__ == "__main__":

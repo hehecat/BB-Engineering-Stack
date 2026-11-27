@@ -71,7 +71,7 @@ class FileCodeBoxTests(unittest.TestCase):
             )
         command = run.call_args.args[0]
         self.assertIn("https://filebox.example/share/file/", command)
-        self.assertIn('file=@"' + str(self.source) + '"', command)
+        self.assertIn('file=@"' + str(self.source.resolve()) + '"', command)
         self.assertIn("expire_value=7", command)
         self.assertIn("expire_style=day", command)
         self.assertNotIn("private-token", json.dumps(command))

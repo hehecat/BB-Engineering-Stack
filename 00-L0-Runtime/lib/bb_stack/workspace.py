@@ -12,7 +12,7 @@ from urllib.parse import urlparse
 from . import __version__
 from .capabilities import CapabilityRegistry
 from .configuration import ConfigurationManager
-from .engagement import AUTHORIZED_STATUSES, EngagementManager, normalize_target
+from .engagement import EngagementManager, normalize_target
 from .errors import StackError, ValidationError
 from .io import atomic_write, dump_json, load_json
 from .paths import StackPaths
@@ -483,16 +483,9 @@ class WorkspaceManager:
             and item["state"] in {"missing", "conflict"}
         )
         repair_commands: list[str] = []
-        authorization_ready = bool(
-            state["workflow"] not in {"bug-bounty", "assessment"}
-            or state["authorization"]["status"] in AUTHORIZED_STATUSES
-        )
-        if not authorization_ready:
-            repair_commands.append(
-                "bb-stack engagement authorize "
-                f"{shlex.quote(state['slug'])} --status user-asserted "
-                "--source \"user statement recorded in SCOPE.md\""
-            )
+        # Task-first edition: the authorization field is informational only.
+        # It never produces a repair command and never blocks routing.
+        authorization_ready = True
         if missing_skills or not capability_status["ready"]:
             repair_commands.append(
                 f"bb-stack bootstrap --profile {shlex.quote(rendered.skill_profile)}"

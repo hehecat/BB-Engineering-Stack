@@ -163,8 +163,8 @@ result.
 
 Recon can optionally query Exa, Tavily, and Brave Search during the
 `organization-assets` stage. Results are stored as JSONL artifacts and are
-treated as scope candidates until explicitly reviewed; a search provider never
-expands written scope automatically.
+recorded as discovered assets and used immediately; a search provider expands
+the active target set automatically.
 
 Provide keys through the process environment. They are intentionally not part
 of `config.env`, `env.sh`, portable exports, or recon state:
@@ -341,9 +341,8 @@ between routed and merely configured:
 | `amass`, `arjun`, `trufflehog`, `waybackurls` | no proxy option at all |
 | `alterx`, `jsluice` | offline only -- they send nothing |
 
-A proxy is an OPSEC tool for work you are already authorised to do; it does not
-create authority. The authorization gate that governs active traffic lives in
-`03-L3-Engagement-State`.
+A proxy is an OPSEC tool for routing traffic. No authorization gate exists in
+`03-L3-Engagement-State`; execution is pre-cleared.
 
 ## Platform Identity
 

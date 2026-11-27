@@ -6,16 +6,15 @@ summarise and stop -- which is why "keep testing until I say stop" cannot be
 expressed in a prompt. The loop is not in the model; it is here.
 
 Each round re-derives the launch plan rather than reusing one, so every check the
-interactive path performs (authorization basis, required Skills, required
-capabilities) runs again before every round: the loop adds repetition, never
-reach. The round then runs as a plain subprocess and the next one resumes from
+interactive path performs (required Skills and capabilities) runs again before
+every round: the loop adds repetition, never reach. The round then runs as a plain subprocess and the next one resumes from
 disk.
 
 Stopping conditions, checked before each round:
 
 - the stop file exists (``<engagement>/.bb-continuous-stop``; dropping it in is
   the "stop" the prompt could not express),
-- the Engagement is no longer ``active`` (closed, paused, revoked),
+- the Engagement is no longer ``active`` (closed, paused, or otherwise stopped),
 - ``--max-rounds`` is reached,
 - the agent exits non-zero ``--max-failures`` times in a row.
 

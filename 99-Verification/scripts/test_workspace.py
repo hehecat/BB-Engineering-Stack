@@ -57,9 +57,9 @@ class WorkspaceTests(unittest.TestCase):
         self.assertIn("android", router)
         self.assertIn("Operate `bb-stack`, MCP, and CLI tools", router)
         self.assertIn("returned repair commands yourself", router)
-        self.assertIn("Ask one compact question only", router)
+        self.assertIn("never ask for authorization", router)
         self.assertIn("使用简体中文编写面向用户的回复", router)
-        self.assertIn("`user-asserted`", router)
+        self.assertIn("pre-cleared", router)
         self.assertIn("bb-stack data ensure", router)
         self.assertTrue(self.manager.status()["ready"])
 
@@ -126,7 +126,7 @@ class WorkspaceTests(unittest.TestCase):
         )
 
         root = Path(first["engagement"])
-        self.assertEqual(root.parent, self.paths.engagements_root)
+        self.assertEqual(root.parent.resolve(), self.paths.engagements_root.resolve())
         self.assertEqual(first["profile"], "ctf-android")
         self.assertEqual(
             first["skill_route"],
@@ -234,7 +234,10 @@ class WorkspaceTests(unittest.TestCase):
                     mode=None,
                 )
                 self.assertFalse(resumed["created"])
-                self.assertEqual(resumed["engagement"], first["engagement"])
+                self.assertEqual(
+                    Path(resumed["engagement"]).resolve(),
+                    Path(first["engagement"]).resolve(),
+                )
 
         engagements = sorted(
             path.name
@@ -341,7 +344,7 @@ class WorkspaceTests(unittest.TestCase):
             ],
         )
         assessment_prompt = Path(assessment["prompt_file"]).read_text()
-        self.assertIn("Authorized Security Assessment Workflow", assessment_prompt)
+        self.assertIn("Security Assessment Workflow", assessment_prompt)
         self.assertNotIn("Default Production Action Budget", assessment_prompt)
         self.assertNotIn("verified flag", assessment_prompt)
 
@@ -349,13 +352,13 @@ class WorkspaceTests(unittest.TestCase):
         self.assertEqual(analysis["profile"], "analysis-android")
         analysis_prompt = Path(analysis["prompt_file"]).read_text()
         self.assertIn("Security Analysis Workflow", analysis_prompt)
-        self.assertNotIn("Authorized Security Assessment Workflow", analysis_prompt)
+        self.assertNotIn("Security Assessment Workflow", analysis_prompt)
 
         self.assertEqual(challenge["workflow"], "ctf")
         self.assertEqual(challenge["profile"], "ctf-android")
         challenge_prompt = Path(challenge["prompt_file"]).read_text()
         self.assertIn("CTF Workflow", challenge_prompt)
-        self.assertNotIn("Authorized Security Assessment Workflow", challenge_prompt)
+        self.assertNotIn("Security Assessment Workflow", challenge_prompt)
 
     def test_full_security_routes_select_expected_specialists(self) -> None:
         self.manager.initialize()
@@ -433,13 +436,12 @@ class WorkspaceTests(unittest.TestCase):
             ["security-orchestrator", "native-reverse-engineering"],
         )
         self.assertEqual(assessment["workflow"], "assessment")
-        self.assertFalse(assessment["ready"])
-        self.assertIn(
+        self.assertNotIn(
             "bb-stack engagement authorize",
             "\n".join(assessment["repair_commands"]),
         )
         assessment_prompt = Path(assessment["prompt_file"]).read_text()
-        self.assertIn("Authorized Security Assessment Workflow", assessment_prompt)
+        self.assertIn("Security Assessment Workflow", assessment_prompt)
         self.assertNotIn("verified flag", assessment_prompt)
 
         inferred_root = EngagementManager(self.paths).create(
@@ -490,7 +492,9 @@ class WorkspaceTests(unittest.TestCase):
         legacy = self.paths.work_root / nested.name
         nested.rename(legacy)
 
-        self.assertEqual(self.paths.engagement("legacy-readable"), legacy)
+        self.assertEqual(
+            self.paths.engagement("legacy-readable").resolve(), legacy.resolve()
+        )
         listed = EngagementManager(self.paths).list()
         self.assertEqual([item["slug"] for item in listed], ["legacy-readable"])
 

@@ -117,16 +117,16 @@ class ContractTests(unittest.TestCase):
             rendered = registry.render(name)
             content = Path(rendered.output_file).read_text(encoding="utf-8")
             if rendered.workflow == "assessment":
-                self.assertIn("Authorized Security Assessment Workflow", content)
+                self.assertIn("Security Assessment Workflow", content)
                 self.assertNotIn("Default Production Action Budget", content)
                 self.assertNotIn("Optimize for a verified flag", content)
             elif rendered.workflow == "analysis":
                 self.assertIn("Security Analysis Workflow", content)
-                self.assertNotIn("Authorized Security Assessment Workflow", content)
+                self.assertNotIn("Security Assessment Workflow", content)
                 self.assertNotIn("Default Production Action Budget", content)
             elif rendered.workflow == "ctf":
                 self.assertIn("CTF Workflow", content)
-                self.assertNotIn("Authorized Security Assessment Workflow", content)
+                self.assertNotIn("Security Assessment Workflow", content)
 
     def test_cross_domain_skills_are_optional_handoffs(self) -> None:
         registry = SkillRegistry(self.paths)
@@ -330,12 +330,12 @@ class ContractTests(unittest.TestCase):
         ).read_text(encoding="utf-8")
         self.assertLessEqual(len(router.split()), 1200)
         self.assertIn("bb-stack workspace route", router)
-        self.assertIn("Do not ask the user to choose an internal Profile", router)
+        self.assertIn("Never ask the user to choose Profiles", router)
         self.assertIn("Operate `bb-stack`, MCP, and CLI tools", router)
-        self.assertIn("Ask one compact question only", router)
+        self.assertIn("never ask for authorization", router)
         self.assertIn("returned repair commands yourself", router)
         self.assertIn("stack operations, not Engagements", router)
-        self.assertIn("`user-asserted`", router)
+        self.assertIn("pre-cleared", router)
         self.assertIn("bb-stack data ensure", router)
         for kind in (
             "ctf-web",

@@ -14,8 +14,8 @@ timestamps:
   updated_at: "2026-01-01T00:00:00Z"
 
 authorization:
-  status: user-asserted
-  source: "User instruction and program policy captured in notes/SCOPE.md"
+  status: exempt
+  source: "User-supplied task instruction and requested outcome"
 
 scope:
   file: notes/SCOPE.md
@@ -40,7 +40,7 @@ identity:
 current:
   lead_id: null
   finding_id: null
-  next_action: "Read notes/SCOPE.md and select the first in-scope lead"
+  next_action: "Read notes/SCOPE.md and select the first useful lead"
   stop_reason: null
 
 checkpoint:

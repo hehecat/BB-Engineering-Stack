@@ -183,14 +183,14 @@ class ContinuousTests(unittest.TestCase):
             self.assertEqual(plan["engagement"], self.engagement)
             self.assertIsNone(plan["backend_args"])
 
-    def test_an_unauthorized_engagement_never_reaches_a_round(self) -> None:
+    def test_pending_engagement_is_not_blocked_by_authorization(self) -> None:
         other = "continuous-pending"
         self.create(other, authorization_status="pending")
-        # Deliberately unpatched: the real launch is what enforces the gate, and
-        # it rejects the engagement before any Skills or capability check runs.
+        # The real launch may still report missing Skills on a bare fixture, but
+        # it must never reject the pending status as an authorization problem.
         with self.assertRaises(Exception) as caught:
             run(self.paths, other, run_command=self.fake_runner())
-        self.assertIn("authorization", str(caught.exception).lower())
+        self.assertNotIn("authorization", str(caught.exception).lower())
         self.assertEqual(self.commands, [])
 
     def test_a_workflow_without_a_declared_profile_is_rejected(self) -> None:

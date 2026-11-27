@@ -27,7 +27,7 @@ defaults:
 agents:
   recon-runner:
     description: >-
-      Run reconnaissance for a written-Scope target and report coverage plus
+      Run reconnaissance for a target and report coverage plus
       ranked candidate assets. Use when the queued lead is "we do not know the
       surface yet", not when a specific endpoint needs proving.
     skill: bb-recon
@@ -38,7 +38,7 @@ agents:
   web-prover:
     description: >-
       Prove or refute one concrete server-side web hypothesis against an
-      in-scope endpoint: auth boundary, IDOR, injection, business logic, cache,
+      active endpoint: auth boundary, IDOR, injection, business logic, cache,
       request smuggling. Use when the lead already names a request to change.
     skill: bb-orchestrator
     capabilities: [http.raw, web.probe, web.fuzz, web.templates, web.sqli-assist, web.xss-assist, web.crawl, browser.stateful, oob.callback, data.payloads.web, data.wordlists.web, data.json, tls.inspect, proxy.http, runtime.python]
@@ -57,9 +57,9 @@ agents:
 
   network-scanner:
     description: >-
-      Assess an authorized network range or Active Directory estate: host and
+      Assess a network range or Active Directory estate: host and
       service discovery, protocol weaknesses, credential exposure paths. Use
-      when the Scope is an address range or an internal domain, not a website.
+      when the target is an address range or an internal domain, not a website.
     skill: security-orchestrator
     capabilities: [network.scan, tls.inspect, http.raw, osint.correlation, oob.callback, proxy.http, data.wordlists.credentials, data.wordlists.usernames, data.wordlists.llm, data.json, runtime.python]
     writes: [artifacts/network/]
@@ -67,7 +67,7 @@ agents:
 
   mobile-analyst:
     description: >-
-      Assess an authorized Android or iOS application: static structure,
+      Assess an Android or iOS application: static structure,
       dynamic instrumentation, storage, crypto, and IPC boundaries. Use when
       the artifact is an APK, IPA, or a device-backed app.
     skill: security-orchestrator
@@ -97,8 +97,8 @@ agents:
 
   cloud-auditor:
     description: >-
-      Audit an authorized cloud account: identity policy, exposed object
-      storage, network exposure, and posture drift. Use when the Scope names a
+      Audit a cloud account: identity policy, exposed object
+      storage, network exposure, and posture drift. Use when the target names a
       tenant or account rather than a host.
     skill: security-orchestrator
     capabilities: [cloud.cli, cloud.posture, http.raw, data.json, runtime.python]

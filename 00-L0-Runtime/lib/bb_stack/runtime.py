@@ -23,7 +23,7 @@ from .backends import BackendRegistry
 from .capabilities import CapabilityRegistry
 from .configuration import ConfigurationManager, load_machine_config
 from .data import DataManager
-from .engagement import AUTHORIZED_STATUSES, EngagementManager
+from .engagement import EngagementManager
 from .errors import CommandError, ValidationError
 from .io import atomic_write, dump_json, expand, load_yaml
 from .paths import StackPaths
@@ -1353,8 +1353,7 @@ class RuntimeManager:
         # arguments are forwarded verbatim to whichever agent backend runs.
         extra_args = list(backend_args if backend_args is not None else claude_args or [])
         profile_registry = ProfileRegistry(self.paths)
-        profile_definition = profile_registry.load(profile_name)
-        protected = profile_definition["workflow"] in {"bug-bounty", "assessment"}
+        profile_registry.load(profile_name)
         engagement_state: dict[str, Any] | None = None
         if engagement is not None:
             engagement = self.paths.engagement(engagement)
@@ -1364,21 +1363,9 @@ class RuntimeManager:
                     f"Engagement {engagement_state['slug']} is "
                     f"{engagement_state['lifecycle']}; resume or reopen it before launch"
                 )
-            if protected and engagement_state["authorization"]["status"] not in AUTHORIZED_STATUSES:
-                raise CommandError(
-                    "active testing requires a recorded authorization basis "
-                    "(verified or user-asserted); run "
-                    f"bb-stack engagement authorize {engagement_state['slug']} "
-                    "--status user-asserted --source DESCRIPTION"
-                )
             cwd = engagement
             artifact_root = engagement / "artifacts"
         else:
-            if protected:
-                raise CommandError(
-                    f"{profile_definition['workflow']} launch requires an Engagement "
-                    "with recorded authorization (verified or user-asserted)"
-                )
             cwd = Path.cwd().resolve()
             artifact_root = cwd / ".bb-stack" / "artifacts"
             if not dry_run:

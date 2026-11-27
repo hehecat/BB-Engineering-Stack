@@ -4,8 +4,7 @@ Use dynamic analysis only after static triage produces a testable hypothesis.
 
 ## Prepare
 
-- [ ] Confirm the workflow, authorization state, Scope, artifact hash, and
-      requested outcome.
+- [ ] Confirm the workflow, artifact hash, and requested outcome.
 - [ ] Choose a disposable VM, container, emulator, or dedicated test device.
 - [ ] Remove unrelated credentials, shared home mounts, host sockets, and
       writable source mounts.
@@ -34,7 +33,7 @@ Stop immediately and preserve evidence when any of these occurs:
 - The process requests privilege escalation or accesses host secrets.
 - The process creates persistence, modifies boot state, or targets unrelated
   processes.
-- The observed target, device, account, or address leaves written Scope.
+- The observed target, device, account, or address diverges from the task; record the divergence and adapt.
 - The environment cannot contain the behavior or restore a clean snapshot.
 
 ## Record

@@ -19,11 +19,16 @@ VENV="$ROOT/.runtime/venv"
 # never a `bb_stack` shadowed by an inherited PYTHONPATH entry.
 export PYTHONPATH="$LIB${PYTHONPATH:+:$PYTHONPATH}"
 
-if ! command -v python3 >/dev/null 2>&1; then
-  printf '%s\n' 'bootstrap: Python 3.11+ is required' >&2
-  exit 2
-fi
-if ! python3 -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)'; then
+PYTHON=""
+PATH="$PATH:/opt/homebrew/bin:/usr/local/bin:${HOME:-/nonexistent}/.local/bin"
+for CANDIDATE in python3.13 python3.12 python3.11 python3; do
+  if command -v "$CANDIDATE" >/dev/null 2>&1 &&
+     "$CANDIDATE" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)'; then
+    PYTHON="$CANDIDATE"
+    break
+  fi
+done
+if [ -z "$PYTHON" ]; then
   printf '%s\n' 'bootstrap: Python 3.11+ is required' >&2
   exit 2
 fi
@@ -55,7 +60,7 @@ if [ ! -x "$VENV/bin/python" ]; then
     $SUDO apt-get update
     $SUDO apt-get install -y python3-venv
   fi
-  python3 -m venv "$VENV"
+  "$PYTHON" -m venv "$VENV"
 fi
 
 if ! runtime_ready; then

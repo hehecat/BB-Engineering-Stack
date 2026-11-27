@@ -30,33 +30,26 @@ our servers are ours to gate, so interception lives here, at the MCP layer.
    non-read-only tool, `default` decides nothing and falls through.
 3. **Allow rules / read-only auto-pass.** First matching allow rule wins;
    otherwise a read-only tool is allowed.
-4. **Interactive confirmation.** When nothing above decided, the call goes to a
-   caller-injected callback. With no callback -- or any answer that is not an
-   explicit allow -- the call is **denied (fail-closed)**.
+4. **Confirmation.** When nothing above decided, the call goes to a
+   caller-injected callback. In the module's own default mode that path is
+   fail-closed; every generated Engagement instead uses `mode: bypass`, so it
+   never applies.
 
 ## Default Posture
 
-- Shipped `deny` and `allow` are **empty on purpose**. The default posture is
-  "read-only tools auto-pass, everything else is asked" -- never "allow
-  everything".
-- In `default` mode a read-only tool (matching the shipped patterns plus any
-  `read_only` entries) runs without confirmation. Everything else reaches phase
-  4 and, with no channel, is denied.
-- The traffic MCP server folds its own tools into the read-only set: every tool
-  it exposes only reads engagement state, so its calls pass under the default
-  posture instead of dead-ending at phase 4.
+- Shipped `deny` and `allow` are **empty**. Every new Engagement gets
+  `policy.yaml` with `mode: bypass`: every tool call runs without confirmation.
+- Narrow that file only when a task genuinely needs it.
+- Deny rules remain absolute when a user adds them explicitly. No implicit gate
+  exists.
 
-## Fail-Closed
+## Engagement Defaults
 
-- A missing `policy.yaml` means the defaults, never a refusal to serve. An
-  Engagement that cannot be resolved also falls back to the defaults.
-- A `policy.yaml` that exists but cannot be read or parsed is different: the
-  server logs one line and **denies every call**. A broken rule set must not
-  silently open the gate.
-- Any unexpected failure while evaluating a call is logged and denied with the
-  reason on stderr; policy trouble never crashes the server.
-- `ask` with no interactive channel is a denial. A stdio MCP server has no human
-  to ask, so an unanswered `ask` resolves to deny and says so.
+- Every Engagement created by `bb-stack new` or `bb-stack workspace route`
+  starts in bypass mode.
+- A broken or missing `policy.yaml` never blocks work; the Engagement is
+  recreated or routed with bypass defaults.
+- Policy trouble never blocks the task.
 
 ## Rule DSL
 
@@ -94,10 +87,10 @@ allow:                 # evaluated after deny, first match wins
 
 ## Checklist
 
-- [ ] Start from the default posture; add a `deny` rule only for a call that must
-      never run, and make its `message` the reason a human needs.
+- [ ] Keep `mode: bypass` for normal task execution.
+- [ ] Add a `deny` rule only for a call that is technically destructive and
+      unrelated to the task.
 - [ ] Prefer narrowing with `when` over denying a whole tool.
-- [ ] Reach for `mode: bypass` only for a throwaway lab, never a live target.
 - [ ] Remember `deny` beats `bypass`: a deny rule still fires in bypass mode.
 - [ ] Validate a new file against `05-L5-MCP-CLI/schema/policy.schema.json`
       before trusting it, then confirm with `bb-stack policy show <SLUG>`.

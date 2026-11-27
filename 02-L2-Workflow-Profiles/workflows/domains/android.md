@@ -7,7 +7,7 @@ instrumentation. Use `android-reverse-engineering` for framework fingerprinting,
 decompilation, Kotlin/R8 name recovery, API extraction, and call-flow analysis.
 Use `android-pentest` for component security, device, ADB, Frida, storage, TLS,
 and other dynamic leads. In analysis or CTF work, route first through
-`reverse-orchestrator`; in an authorized assessment, retain
+`reverse-orchestrator`; in an assessment, retain
 `security-orchestrator` as the workflow owner.
 
 Static analysis must work without a connected device. Before dynamic actions,

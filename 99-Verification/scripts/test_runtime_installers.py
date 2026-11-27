@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import sys
 import tarfile
 import tempfile
 import unittest
@@ -232,7 +233,7 @@ class RuntimeInstallerTests(unittest.TestCase):
             "BB_CONFIG_HOME": str(base / "config"),
             "BB_WORK_ROOT": str(base / "work"),
             "CLAUDE_CONFIG_DIR": str(home / ".claude"),
-            "PATH": "/usr/bin:/bin",
+            "PATH": f"{Path(sys.executable).parent}:/usr/bin:/bin",
         }
 
         completed = subprocess.run(
@@ -273,7 +274,7 @@ class RuntimeInstallerTests(unittest.TestCase):
         env = {
             "HOME": str(base / "home"),
             "BB_STACK_ROOT": str(stack),
-            "PATH": "/usr/bin:/bin",
+            "PATH": f"{Path(sys.executable).parent}:/usr/bin:/bin",
         }
 
         completed = subprocess.run(
@@ -918,25 +919,49 @@ class RuntimeInstallerTests(unittest.TestCase):
         )
         self.assertEqual(status["commands"]["git"], "/usr/bin/fixture")
 
-    def test_launch_rejects_protected_workflow_without_engagement(self) -> None:
+    def _launch_mocks(self, workflow: str):
+        prompt = Path(self.temporary.name) / "generated" / "prompt.md"
+        render = SimpleNamespace(
+            skill_profile="minimal",
+            l5_profile="minimal",
+            output_file=str(prompt),
+            prompt_mode="append",
+        )
         profiles = MagicMock()
-        profiles.load.return_value = {"workflow": "assessment"}
+        profiles.load.return_value = {"workflow": workflow}
+        profiles.render.return_value = render
+        skills = MagicMock()
+        skills.profile.return_value = {"required": []}
+        skills.status.return_value = []
+        capabilities = MagicMock()
+        capabilities.side_effects.return_value = ["filesystem-write"]
+        capabilities.doctor.return_value = {"ready": True, "missing_required": []}
+        capabilities.render_mcp.return_value = {"mcpServers": {}}
+        data = MagicMock()
+        data.ensure_profile.return_value = {"ready": True}
+        return profiles, skills, capabilities, data
+
+    def test_launch_allows_protected_workflow_without_engagement(self) -> None:
+        profiles, skills, capabilities, data = self._launch_mocks("assessment")
         with (
             patch("bb_stack.runtime.ProfileRegistry", return_value=profiles),
-            self.assertRaisesRegex(CommandError, "requires an Engagement"),
+            patch("bb_stack.runtime.SkillRegistry", return_value=skills),
+            patch("bb_stack.runtime.CapabilityRegistry", return_value=capabilities),
+            patch("bb_stack.runtime.DataManager", return_value=data),
+            patch("bb_stack.runtime.shutil.which", return_value="/usr/bin/claude"),
         ):
-            self.manager.launch(
+            plan = self.manager.launch(
                 "assessment-web",
                 engagement=None,
                 platform=None,
                 claude_args=[],
                 dry_run=True,
             )
+        self.assertEqual(plan["profile"], "assessment-web")
 
-    def test_launch_rejects_inactive_and_unverified_engagements(self) -> None:
+    def test_launch_rejects_inactive_but_allows_pending_authorization(self) -> None:
         engagement = Path(self.temporary.name) / "engagement"
-        profiles = MagicMock()
-        profiles.load.return_value = {"workflow": "bug-bounty"}
+        profiles, skills, capabilities, data = self._launch_mocks("bug-bounty")
         inactive = {
             "slug": "fixture",
             "lifecycle": "paused",
@@ -961,11 +986,13 @@ class RuntimeInstallerTests(unittest.TestCase):
                 dry_run=True,
             )
 
-        unverified = inactive | {
+        pending = inactive | {
             "lifecycle": "active",
+            "workflow": "bug-bounty",
+            "platform": "generic-vdp",
             "authorization": {"status": "pending"},
         }
-        engagement_manager.validate.return_value = unverified
+        engagement_manager.validate.return_value = pending
         with (
             patch("bb_stack.runtime.ProfileRegistry", return_value=profiles),
             patch("bb_stack.runtime.StackPaths.engagement", return_value=engagement),
@@ -973,15 +1000,19 @@ class RuntimeInstallerTests(unittest.TestCase):
                 "bb_stack.runtime.EngagementManager",
                 return_value=engagement_manager,
             ),
-            self.assertRaisesRegex(CommandError, "recorded authorization basis"),
+            patch("bb_stack.runtime.SkillRegistry", return_value=skills),
+            patch("bb_stack.runtime.CapabilityRegistry", return_value=capabilities),
+            patch("bb_stack.runtime.DataManager", return_value=data),
+            patch("bb_stack.runtime.shutil.which", return_value="/usr/bin/claude"),
         ):
-            self.manager.launch(
+            plan = self.manager.launch(
                 "ctf-web",
                 engagement=engagement,
                 platform=None,
                 claude_args=[],
                 dry_run=True,
             )
+        self.assertEqual(plan["cwd"], str(engagement))
 
     def test_launch_dry_run_builds_isolated_command(self) -> None:
         prompt = Path(self.temporary.name) / "generated" / "prompt.md"

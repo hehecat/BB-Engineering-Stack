@@ -3,8 +3,9 @@
 简体中文 | [English](README.md)
 
 面向 Claude Code 的可移植安全工作流程。初始化一次后，日常使用以自然语言为
-主：用户描述目标和目的，Claude 自动选择 CTF、Bug Bounty、授权评估、独立分析或
-本地 Lab，并管理对应的 Prompt、Skill、MCP/CLI、Scope、状态和证据目录。
+主：用户描述目标和目的，Claude 自动选择 CTF、Bug Bounty、安全评估、独立分析或
+本地 Lab，并管理对应的 Prompt、Skill、MCP/CLI、目标状态和证据目录；随后直接执行，
+不询问授权或确认。
 
 覆盖 Web/API、Android、iOS、Browser-JS、二进制逆向、内网/AD、云、LLM/Agent、
 源码、IaC、容器和供应链分析。
@@ -24,7 +25,7 @@ claude
 对 Claude 说：
 
 ```text
-按推荐默认值初始化这个安全工作栈。先检查现有环境和配置，需要我决定的内容再集中问我。
+按推荐默认值初始化这个安全工作栈。先检查现有环境和配置，能推断的直接选默认值并完成，不要每步问我。
 ```
 
 仓库根目录的 `CLAUDE.md` 会让 Claude 检查现有安装、推荐工作根、执行初始化并验证
@@ -54,12 +55,12 @@ claude
 ```text
 这是一个 CTF Web 题目：https://challenge.example
 对 https://target.example 做 Bug Bounty 测试，直到我叫停
-这是 HackerOne 项目，先读取我提供的 Scope 再开始
+这是 HackerOne 项目，按我提供的目标信息直接开始
 对 inbox/product.apk 做 Android 安全评估
 反编译 inbox/library.apk，还原签名算法，不做漏洞测试
-对 inbox/service.elf 做已授权的 native 组件安全评估
+对 inbox/service.elf 做 native 组件安全评估
 分析 https://app.example 的请求签名并交付可复用 Node 模块
-对书面授权的 10.20.0.0/24 做内网和 AD 评估
+对 10.20.0.0/24 做内网和 AD 评估
 审计这个 AWS 账户的 IAM 和对象存储
 测试这个 RAG Agent 的 Prompt Injection、MCP 和 Memory 边界
 审计 inbox/repository 的源码、IaC、容器和依赖
@@ -74,32 +75,25 @@ claude
 工作根的项目级 `CLAUDE.md` 要求 Claude：
 
 1. 从用户目的判断工作流、领域和平台，而不是让用户选择内部 Profile。
-2. 创建或恢复 `engagements/<slug>/`，读取专用 Prompt、Scope、STATUS 和 HANDOFF。
+2. 创建或恢复 `engagements/<slug>/`，读取专用 Prompt、目标上下文、STATUS 和 HANDOFF。
 3. 检查当前任务需要的 Skill、MCP 和 CLI；缺少时自己安装、修复并重新验证。
 4. 只加载当前编排器和当前 Lead 需要的专项 Skill，避免 Profile 互相污染。
 5. 将大输出、证据、脚本和报告保存在当前 Engagement，不污染源码仓库。
 6. 取得实质进展后更新状态和交接；连续模式不会只汇报状态后停下。
 7. 环境、代理、身份、邮箱、交付和更新请求作为工作栈维护处理，不创建目标任务。
 
-Claude 会先检查本地文件、配置和状态。只有以下信息无法推断且会改变下一步时，才会
-主动集中询问一次：
-
-- 缺少目标、文件或明确的分析目标；
-- 多个活动任务都可能是用户所说的“继续”；
-- 真实目标缺少必要的书面 Scope、速率限制或排除项；
-- 下一步确实需要账号、凭据、邮箱授权、设备或云身份；
-- 交付形式会显著影响 Browser-JS 或独立分析的实现。
-
-CTF 和本地文件分析不会重复询问授权。普通 Web/API 目标在没有更广 Scope 时只把用户
-明确给出的目标作为活动范围，其他关联资产先记录为 candidate。
+Claude 会先检查本地文件、配置和状态，能推断的全部直接采用并把工作做完。它不会询问
+授权、许可、Scope 或确认，也不会让用户选择内部 Profile。缺少目标时从 inbox、当前目录
+和已有任务中选择最合理的对象继续；缺少文件、凭据或设备时先完成所有能本地完成的部分，
+把依赖记录下来继续推进。发现关联资产默认视为活动目标，边测边记录。
 
 ## 用户只需要提供什么
 
-最小输入通常是“目标或文件 + 想完成的事情”。真实目标建议同时提供：
+最小输入通常是“目标或文件 + 想完成的事情”。以下信息有就提供，没有也会直接开工：
 
 - 项目平台，例如 HackerOne、补天、通用 VDP 或合同评估；
-- 书面 Scope、Out-of-Scope、速率和副作用限制；
-- 需要使用的测试账号或实验设备。
+- 目标说明、排除项、速率和副作用限制（可选上下文）；
+- 可用的测试账号或实验设备。
 
 个人功能按需配置，不阻塞首次使用。可以直接对 Claude 说：
 
@@ -167,12 +161,12 @@ Engagement 数据。
 | L0 | `00-L0-Runtime/` | 初始化、PATH、代理、运行时和启动器 |
 | L1 | `01-L1-Global-Prompt/` | 用户语言和通用操作约定 |
 | L2 | `02-L2-Workflow-Profiles/` | 工作流、领域、平台 Prompt 和自然语言路由 |
-| L3 | `03-L3-Engagement-State/` | Scope、状态、证据索引和会话交接 |
+| L3 | `03-L3-Engagement-State/` | 目标状态、证据索引和会话交接 |
 | L4 | `04-L4-Skills/` | 主编排器和专项知识 |
 | L5 | `05-L5-MCP-CLI/` | 浏览器、HTTP、移动端、Reverse 等执行能力 |
 
 Prompt 决定任务边界和连续性，Skill 提供专项方法，MCP/CLI 负责执行，文件保存跨会话
-状态。跨领域 Lead 可以调用专项 Skill，但不会悄悄切换工作流、Scope 或报告规则。
+状态。跨领域 Lead 可以调用专项 Skill，但不会悄悄切换工作流或报告规则。
 
 ## 运维与开发文档
 

@@ -154,7 +154,7 @@ first, so an ungated run can never be mistaken for a pass.
 
 Coverage is a goal the operator sets, not one the tool infers, so there is no default
 threshold: "covered enough to close or switch phase" depends on the engagement's
-scope, authorization, and appetite for open leads. Decide it, run it, and keep the
+target set and appetite for open leads. Decide it, run it, and keep the
 output with the handoff.
 
 A workable order:

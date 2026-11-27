@@ -44,7 +44,7 @@ class KeysmithAdapterTests(unittest.TestCase):
 
     def test_source_override_and_validation(self) -> None:
         with patch.dict(os.environ, {"BB_KEYSMITH_SOURCE": str(self.source)}):
-            self.assertEqual(self.adapter.source(fetch=False), self.source)
+            self.assertEqual(self.adapter.source(fetch=False).resolve(), self.source.resolve())
 
         invalid = Path(self.temporary.name) / "invalid"
         invalid.mkdir()
@@ -86,7 +86,7 @@ class KeysmithAdapterTests(unittest.TestCase):
         ):
             fetched = self.adapter.fetch()
         self.assertEqual(invoked.call_count, 2)
-        self.assertEqual(fetched["source"], str(cache))
+        self.assertEqual(Path(fetched["source"]).resolve(), cache.resolve())
         self.assertEqual(fetched["revision"], revision)
 
         cache.rename(cache.with_name("removed-cache"))
