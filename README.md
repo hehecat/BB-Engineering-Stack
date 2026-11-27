@@ -9,8 +9,9 @@ MCP/CLI capabilities, target state, and evidence directory, then executes
 immediately without asking for authorization or confirmation.
 
 It covers Web/API, CTF, Bug Bounty/VDP, Android, iOS, Browser JavaScript,
-reverse engineering, network/AD, cloud, LLM/agent, source, IaC, container, and
-supply-chain work.
+reverse engineering, binary exploitation (CTF Pwn / memory corruption proof),
+network/AD, cloud, LLM/agent, source, IaC, container, and supply-chain work on
+Linux (`x86_64`/`arm64`) and macOS (`arm64`/`x86_64` via Homebrew + Xcode CLT).
 
 ## Start Once
 

@@ -28,7 +28,11 @@
         "properties": {
           "kind": {"enum": ["apt", "go", "pipx", "uv-tool", "git-data", "git-build", "archive-binary", "archive-tree", "deb", "service"]},
           "checks": {"type": "array", "items": {"type": "string"}},
+          "darwin_checks": {"type": "array", "items": {"type": "string"}},
+          "darwin_probe": {"type": "array", "minItems": 1, "items": {"type": "string"}},
           "packages": {"type": "array", "items": {"type": "string"}},
+          "brew": {"type": "array", "items": {"type": "string"}},
+          "brew_casks": {"type": "array", "items": {"type": "string"}},
           "package": {"type": "string"},
           "python": {"type": "string"},
           "binary": {"type": "string"},

@@ -472,7 +472,16 @@ class WorkspaceTests(unittest.TestCase):
         original_which = shutil.which
 
         def without_chromium(command: str, path: str | None = None) -> str | None:
-            if command in {"chromium", "chromium-browser", "google-chrome"}:
+            if (
+                command
+                in {
+                    "chromium",
+                    "chromium-browser",
+                    "google-chrome",
+                    "google-chrome-stable",
+                }
+                or ".app/Contents/MacOS/" in command
+            ):
                 return None
             return original_which(command, path=path)
 

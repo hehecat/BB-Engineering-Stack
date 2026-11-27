@@ -14,12 +14,14 @@ import tarfile
 import tempfile
 import time
 import zipfile
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from .backends import BackendRegistry
+from .browser import find_chromium
 from .capabilities import CapabilityRegistry
 from .configuration import ConfigurationManager, load_machine_config
 from .data import DataManager
@@ -57,6 +59,7 @@ GO_INSTALL_TIMEOUT_SECONDS = 900
 PIPX_INSTALL_TIMEOUT_SECONDS = 900
 UV_TOOL_INSTALL_TIMEOUT_SECONDS = 900
 APT_TIMEOUT_SECONDS = 900
+BREW_TIMEOUT_SECONDS = 900
 BUILD_TIMEOUT_SECONDS = 1800
 POST_INSTALL_TIMEOUT_SECONDS = 1200
 
@@ -422,16 +425,38 @@ class RuntimeManager:
             digest.update(b"\0")
         return digest.hexdigest()
 
+    @staticmethod
+    def _select_platform_file(
+        files: Mapping[str, Any], name: str, label: str
+    ) -> tuple[str, dict[str, Any]]:
+        system = platform.system().lower()
+        raw_machine = platform.machine().lower()
+        arch = {
+            "x86_64": "x86_64",
+            "amd64": "x86_64",
+            "aarch64": "aarch64",
+            "arm64": "aarch64",
+        }.get(raw_machine, raw_machine)
+        if system == "linux":
+            candidates = (f"linux-{arch}", arch, platform.machine())
+        elif system == "darwin":
+            candidates = (f"darwin-{arch}", f"darwin-{raw_machine}")
+        else:
+            candidates = ()
+        for key in candidates:
+            entry = files.get(key)
+            if isinstance(entry, dict):
+                return key, entry
+        raise CommandError(f"{label} for {name} supports Linux and macOS x86_64/arm64")
+
     def _ensure_toolchain(self, name: str) -> None:
         config = load_yaml(self.config / "toolchains.yaml")["toolchains"][name]
         existing = shutil.which(name, path=self.paths.runtime_path())
         if existing and self._toolchain_version_ready(name, existing, config):
             return
-        if platform.system() != "Linux" or platform.machine() not in config["files"]:
-            raise CommandError(
-                f"{name} is missing or too old; portable bootstrap supports Linux x86_64/aarch64"
-            )
-        file_spec = config["files"][platform.machine()]
+        file_key, file_spec = self._select_platform_file(
+            config["files"], name, f"{name} toolchain bootstrap"
+        )
         cache = self.paths.runtime / "cache"
         toolchains = self.paths.runtime / "toolchains"
         cache.mkdir(parents=True, exist_ok=True)
@@ -451,7 +476,7 @@ class RuntimeManager:
             finally:
                 if temporary.exists():
                     temporary.unlink()
-        target = toolchains / f"{name}-{config['version']}-{platform.machine()}"
+        target = toolchains / f"{name}-{config['version']}-{file_key}"
         if not target.is_dir():
             with tempfile.TemporaryDirectory(
                 prefix=f"{name}-extract-", dir=toolchains
@@ -820,6 +845,13 @@ class RuntimeManager:
         apt_names: list[str] = []
         apt_optional_pending: list[str] = []
         apt_optional_names: list[str] = []
+        brew_formulae: list[str] = []
+        brew_casks: list[str] = []
+        brew_names: list[str] = []
+        brew_optional_formulae: list[str] = []
+        brew_optional_casks: list[str] = []
+        brew_optional_names: list[str] = []
+        is_darwin = platform.system() == "Darwin"
 
         for name in selected:
             spec = document["installers"][name]
@@ -829,6 +861,28 @@ class RuntimeManager:
                 continue
             is_optional = name in optional
             kind = expanded["kind"]
+            has_brew = bool(expanded.get("brew") or expanded.get("brew_casks"))
+            if is_darwin and (
+                kind == "apt" or (kind in {"deb", "git-build"} and has_brew)
+            ):
+                if not has_brew:
+                    if not is_optional:
+                        raise CommandError(
+                            f"tool {name} has no macOS Homebrew package declared"
+                        )
+                    results.append(
+                        {"component": f"tool:{name}", "state": "unavailable"}
+                    )
+                    continue
+                if is_optional:
+                    brew_optional_formulae.extend(expanded.get("brew", []))
+                    brew_optional_casks.extend(expanded.get("brew_casks", []))
+                    brew_optional_names.append(name)
+                else:
+                    brew_formulae.extend(expanded.get("brew", []))
+                    brew_casks.extend(expanded.get("brew_casks", []))
+                    brew_names.append(name)
+                continue
             if kind == "apt":
                 if is_optional:
                     apt_optional_pending.extend(expanded["packages"])
@@ -852,6 +906,91 @@ class RuntimeManager:
                 results.append({"component": f"tool:{name}", "state": "unavailable"})
                 continue
             results.append({"component": f"tool:{name}", "state": "installed"})
+
+        if brew_names or brew_optional_names:
+            if dry_run:
+                results.extend(
+                    {"component": f"tool:{name}", "state": "planned"}
+                    for name in (*brew_names, *brew_optional_names)
+                )
+            else:
+                brew = shutil.which("brew", path=env["PATH"])
+                if not brew:
+                    if brew_names:
+                        raise CommandError(
+                            "Homebrew (brew) is required on macOS to install system packages"
+                        )
+                    results.extend(
+                        {"component": f"tool:{name}", "state": "unavailable"}
+                        for name in brew_optional_names
+                    )
+                else:
+                    brew_env = {**env, "HOMEBREW_NO_AUTO_UPDATE": "1"}
+
+                    def install_brew_batch(
+                        names: list[str],
+                        formulae: list[str],
+                        casks: list[str],
+                        *,
+                        degrade: bool,
+                    ) -> None:
+                        if not names:
+                            return
+                        try:
+                            if formulae:
+                                self._run(
+                                    [brew, "install", *sorted(set(formulae))],
+                                    env=brew_env,
+                                    timeout=BREW_TIMEOUT_SECONDS,
+                                )
+                            if casks:
+                                self._run(
+                                    [
+                                        brew,
+                                        "install",
+                                        "--cask",
+                                        *sorted(set(casks)),
+                                    ],
+                                    env=brew_env,
+                                    timeout=BREW_TIMEOUT_SECONDS,
+                                )
+                        except CommandError:
+                            if not degrade:
+                                raise
+                            results.extend(
+                                {"component": f"tool:{name}", "state": "unavailable"}
+                                for name in names
+                            )
+                            return
+                        for name in names:
+                            spec = expand(
+                                document["installers"][name], env, strict=False
+                            )
+                            if not self._tool_ready(spec, env):
+                                if degrade:
+                                    results.append(
+                                        {
+                                            "component": f"tool:{name}",
+                                            "state": "unavailable",
+                                        }
+                                    )
+                                    continue
+                                raise CommandError(
+                                    f"Homebrew completed but tool check still fails: {name}"
+                                )
+                            results.append(
+                                {"component": f"tool:{name}", "state": "installed"}
+                            )
+
+                    install_brew_batch(
+                        brew_names, brew_formulae, brew_casks, degrade=False
+                    )
+                    install_brew_batch(
+                        brew_optional_names,
+                        brew_optional_formulae,
+                        brew_optional_casks,
+                        degrade=True,
+                    )
 
         if apt_pending or apt_optional_pending:
             if dry_run:
@@ -998,9 +1137,36 @@ class RuntimeManager:
                 ):
                     return False
             return True
-        commands_ready = all(
-            shutil.which(item, path=env["PATH"]) for item in spec.get("checks", [])
-        )
+        if platform.system() == "Darwin":
+            checks = spec.get("darwin_checks", spec.get("checks", []))
+            if checks == ["chromium"] and spec.get("kind") == "apt":
+                commands_ready = bool(find_chromium(env, which=shutil.which))
+            else:
+                commands_ready = all(
+                    shutil.which(item, path=env["PATH"]) for item in checks
+                )
+            probe = spec.get("darwin_probe")
+            if commands_ready and probe:
+                probe_command = [
+                    shutil.which(probe[0], path=env["PATH"]) or probe[0],
+                    *probe[1:],
+                ]
+                try:
+                    completed = subprocess.run(
+                        probe_command,
+                        env=env,
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                        timeout=10,
+                        check=False,
+                    )
+                    commands_ready = completed.returncode == 0
+                except (OSError, subprocess.TimeoutExpired):
+                    commands_ready = False
+        else:
+            commands_ready = all(
+                shutil.which(item, path=env["PATH"]) for item in spec.get("checks", [])
+            )
         post_check = spec.get("post_check")
         return commands_ready and (not post_check or Path(post_check).exists())
 
@@ -1020,20 +1186,33 @@ class RuntimeManager:
         elif kind == "pipx":
             pipx = shutil.which("pipx", path=env["PATH"])
             if not pipx:
-                apt = shutil.which("apt-get", path=env["PATH"])
-                if not apt:
-                    raise CommandError(f"pipx is required to install {name}")
-                prefix = [] if os.geteuid() == 0 else ["sudo"]
-                self._run(
-                    [*prefix, apt, "update"],
-                    env=env,
-                    timeout=APT_TIMEOUT_SECONDS,
-                )
-                self._run(
-                    [*prefix, apt, "install", "-y", "pipx"],
-                    env=env,
-                    timeout=APT_TIMEOUT_SECONDS,
-                )
+                if platform.system() == "Darwin":
+                    brew = shutil.which("brew", path=env["PATH"])
+                    if not brew:
+                        raise CommandError(
+                            f"Homebrew and pipx are required to install {name}"
+                        )
+                    brew_env = {**env, "HOMEBREW_NO_AUTO_UPDATE": "1"}
+                    self._run(
+                        [brew, "install", "pipx"],
+                        env=brew_env,
+                        timeout=BREW_TIMEOUT_SECONDS,
+                    )
+                else:
+                    apt = shutil.which("apt-get", path=env["PATH"])
+                    if not apt:
+                        raise CommandError(f"pipx is required to install {name}")
+                    prefix = [] if os.geteuid() == 0 else ["sudo"]
+                    self._run(
+                        [*prefix, apt, "update"],
+                        env=env,
+                        timeout=APT_TIMEOUT_SECONDS,
+                    )
+                    self._run(
+                        [*prefix, apt, "install", "-y", "pipx"],
+                        env=env,
+                        timeout=APT_TIMEOUT_SECONDS,
+                    )
                 pipx = shutil.which("pipx", path=env["PATH"])
                 if not pipx:
                     raise CommandError(
@@ -1095,11 +1274,9 @@ class RuntimeManager:
                 spec["revision"] + "\n",
             )
         elif kind == "archive-binary":
-            if platform.system() != "Linux" or platform.machine() not in spec["files"]:
-                raise CommandError(
-                    f"archive installer for {name} supports Linux x86_64/aarch64"
-                )
-            file_spec = spec["files"][platform.machine()]
+            _, file_spec = self._select_platform_file(
+                spec["files"], name, "archive installer"
+            )
             cache = self.paths.runtime / "cache"
             cache.mkdir(parents=True, exist_ok=True)
             archive = cache / file_spec["archive"]
@@ -1306,11 +1483,9 @@ class RuntimeManager:
             return
 
     def _download_tool_archive(self, name: str, spec: dict[str, Any]) -> Path:
-        if platform.system() != "Linux" or platform.machine() not in spec["files"]:
-            raise CommandError(
-                f"archive installer for {name} supports Linux x86_64/aarch64"
-            )
-        file_spec = spec["files"][platform.machine()]
+        _, file_spec = self._select_platform_file(
+            spec["files"], name, "archive installer"
+        )
         cache = self.paths.runtime / "cache"
         cache.mkdir(parents=True, exist_ok=True)
         archive = cache / file_spec["archive"]

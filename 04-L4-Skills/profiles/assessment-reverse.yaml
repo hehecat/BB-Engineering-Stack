@@ -2,4 +2,4 @@ schema_version: 1
 name: assessment-reverse
 orchestrator: security-orchestrator
 required: [security-orchestrator, native-reverse-engineering]
-optional: [android-reverse-engineering, android-pentest, threat-modeling, information-disclosure]
+optional: [android-reverse-engineering, android-pentest, binary-exploitation, threat-modeling, information-disclosure]

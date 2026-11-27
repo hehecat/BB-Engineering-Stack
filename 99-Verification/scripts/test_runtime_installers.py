@@ -20,6 +20,7 @@ from bb_stack.errors import CommandError, ValidationError
 from bb_stack.paths import StackPaths
 from bb_stack.runtime import (
     APT_TIMEOUT_SECONDS,
+    BREW_TIMEOUT_SECONDS,
     BUILD_TIMEOUT_SECONDS,
     UV_TOOL_INSTALL_TIMEOUT_SECONDS,
     RuntimeManager,
@@ -638,6 +639,7 @@ class RuntimeInstallerTests(unittest.TestCase):
             patch(
                 "bb_stack.runtime.ConfigurationManager.effective", return_value=machine
             ),
+            patch("bb_stack.runtime.platform.system", return_value="Linux"),
             patch.object(
                 self.manager, "_tool_ready", side_effect=[False, False, True, True]
             ),
@@ -793,6 +795,7 @@ class RuntimeInstallerTests(unittest.TestCase):
                 "bb_stack.runtime.ConfigurationManager.effective",
                 return_value=self._direct_machine(),
             ),
+            patch("bb_stack.runtime.platform.system", return_value="Linux"),
             patch.object(self.manager, "_tool_ready", side_effect=[False, False, True]),
             patch("bb_stack.runtime.shutil.which", return_value="/usr/bin/apt-get"),
             patch("bb_stack.runtime.os.geteuid", return_value=0),
@@ -1122,6 +1125,152 @@ class RuntimeInstallerTests(unittest.TestCase):
             self.manager.launch(
                 "analysis", engagement=None, platform=None, claude_args=[], dry_run=True
             )
+
+    def test_select_platform_file_supports_linux_and_darwin_arches(self) -> None:
+        files = {
+            "x86_64": {"archive": "lin64"},
+            "aarch64": {"archive": "linarm"},
+            "darwin-x86_64": {"archive": "mac64"},
+            "darwin-aarch64": {"archive": "macarm"},
+        }
+        with (
+            patch("bb_stack.runtime.platform.system", return_value="Darwin"),
+            patch("bb_stack.runtime.platform.machine", return_value="arm64"),
+        ):
+            key, spec = self.manager._select_platform_file(files, "demo", "archive")
+            self.assertEqual((key, spec["archive"]), ("darwin-aarch64", "macarm"))
+        with (
+            patch("bb_stack.runtime.platform.system", return_value="Darwin"),
+            patch("bb_stack.runtime.platform.machine", return_value="x86_64"),
+        ):
+            key, spec = self.manager._select_platform_file(files, "demo", "archive")
+            self.assertEqual((key, spec["archive"]), ("darwin-x86_64", "mac64"))
+        with (
+            patch("bb_stack.runtime.platform.system", return_value="Linux"),
+            patch("bb_stack.runtime.platform.machine", return_value="aarch64"),
+        ):
+            key, spec = self.manager._select_platform_file(files, "demo", "archive")
+            self.assertEqual((key, spec["archive"]), ("aarch64", "linarm"))
+
+    def test_darwin_homebrew_batching_and_optional_degradation(self) -> None:
+        document = {
+            "profiles": {
+                "fixture": {"required": ["req", "browser"], "optional": ["opt"]}
+            },
+            "installers": {
+                "req": {
+                    "kind": "apt",
+                    "packages": ["req-pkg"],
+                    "brew": ["req-brew"],
+                    "checks": ["req"],
+                },
+                "browser": {
+                    "kind": "apt",
+                    "packages": ["chromium"],
+                    "brew_casks": ["chromium"],
+                    "checks": ["chromium"],
+                },
+                "opt": {
+                    "kind": "apt",
+                    "packages": ["opt-pkg"],
+                    "brew": ["opt-brew"],
+                    "checks": ["opt"],
+                },
+            },
+        }
+        machine = self._direct_machine()
+
+        def run(command: list[str], **_kwargs: object) -> None:
+            if "opt-brew" in command:
+                raise CommandError("optional brew install failed")
+
+        with (
+            patch("bb_stack.runtime.platform.system", return_value="Darwin"),
+            patch("bb_stack.runtime.load_yaml", return_value=document),
+            patch("bb_stack.runtime.validate"),
+            patch(
+                "bb_stack.runtime.ConfigurationManager.effective",
+                return_value=machine,
+            ),
+            patch.object(
+                self.manager,
+                "_tool_ready",
+                side_effect=[False, False, False, True, True],
+            ),
+            patch(
+                "bb_stack.runtime.shutil.which", return_value="/opt/homebrew/bin/brew"
+            ),
+            patch.object(self.manager, "_run", side_effect=run) as run_mock,
+        ):
+            result = self.manager.install_tools("fixture", True, dry_run=False)
+
+        self.assertEqual(
+            [(item["component"], item["state"]) for item in result],
+            [
+                ("tool:req", "installed"),
+                ("tool:browser", "installed"),
+                ("tool:opt", "unavailable"),
+            ],
+        )
+        commands = [entry.args[0] for entry in run_mock.call_args_list]
+        self.assertEqual(commands[0], ["/opt/homebrew/bin/brew", "install", "req-brew"])
+        self.assertEqual(
+            commands[1],
+            ["/opt/homebrew/bin/brew", "install", "--cask", "chromium"],
+        )
+        self.assertEqual(commands[2], ["/opt/homebrew/bin/brew", "install", "opt-brew"])
+        self.assertTrue(
+            all(
+                entry.kwargs["env"].get("HOMEBREW_NO_AUTO_UPDATE") == "1"
+                for entry in run_mock.call_args_list
+            )
+        )
+        self.assertEqual(
+            run_mock.call_args_list[0].kwargs["timeout"], BREW_TIMEOUT_SECONDS
+        )
+
+    def test_darwin_pipx_uses_homebrew_and_probe_gates_stub(self) -> None:
+        env = {"PATH": "/opt/homebrew/bin:/usr/bin:/bin"}
+        which_results = [None, "/opt/homebrew/bin/brew", "/opt/homebrew/bin/pipx"]
+        with (
+            patch("bb_stack.runtime.platform.system", return_value="Darwin"),
+            patch("bb_stack.runtime.shutil.which", side_effect=which_results),
+            patch.object(self.manager, "_run") as run,
+        ):
+            self.manager._install_tool(
+                "demo", {"kind": "pipx", "package": "demo==1.0.0"}, env
+            )
+        self.assertEqual(
+            run.call_args_list[0].args[0], ["/opt/homebrew/bin/brew", "install", "pipx"]
+        )
+        self.assertEqual(run.call_args_list[1].args[0][0], "/opt/homebrew/bin/pipx")
+
+        java_spec = {
+            "kind": "apt",
+            "checks": ["java"],
+            "darwin_probe": ["java", "-version"],
+        }
+        with (
+            patch("bb_stack.runtime.platform.system", return_value="Darwin"),
+            patch("bb_stack.runtime.shutil.which", return_value="/usr/bin/java"),
+            patch(
+                "bb_stack.runtime.subprocess.run",
+                return_value=subprocess.CompletedProcess(["java"], 1),
+            ),
+        ):
+            self.assertFalse(self.manager._tool_ready(java_spec, env))
+        with (
+            patch("bb_stack.runtime.platform.system", return_value="Darwin"),
+            patch(
+                "bb_stack.runtime.shutil.which",
+                return_value="/opt/homebrew/opt/openjdk/bin/java",
+            ),
+            patch(
+                "bb_stack.runtime.subprocess.run",
+                return_value=subprocess.CompletedProcess(["java"], 0),
+            ),
+        ):
+            self.assertTrue(self.manager._tool_ready(java_spec, env))
 
 
 if __name__ == "__main__":

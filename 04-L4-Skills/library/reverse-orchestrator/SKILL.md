@@ -12,8 +12,10 @@ description: Orchestrate first-pass reverse engineering of a binary, APK, firmwa
 4. For APK/XAPK/JAR/AAR Java or Kotlin static triage, load
    `android-reverse-engineering`. When the artifact contains `.so` libraries,
    hand off the native component to `native-reverse-engineering` while keeping
-   the Android workflow owner. For ELF, PE, Mach-O, firmware, bytecode, Go,
-   Rust, JNI, or custom native protocols, load `native-reverse-engineering`.
+   For ELF, PE, Mach-O, firmware, bytecode, Go, Rust, JNI, or custom native
+   protocols, load `native-reverse-engineering`. When a CTF Pwn or native
+   memory-corruption hypothesis needs exploitability validation (outside
+   standalone `analysis`), also load `binary-exploitation` after initial triage.
    For device, component, Frida, storage, TLS, or runtime security testing,
    load `android-pentest`. For mixed Web surfaces, route the HTTP component to
    `ctf-web`.

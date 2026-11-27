@@ -4,6 +4,7 @@ import fcntl
 import hashlib
 import json
 import os
+import platform
 import re
 import shlex
 import shutil
@@ -19,6 +20,7 @@ from urllib.error import HTTPError
 from urllib.parse import quote, urlparse
 from urllib.request import Request, urlopen
 
+from .browser import find_chromium
 from .capabilities import CapabilityRegistry
 from .errors import CommandError, StackError, ValidationError
 from .io import dump_json, dump_yaml, expand, load_json, load_yaml
@@ -281,7 +283,7 @@ class UpdateManager:
                 install_package=install_package,
                 current=version,
             )
-        elif kind == "pipx":
+        elif kind in {"pipx", "uv-tool"}:
             package, separator, version = spec["package"].partition("==")
             item.update(
                 checker="pypi" if separator else "manual",
@@ -827,31 +829,58 @@ class UpdateManager:
             ],
         }
         bwrap = shutil.which("bwrap", path=self.paths.runtime_path())
-        if not bwrap:
+        if bwrap:
+            sandbox_kind = "bubblewrap-unshared-network"
+            probe_command = [
+                bwrap,
+                "--die-with-parent",
+                "--new-session",
+                "--unshare-net",
+                "--ro-bind",
+                "/",
+                "/",
+                "--bind",
+                str(candidate),
+                str(candidate),
+                "--tmpfs",
+                "/tmp",
+                "--chdir",
+                str(candidate),
+                node,
+                str(candidate / "mcp_probe.mjs"),
+                json.dumps(launch),
+            ]
+        elif platform.system() == "Darwin":
+            sandbox_exec = shutil.which("sandbox-exec", path="/usr/bin:/bin")
+            if not sandbox_exec:
+                raise CommandError(
+                    "sandbox-exec is required to validate untrusted MCP candidates on macOS"
+                )
+            candidate_real = str(candidate.resolve())
+            profile = (
+                "(version 1)"
+                "(allow default)"
+                "(deny network*)"
+                "(deny file-write*)"
+                f'(allow file-write* (subpath "{candidate_real}") '
+                '(subpath "/private/tmp") (subpath "/tmp") (literal "/dev/null"))'
+            )
+            sandbox_kind = "macos-seatbelt-no-network"
+            probe_command = [
+                sandbox_exec,
+                "-p",
+                profile,
+                node,
+                str(candidate / "mcp_probe.mjs"),
+                json.dumps(launch),
+            ]
+        else:
             raise CommandError(
                 "bubblewrap is required to validate untrusted MCP candidates"
             )
-        probe_command = [
-            bwrap,
-            "--die-with-parent",
-            "--new-session",
-            "--unshare-net",
-            "--ro-bind",
-            "/",
-            "/",
-            "--bind",
-            str(candidate),
-            str(candidate),
-            "--tmpfs",
-            "/tmp",
-            "--chdir",
-            str(candidate),
-            node,
-            str(candidate / "mcp_probe.mjs"),
-            json.dumps(launch),
-        ]
         completed = subprocess.run(
             probe_command,
+            cwd=candidate if not bwrap else None,
             env=env,
             text=True,
             capture_output=True,
@@ -872,7 +901,7 @@ class UpdateManager:
         return {
             "npm_ci": "passed",
             "mcp_handshake": "passed",
-            "sandbox": "bubblewrap-unshared-network",
+            "sandbox": sandbox_kind,
             "tool_count": result.get("tool_count"),
         }
 
@@ -896,11 +925,7 @@ class UpdateManager:
             "NPM_CONFIG_USERCONFIG": "/dev/null",
             "NPM_CONFIG_IGNORE_SCRIPTS": "true",
         }
-        chromium = (
-            shutil.which("chromium", path=env["PATH"])
-            or shutil.which("chromium-browser", path=env["PATH"])
-            or shutil.which("google-chrome", path=env["PATH"])
-        )
+        chromium = find_chromium(env, which=shutil.which)
         if chromium:
             env["BB_CHROMIUM_BIN"] = chromium
         return env

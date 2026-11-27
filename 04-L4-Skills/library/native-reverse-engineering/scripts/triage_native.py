@@ -16,6 +16,7 @@ DEFAULT_TIMEOUT_SECONDS = 60
 VERSION_ARGUMENTS = {
     "file": ["--version"],
     "readelf": ["--version"],
+    "otool": ["--version"],
     "objdump": ["--version"],
     "nm": ["--version"],
     "strings": ["--version"],
@@ -54,20 +55,26 @@ def tool_identity(command: str) -> dict[str, Any]:
     if executable is None:
         return {"present": False, "path": None, "version": None}
     version = None
-    try:
-        completed = subprocess.run(
-            [executable, *VERSION_ARGUMENTS[command]],
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            timeout=5,
-            check=False,
-            env=stable_environment(),
-        )
-        version = completed.stdout.splitlines()[0][:512] if completed.stdout else None
-    except (OSError, subprocess.TimeoutExpired):
-        pass
+    candidates = [VERSION_ARGUMENTS[command]]
+    if VERSION_ARGUMENTS[command] != ["-version"]:
+        candidates.append(["-version"])
+    for args in candidates:
+        try:
+            completed = subprocess.run(
+                [executable, *args],
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                timeout=5,
+                check=False,
+                env=stable_environment(),
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            break
+        if completed.returncode == 0 and completed.stdout:
+            version = completed.stdout.splitlines()[0][:512]
+            break
     return {"present": True, "path": executable, "version": version}
 
 
@@ -153,6 +160,10 @@ def main() -> int:
         "readelf-symbols": ["readelf", "-sW", str(source)],
         "readelf-relocations": ["readelf", "-rW", str(source)],
         "readelf-notes": ["readelf", "-nW", str(source)],
+        "otool-header": ["otool", "-hv", str(source)],
+        "otool-load-commands": ["otool", "-l", str(source)],
+        "otool-shared-libs": ["otool", "-L", str(source)],
+        "codesign-metadata": ["codesign", "-dvvv", str(source)],
         "objdump-metadata": ["objdump", "-f", "-p", str(source)],
         "nm-symbols": ["nm", "-an", str(source)],
         "strings": ["strings", "-a", "-n", "6", str(source)],

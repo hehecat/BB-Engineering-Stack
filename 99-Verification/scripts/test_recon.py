@@ -66,11 +66,28 @@ class FakeProviderProcess:
 
 def _process_alive(pid: int) -> bool:
     """True while ``pid`` still runs; a zombie counts as terminated."""
+    proc_stat = Path(f"/proc/{pid}/stat")
+    if Path("/proc").is_dir():
+        try:
+            stat = proc_stat.read_text(encoding="utf-8")
+        except OSError:
+            return False
+        return stat.rsplit(") ", 1)[1][:1] not in {"Z", "X", "x"}
     try:
-        stat = Path(f"/proc/{pid}/stat").read_text(encoding="utf-8")
-    except OSError:
+        os.kill(pid, 0)
+    except ProcessLookupError:
         return False
-    return stat.rsplit(") ", 1)[1][:1] not in {"Z", "X", "x"}
+    except PermissionError:
+        return True
+    completed = subprocess.run(
+        ["ps", "-p", str(pid), "-o", "stat="],
+        capture_output=True,
+        text=True,
+        timeout=3,
+        check=False,
+    )
+    stat = completed.stdout.strip()
+    return completed.returncode == 0 and bool(stat) and not stat.startswith("Z")
 
 
 class ReconManagerTests(unittest.TestCase):

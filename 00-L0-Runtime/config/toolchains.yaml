@@ -15,6 +15,16 @@ toolchains:
         url: https://nodejs.org/dist/v22.23.2/node-v22.23.2-linux-arm64.tar.xz
         sha256: fff4078c5def658577f92c88db7db3bc0072924bfb93fe52c1e744a54e94abb8
         top_directory: node-v22.23.2-linux-arm64
+      darwin-x86_64:
+        archive: node-v22.23.2-darwin-x64.tar.gz
+        url: https://nodejs.org/dist/v22.23.2/node-v22.23.2-darwin-x64.tar.gz
+        sha256: 58e99022c2ff89395576cc7fd4d98cea24bb68081475d5f88b801ee8729fb026
+        top_directory: node-v22.23.2-darwin-x64
+      darwin-aarch64:
+        archive: node-v22.23.2-darwin-arm64.tar.gz
+        url: https://nodejs.org/dist/v22.23.2/node-v22.23.2-darwin-arm64.tar.gz
+        sha256: 61130f394c1630d211dd50aecc4353d379480f36d3ac913cd85dbba1aed585c6
+        top_directory: node-v22.23.2-darwin-arm64
   go:
     version: 1.26.5
     minimum: 1.24
@@ -28,4 +38,14 @@ toolchains:
         archive: go1.26.5.linux-arm64.tar.gz
         url: https://go.dev/dl/go1.26.5.linux-arm64.tar.gz
         sha256: fe4789e92b1f33358680864bbe8704289e7bb5fc207d80623c308935bd696d49
+        top_directory: go
+      darwin-x86_64:
+        archive: go1.26.5.darwin-amd64.tar.gz
+        url: https://go.dev/dl/go1.26.5.darwin-amd64.tar.gz
+        sha256: 6231d8d3b8f5552ec6cbf6d685bdd5482e1e703214b120e89b3bf0d7bf1ef725
+        top_directory: go
+      darwin-aarch64:
+        archive: go1.26.5.darwin-arm64.tar.gz
+        url: https://go.dev/dl/go1.26.5.darwin-arm64.tar.gz
+        sha256: efb87ff28af9a188d0536ef5d42e63dd52ba8263cd7344a993cc48dd11dedb6a
         top_directory: go

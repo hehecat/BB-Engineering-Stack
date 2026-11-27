@@ -57,6 +57,7 @@ class UpdateManagerTests(unittest.TestCase):
                 "go",
             ),
             ({"kind": "pipx", "package": "demo==1.2.3"}, "pypi"),
+            ({"kind": "uv-tool", "package": "demo==1.2.3"}, "pypi"),
             ({"kind": "pipx", "package": "demo"}, "manual"),
             (
                 {
@@ -852,6 +853,27 @@ class UpdateManagerTests(unittest.TestCase):
             self.assertRaisesRegex(StackError, "handshake failed"),
         ):
             self.manager._validate_npm_mcp(component, candidate)
+
+        def mac_which(command: str, path: str | None = None) -> str | None:
+            if command == "bwrap":
+                return None
+            return f"/usr/bin/{command}"
+
+        with (
+            patch("bb_stack.updates.platform.system", return_value="Darwin"),
+            patch("bb_stack.updates.shutil.which", side_effect=mac_which),
+            patch.object(self.manager, "_run"),
+            patch(
+                "bb_stack.updates.CapabilityRegistry.registry",
+                return_value={"providers": {"fixture": provider}},
+            ),
+            patch(
+                "bb_stack.updates.subprocess.run", return_value=completed
+            ) as probe_run,
+        ):
+            darwin_result = self.manager._validate_npm_mcp(component, candidate)
+        self.assertEqual(darwin_result["sandbox"], "macos-seatbelt-no-network")
+        self.assertEqual(probe_run.call_args.args[0][0], "/usr/bin/sandbox-exec")
 
     def test_stage_github_tree_extracts_and_validates_skill_payload(self) -> None:
         archive = Path(self.temporary.name) / "skill.tar.gz"

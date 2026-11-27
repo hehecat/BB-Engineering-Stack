@@ -14,7 +14,7 @@ from unittest.mock import MagicMock, patch
 ROOT = Path(__file__).resolve().parents[2]
 os.environ["BB_STACK_ROOT"] = str(ROOT)
 
-from bb_stack.browser import BrowserRuntimeManager
+from bb_stack.browser import BrowserRuntimeManager, find_chromium
 from bb_stack.capabilities import CapabilityRegistry
 from bb_stack.engagement import EngagementManager
 from bb_stack.errors import CommandError
@@ -256,17 +256,64 @@ class BrowserRuntimeTests(unittest.TestCase):
         )
         with patch("pathlib.Path.read_bytes", return_value=command):
             self.assertTrue(manager._process_matches(123, profile))
-        with patch("pathlib.Path.read_bytes", side_effect=OSError("gone")):
+        with (
+            patch("bb_stack.browser.platform.system", return_value="Linux"),
+            patch("pathlib.Path.read_bytes", side_effect=OSError("gone")),
+        ):
             self.assertFalse(manager._process_matches(123, profile))
         self.assertFalse(manager._process_matches(1, profile))
 
         with patch("bb_stack.browser.os.waitpid", return_value=(123, 0)):
             self.assertTrue(manager._child_exited(123))
         with (
+            patch("bb_stack.browser.platform.system", return_value="Linux"),
             patch("bb_stack.browser.os.waitpid", side_effect=ChildProcessError),
             patch("pathlib.Path.exists", return_value=False),
         ):
             self.assertTrue(manager._child_exited(123))
+
+    def test_find_chromium_detects_macos_app_bundles(self) -> None:
+        chrome = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+
+        def fake_which(command: str, path: str | None = None) -> str | None:
+            return chrome if command == chrome else None
+
+        with patch("bb_stack.browser.platform.system", return_value="Darwin"):
+            self.assertEqual(
+                find_chromium({"PATH": "/usr/bin:/bin"}, which=fake_which),
+                chrome,
+            )
+
+    def test_darwin_process_matching_and_pid_liveness(self) -> None:
+        manager = BrowserRuntimeManager(self.paths)
+        profile = Path(self.temporary.name) / "profile"
+        ps_match = subprocess.CompletedProcess(
+            ["ps"],
+            0,
+            stdout=f"/Applications/Google Chrome.app --user-data-dir={profile} --remote-debugging-port=9222\n",
+            stderr="",
+        )
+        with (
+            patch("bb_stack.browser.platform.system", return_value="Darwin"),
+            patch("pathlib.Path.read_bytes", side_effect=FileNotFoundError),
+            patch("bb_stack.browser.subprocess.run", return_value=ps_match),
+        ):
+            self.assertTrue(manager._process_matches(456, profile))
+
+        zombie = subprocess.CompletedProcess(["ps"], 0, stdout="Z+\n", stderr="")
+        alive = subprocess.CompletedProcess(["ps"], 0, stdout="S\n", stderr="")
+        with (
+            patch("bb_stack.browser.platform.system", return_value="Darwin"),
+            patch("bb_stack.browser.os.kill"),
+            patch("bb_stack.browser.subprocess.run", return_value=zombie),
+        ):
+            self.assertFalse(manager._pid_exists(456))
+        with (
+            patch("bb_stack.browser.platform.system", return_value="Darwin"),
+            patch("bb_stack.browser.os.kill"),
+            patch("bb_stack.browser.subprocess.run", return_value=alive),
+        ):
+            self.assertTrue(manager._pid_exists(456))
 
     def test_start_failure_terminates_spawned_process(self) -> None:
         engagement = EngagementManager(self.paths).create(
@@ -389,61 +436,66 @@ class BrowserRuntimeTests(unittest.TestCase):
     def test_managed_cdp_serves_real_cli_calls(self) -> None:
         env = self.paths.environment()
         env["PATH"] = self.paths.runtime_path()
-        configured = env.get("BB_CHROMIUM_BIN", "").strip()
-        candidates = (configured,) if configured else ()
-        if not any(
-            shutil.which(name, path=env["PATH"])
-            for name in (*candidates, "chromium", "chromium-browser", "google-chrome")
-        ):
+        if not find_chromium(env):
             self.skipTest("Chromium is unavailable")
         cli = ROOT / ".runtime" / "node_modules" / ".bin" / "chrome-devtools"
         if not cli.is_file():
             self.skipTest("managed chrome-devtools CLI is unavailable")
+        node = shutil.which("node", path=env["PATH"]) or shutil.which("node")
+        if not node:
+            self.skipTest("Node.js is unavailable")
+        node_dir = str(Path(node).parent)
+        extra_path = os.pathsep.join(
+            part for part in (node_dir, os.environ.get("BB_EXTRA_PATH", "")) if part
+        )
 
-        engagement = EngagementManager(self.paths).create(
-            "browser-check",
-            "https://example.invalid",
-            workflow="analysis",
-            platform="standalone-analysis",
-            route_kind="browser-js",
-        )
-        started = BrowserRuntimeManager(self.paths).start(engagement)
-        self.assertTrue(started["ready"])
-        completed = subprocess.run(
-            [str(cli), "list_pages", "--output-format=json"],
-            env=env,
-            text=True,
-            capture_output=True,
-            timeout=20,
-            check=False,
-        )
-        self.assertEqual(completed.returncode, 0, completed.stderr)
-        self.assertTrue(json.loads(completed.stdout)["pages"])
+        with patch.dict(os.environ, {"BB_EXTRA_PATH": extra_path}, clear=False):
+            env = self.paths.environment()
+            env["PATH"] = self.paths.runtime_path()
+            engagement = EngagementManager(self.paths).create(
+                "browser-check",
+                "https://example.invalid",
+                workflow="analysis",
+                platform="standalone-analysis",
+                route_kind="browser-js",
+            )
+            started = BrowserRuntimeManager(self.paths).start(engagement)
+            self.assertTrue(started["ready"])
+            completed = subprocess.run(
+                [str(cli), "list_pages", "--output-format=json"],
+                env=env,
+                text=True,
+                capture_output=True,
+                timeout=20,
+                check=False,
+            )
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            self.assertTrue(json.loads(completed.stdout)["pages"])
 
-        mcp_path = Path(self.temporary.name) / "browser-mcp.json"
-        document = CapabilityRegistry(self.paths).render_mcp(
-            "browser-js", mcp_path, artifact_root=engagement / "artifacts"
-        )
-        server = document["mcpServers"]["chrome-devtools"]
-        launch = {"command": server["command"], "args": server["args"]}
-        mcp_probe = ROOT / ".runtime" / "mcp_probe.mjs"
-        probed = subprocess.run(
-            [
-                shutil.which("node", path=env["PATH"]),
-                str(mcp_probe),
-                json.dumps(launch),
-                json.dumps({"name": "list_pages", "arguments": {}}),
-            ],
-            env=env,
-            text=True,
-            capture_output=True,
-            timeout=30,
-            check=False,
-        )
-        self.assertEqual(probed.returncode, 0, probed.stderr)
-        result = json.loads(probed.stdout)
-        self.assertTrue(result["connected"])
-        self.assertFalse(result["call"].get("isError", False))
+            mcp_path = Path(self.temporary.name) / "browser-mcp.json"
+            document = CapabilityRegistry(self.paths).render_mcp(
+                "browser-js", mcp_path, artifact_root=engagement / "artifacts"
+            )
+            server = document["mcpServers"]["chrome-devtools"]
+            launch = {"command": server["command"], "args": server["args"]}
+            mcp_probe = ROOT / ".runtime" / "mcp_probe.mjs"
+            probed = subprocess.run(
+                [
+                    shutil.which("node", path=env["PATH"]),
+                    str(mcp_probe),
+                    json.dumps(launch),
+                    json.dumps({"name": "list_pages", "arguments": {}}),
+                ],
+                env=env,
+                text=True,
+                capture_output=True,
+                timeout=30,
+                check=False,
+            )
+            self.assertEqual(probed.returncode, 0, probed.stderr)
+            result = json.loads(probed.stdout)
+            self.assertTrue(result["connected"])
+            self.assertFalse(result["call"].get("isError", False))
 
 
 if __name__ == "__main__":

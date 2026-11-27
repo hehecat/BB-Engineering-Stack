@@ -49,7 +49,7 @@ Infer each route from the user's words and target.
 | --- | --- | --- |
 | CTF Web, Web challenge, HTTP/API challenge | `ctf-web` | `standalone-ctf` |
 | CTF APK/XAPK/AAB/JAR/AAR challenge | `ctf-android` | `standalone-ctf` |
-| CTF native binary, firmware, or bytecode challenge | `ctf-reverse` | `standalone-ctf` |
+| CTF native binary, Pwn, firmware, or bytecode challenge | `ctf-reverse` | `standalone-ctf` |
 | Bug Bounty, VDP, or ordinary Web/API penetration target | `web` | `generic-vdp` |
 | Web/API security assessment | `web-assessment` | `authorized-assessment` |
 | Android application penetration test or mobile security audit | `android-assessment` | `authorized-assessment` |

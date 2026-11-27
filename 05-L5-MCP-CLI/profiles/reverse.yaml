@@ -9,5 +9,6 @@ optional:
   - native.debug
   - native.emulate
   - native.decompile
+  - native.exploit
   - android.static
   - android.dynamic

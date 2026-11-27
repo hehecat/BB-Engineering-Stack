@@ -122,7 +122,7 @@ stack has no specialist for it.
 | Web | `ctf-web` Skill | XSS, SQLi, SSTI, SSRF, JWT, file uploads, prototype pollution |
 | Reverse | L2 route `ctf-reverse` (`reverse-orchestrator` + `native-reverse-engineering`) | Binary analysis, game clients, VMs, obfuscated code |
 | Android | L2 route `ctf-android` (`reverse-orchestrator` + `android-reverse-engineering`) | APK/DEX, native `.so` inside apps, mobile bundles |
-| Pwn | No shipped Skill — stay in this Skill | Buffer overflow, format string, heap, ROP, sandbox escape |
+| Pwn | L2 route `ctf-reverse` + `binary-exploitation` | Buffer overflow, format string, heap, ROP, sandbox escape |
 | Crypto | No shipped Skill — stay in this Skill | RSA, AES, ECC, PRNG, ZKP, classical ciphers |
 | Forensics | No shipped Skill — stay in this Skill | Disk images, memory dumps, event logs, stego, network captures |
 | OSINT | No shipped Skill — stay in this Skill | Social media, geolocation, DNS, public records |
@@ -137,10 +137,11 @@ bb-stack new <slug> <target> --workflow ctf --platform standalone-ctf
 bb-stack workspace route --kind ctf-web --target <host>   # or ctf-reverse / ctf-android
 ```
 
-Pwn, crypto, forensics, OSINT, malware, and misc challenges have **no**
-specialist Skill in this stack. Keep this Skill loaded, install the tools you
-need with `bb-stack tool install <name>`, and let the L2 `ctf-core` workflow own
-scope, evidence, and closure.
+Install binary-exploitation tooling with `bb-stack tool install pwntools ropgadget`
+when a Pwn challenge needs them. Crypto, forensics, OSINT, malware, and misc
+challenges have **no** specialist Skill in this stack. Keep this Skill loaded,
+install the tools you need with `bb-stack tool install <name>`, and let the L2
+`ctf-core` workflow own scope, evidence, and closure.
 
 ### Step 4: Pivot When Stuck
 

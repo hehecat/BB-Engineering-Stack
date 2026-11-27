@@ -471,11 +471,71 @@ providers:
     placement: bounded-worker
     side_effects: [local-read, local-write, process-execution]
 
+  lldb:
+    kind: cli
+    locator: {type: command, value: lldb}
+    placement: bounded-worker
+    side_effects: [local-read, local-write, process-execution]
+
+  otool:
+    kind: cli
+    locator: {type: command, value: otool}
+    placement: bounded-worker
+    side_effects: [local-read]
+
   qemu-user:
     kind: cli
     locator: {type: command, value: qemu-aarch64}
     placement: bounded-worker
     side_effects: [local-read, local-write, process-execution]
+
+  qemu-system:
+    kind: cli
+    locator: {type: command, value: qemu-system-aarch64}
+    placement: bounded-worker
+    side_effects: [local-read, local-write, process-execution]
+
+  pwntools:
+    kind: cli
+    locator: {type: command, value: pwn}
+    placement: bounded-worker
+    side_effects: [local-read, local-write, network-request, process-execution]
+
+  ropgadget:
+    kind: cli
+    locator: {type: command, value: ROPgadget}
+    placement: bounded-worker
+    side_effects: [local-read]
+
+  impacket:
+    kind: cli
+    locator: {type: command, value: secretsdump.py}
+    placement: bounded-worker
+    side_effects: [network-request, local-write]
+
+  bloodhound-python:
+    kind: cli
+    locator: {type: command, value: bloodhound-python}
+    placement: bounded-worker
+    side_effects: [network-request, local-write]
+
+  certipy:
+    kind: cli
+    locator: {type: command, value: certipy}
+    placement: bounded-worker
+    side_effects: [network-request, local-write]
+
+  kerbrute:
+    kind: cli
+    locator: {type: command, value: kerbrute}
+    placement: bounded-worker
+    side_effects: [high-volume-network, local-read]
+
+  chisel:
+    kind: cli
+    locator: {type: command, value: chisel}
+    placement: main
+    side_effects: [network-routing, network-request]
 
   ghidra-headless:
     kind: cli
@@ -574,6 +634,8 @@ capabilities:
   web.sqli-assist: {strategy: any, providers: [sqlmap]}
   web.xss-assist: {strategy: any, providers: [dalfox]}
   network.scan: {strategy: any, providers: [naabu, nmap]}
+  network.ad: {strategy: any, providers: [impacket, bloodhound-python, certipy, kerbrute]}
+  network.pivot: {strategy: any, providers: [chisel]}
   source.audit: {strategy: any, providers: [semgrep, trufflehog]}
   browser.stateful: {strategy: any, providers: [playwright-mcp]}
   browser.devtools: {strategy: any, providers: [chrome-devtools-mcp, chrome-devtools-cli]}
@@ -600,11 +662,12 @@ capabilities:
   ios.static: {strategy: all, providers: [unzip, radare2]}
   ios.device: {strategy: any, providers: [ideviceinstaller, iproxy]}
   native.static: {strategy: any, providers: [radare2, ghidra-headless]}
-  native.triage: {strategy: all, providers: [file-identify, readelf, objdump, nm, strings]}
-  native.protections: {strategy: any, providers: [checksec, readelf]}
-  native.debug: {strategy: any, providers: [gdb, radare2]}
-  native.emulate: {strategy: any, providers: [qemu-user]}
+  native.triage: {strategy: all, providers: [file-identify, objdump, nm, strings]}
+  native.protections: {strategy: any, providers: [checksec, readelf, otool]}
+  native.debug: {strategy: any, providers: [gdb, lldb, radare2]}
+  native.emulate: {strategy: any, providers: [qemu-user, qemu-system]}
   native.decompile: {strategy: any, providers: [ghidra-headless]}
+  native.exploit: {strategy: any, providers: [pwntools, ropgadget]}
   cloud.cli: {strategy: any, providers: [aws-cli, azure-cli, gcloud-cli]}
   cloud.posture: {strategy: any, providers: [prowler, steampipe]}
   source.iac: {strategy: any, providers: [checkov, trivy]}

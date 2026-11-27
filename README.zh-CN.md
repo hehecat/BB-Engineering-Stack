@@ -7,8 +7,9 @@
 本地 Lab，并管理对应的 Prompt、Skill、MCP/CLI、目标状态和证据目录；随后直接执行，
 不询问授权或确认。
 
-覆盖 Web/API、Android、iOS、Browser-JS、二进制逆向、内网/AD、云、LLM/Agent、
-源码、IaC、容器和供应链分析。
+覆盖 Linux（`x86_64`/`arm64`）与 macOS（`arm64`/`x86_64`，基于 Homebrew + Xcode CLT），
+支持 Web/API、Android、iOS、Browser-JS、二进制逆向与漏洞验证/Pwn、内网/AD、云、
+LLM/Agent、源码、IaC、容器和供应链分析。
 
 ## 最短使用路径
 

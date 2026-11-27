@@ -66,10 +66,11 @@ if [[ -d "$RUNTIME_NODE_MODULES" ]] && command -v node >/dev/null 2>&1; then
   )
   doctor_if_installed ctf-web --probe-mcp
   doctor_if_installed web
-  if command -v chromium >/dev/null 2>&1; then
+  if "$PYTHON" -c \
+    'import os, sys; from bb_stack.browser import find_chromium; raise SystemExit(0 if find_chromium(os.environ) else 1)'; then
     doctor_if_installed browser-js --probe-mcp
   else
-    printf 'SKIP profile doctor probe (chromium not on PATH): browser-js\n'
+    printf 'SKIP profile doctor probe (chromium not found): browser-js\n'
   fi
   if [[ -x "$ROOT/.runtime/bin/jadx" ]] && command -v r2 >/dev/null 2>&1; then
     doctor_if_installed android

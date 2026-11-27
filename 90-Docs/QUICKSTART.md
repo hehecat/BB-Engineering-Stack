@@ -5,7 +5,8 @@ may start Claude in the cloned source repository and ask it to initialize with
 recommended defaults; after that, normal work starts as conversation from the
 selected workspace. See the top-level README for that path.
 
-Supported primary environment: Linux x86_64 or arm64, Python 3.11+, headless or
+Supported primary environments: Linux (`x86_64` or `arm64`) and macOS (`arm64` or
+`x86_64` with Homebrew and Xcode Command Line Tools), Python 3.11+, headless or
 desktop. Claude Code authentication must already work.
 
 The stack does not export `CLAUDE_CONFIG_DIR` by default, preserving Claude
@@ -68,11 +69,15 @@ bb-stack new reverse-challenge ./challenge.bin --workflow ctf --platform standal
 bb-stack launch --profile ctf-reverse --engagement reverse-challenge
 ```
 
-The Reverse profile installs the native inventory baseline (`file` and
-Binutils) plus pinned Radare2. GDB, QEMU user emulation, hardening checks, and
-Ghidra headless analysis remain optional. Start every native artifact with the
+The Reverse profile installs the native inventory baseline (`file` and Binutils;
+on macOS, Xcode CLT `otool`/`nm`/`objdump` plus Homebrew `binutils`) and
+pinned Radare2. GDB/LLDB, QEMU emulation, `checksec`, Ghidra headless
+analysis, and optional Pwn/binary-exploitation tooling (`pwntools`, `ropgadget`)
+remain optional. Start every native artifact with the
 `native-reverse-engineering` triage workflow; it preserves the input and writes
-its evidence under the active Engagement.
+its evidence under the active Engagement. Use `binary-exploitation` after
+triage for CTF Pwn or assessment memory-corruption validation (never for
+standalone `analysis`).
 
 The Android profile installs Java, ADB, Apktool, pinned JADX, the
 `android-reverse-engineering` static workflow, and `android-pentest` for security
@@ -115,8 +120,10 @@ bb-stack workspace route --kind reverse-assessment --target ./service.elf
 bb-stack launch --profile assessment-reverse --engagement service-native
 ```
 
-Provider credentials, iOS devices, Frida, cloud CLIs, and specialized scanners
-remain optional machine capabilities and are reported by Doctor.
+Provider credentials, iOS devices, Frida, cloud CLIs, AD/pivoting tools
+(`impacket`, `bloodhound-python`, `certipy`, `kerbrute`, `chisel`), and
+specialized scanners remain optional machine capabilities and are reported by
+Doctor.
 
 ## Bug Bounty Or VDP
 

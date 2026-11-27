@@ -61,7 +61,7 @@ agents:
       service discovery, protocol weaknesses, credential exposure paths. Use
       when the target is an address range or an internal domain, not a website.
     skill: security-orchestrator
-    capabilities: [network.scan, tls.inspect, http.raw, osint.correlation, oob.callback, proxy.http, data.wordlists.credentials, data.wordlists.usernames, data.wordlists.llm, data.json, runtime.python]
+    capabilities: [network.scan, network.ad, network.pivot, tls.inspect, http.raw, osint.correlation, oob.callback, proxy.http, data.wordlists.credentials, data.wordlists.usernames, data.wordlists.llm, data.json, runtime.python]
     writes: [artifacts/network/]
     max_turns: 60
 
@@ -81,7 +81,7 @@ agents:
       protection analysis, and algorithm reconstruction. Use when the proof
       depends on binary internals rather than protocol behaviour.
     skill: native-reverse-engineering
-    capabilities: [native.triage, native.static, native.decompile, native.protections, native.debug, native.emulate, data.json, runtime.python]
+    capabilities: [native.triage, native.static, native.decompile, native.protections, native.debug, native.emulate, native.exploit, data.json, runtime.python]
     writes: [artifacts/native/]
     max_turns: 60
 

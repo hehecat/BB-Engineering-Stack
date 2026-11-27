@@ -25,7 +25,7 @@ cleanup() {
   python3 - "$SANDBOX" <<'PY'
 import pathlib, shutil, sys
 p = pathlib.Path(sys.argv[1]).resolve()
-if p.parent == pathlib.Path('/tmp') and p.name.startswith('bb-full-fresh.'):
+if p.parent == pathlib.Path('/tmp').resolve() and p.name.startswith('bb-full-fresh.'):
     shutil.rmtree(p, ignore_errors=True)
 PY
 }
@@ -75,7 +75,7 @@ export HOME="$HOME_TEST"
 export BB_STACK_ROOT="$ROOT"
 export BB_CONFIG_HOME="$HOME_TEST/.config/bb-stack"
 export CLAUDE_CONFIG_DIR="$HOME_TEST/.claude"
-export PATH="/usr/local/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+export PATH="/opt/homebrew/sbin:/opt/homebrew/bin:/usr/local/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 unset BB_WORK_ROOT BB_EXTRA_PATH HTTP_PROXY HTTPS_PROXY ALL_PROXY
 unset http_proxy https_proxy all_proxy
 

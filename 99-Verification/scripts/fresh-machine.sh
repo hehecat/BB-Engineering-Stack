@@ -7,7 +7,7 @@ cleanup() {
   python3 - "$SANDBOX" <<'PY'
 import pathlib, shutil, sys
 p=pathlib.Path(sys.argv[1]).resolve()
-if p.parent == pathlib.Path('/tmp') and p.name.startswith('bb-fresh-machine.'):
+if p.parent == pathlib.Path('/tmp').resolve() and p.name.startswith('bb-fresh-machine.'):
     shutil.rmtree(p, ignore_errors=True)
 PY
 }

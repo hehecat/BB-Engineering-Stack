@@ -3,11 +3,13 @@ from __future__ import annotations
 import http.client
 import json
 import os
+import platform
 import shutil
 import signal
 import socket
 import subprocess
 import time
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
@@ -16,6 +18,47 @@ from .engagement import EngagementManager
 from .errors import CommandError, ValidationError
 from .io import dump_json, load_json
 from .paths import StackPaths
+
+CHROMIUM_COMMANDS = (
+    "chromium",
+    "chromium-browser",
+    "google-chrome",
+    "google-chrome-stable",
+)
+MACOS_CHROMIUM_BUNDLES = (
+    "/Applications/Chromium.app/Contents/MacOS/Chromium",
+    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+    "/Applications/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing",
+)
+
+
+def find_chromium(
+    env: Mapping[str, str],
+    *,
+    which: Callable[..., str | None] = shutil.which,
+) -> str | None:
+    """Locate a Chrome or Chromium executable from config, PATH, or macOS bundles."""
+    path = env.get("PATH")
+    configured = env.get("BB_CHROMIUM_BIN", "").strip()
+    if configured:
+        expanded = str(Path(configured).expanduser())
+        return which(expanded, path=path) or which(configured, path=path)
+    for command in CHROMIUM_COMMANDS:
+        found = which(command, path=path)
+        if found:
+            return found
+    if platform.system() == "Darwin":
+        home = Path(env.get("HOME", str(Path.home())))
+        candidates = (
+            *MACOS_CHROMIUM_BUNDLES,
+            str(home / "Applications/Chromium.app/Contents/MacOS/Chromium"),
+            str(home / "Applications/Google Chrome.app/Contents/MacOS/Google Chrome"),
+        )
+        for candidate in candidates:
+            found = which(candidate, path=path)
+            if found:
+                return found
+    return None
 
 
 class BrowserRuntimeManager:
@@ -57,17 +100,7 @@ class BrowserRuntimeManager:
 
         env = self.paths.environment(engagement / "artifacts")
         env["PATH"] = self.paths.runtime_path()
-        configured_browser = env.get("BB_CHROMIUM_BIN", "").strip()
-        chromium = (
-            (
-                shutil.which(configured_browser, path=env["PATH"])
-                if configured_browser
-                else None
-            )
-            or shutil.which("chromium", path=env["PATH"])
-            or shutil.which("chromium-browser", path=env["PATH"])
-            or shutil.which("google-chrome", path=env["PATH"])
-        )
+        chromium = find_chromium(env, which=shutil.which)
         if not chromium:
             raise CommandError(
                 "Chromium or Chrome is required for managed browser work"
@@ -316,23 +349,59 @@ class BrowserRuntimeManager:
         return command
 
     @staticmethod
+    def _pid_exists(pid: int) -> bool:
+        if pid <= 1:
+            return False
+        if platform.system() != "Darwin":
+            return Path(f"/proc/{pid}").exists()
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return False
+        except PermissionError:
+            return True
+        completed = subprocess.run(
+            ["ps", "-p", str(pid), "-o", "stat="],
+            capture_output=True,
+            text=True,
+            timeout=3,
+            check=False,
+        )
+        stat = completed.stdout.strip()
+        return completed.returncode == 0 and bool(stat) and not stat.startswith("Z")
+
+    @staticmethod
     def _process_matches(pid: int, profile_dir: Path) -> bool:
         if pid <= 1 or not profile_dir:
             return False
         try:
             command = Path(f"/proc/{pid}/cmdline").read_bytes().replace(b"\0", b" ")
         except OSError:
-            return False
+            if platform.system() != "Darwin":
+                return False
+            completed = subprocess.run(
+                ["ps", "-p", str(pid), "-o", "command="],
+                capture_output=True,
+                text=True,
+                timeout=3,
+                check=False,
+            )
+            if completed.returncode != 0:
+                return False
+            return (
+                str(profile_dir) in completed.stdout
+                and "remote-debugging-port" in completed.stdout
+            )
         return (
             str(profile_dir).encode() in command and b"remote-debugging-port" in command
         )
 
-    @staticmethod
-    def _child_exited(pid: int) -> bool:
+    @classmethod
+    def _child_exited(cls, pid: int) -> bool:
         try:
             exited_pid, _ = os.waitpid(pid, os.WNOHANG)
         except ChildProcessError:
-            return not Path(f"/proc/{pid}").exists()
+            return not cls._pid_exists(pid)
         return exited_pid == pid
 
     def _terminate(self, pid: int, profile_dir: Path) -> None:
@@ -340,8 +409,8 @@ class BrowserRuntimeManager:
             return
         self._terminate_owned(pid)
 
-    @staticmethod
-    def _terminate_owned(pid: int) -> None:
+    @classmethod
+    def _terminate_owned(cls, pid: int) -> None:
         try:
             os.killpg(pid, signal.SIGTERM)
         except ProcessLookupError:
@@ -352,7 +421,7 @@ class BrowserRuntimeManager:
                 exited_pid, _ = os.waitpid(pid, os.WNOHANG)
             except ChildProcessError:
                 exited_pid = 0
-            if exited_pid == pid or not Path(f"/proc/{pid}").exists():
+            if exited_pid == pid or not cls._pid_exists(pid):
                 return
             time.sleep(0.1)
         try:

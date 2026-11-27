@@ -7,6 +7,7 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
+from .browser import find_chromium
 from .errors import CommandError, ValidationError
 from .io import dump_json, expand, load_json, load_yaml
 from .paths import StackPaths
@@ -99,11 +100,7 @@ class CapabilityRegistry:
         env = self.paths.environment(artifact_root)
         env["PATH"] = self.paths.runtime_path()
         if not env.get("BB_CHROMIUM_BIN"):
-            chromium = (
-                shutil.which("chromium", path=env["PATH"])
-                or shutil.which("chromium-browser", path=env["PATH"])
-                or shutil.which("google-chrome", path=env["PATH"])
-            )
+            chromium = find_chromium(env, which=shutil.which)
             if chromium:
                 env["BB_CHROMIUM_BIN"] = chromium
         if artifact_root:

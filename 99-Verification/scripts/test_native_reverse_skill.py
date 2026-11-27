@@ -11,13 +11,14 @@ import tempfile
 import unittest
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[2]
-os.environ["BB_STACK_ROOT"] = str(ROOT)
-
+from bb_stack.agents import AgentRoster
 from bb_stack.capabilities import CapabilityRegistry
 from bb_stack.paths import StackPaths
 from bb_stack.runtime import RuntimeManager
 from bb_stack.skills import SkillRegistry
+
+ROOT = Path(__file__).resolve().parents[2]
+os.environ["BB_STACK_ROOT"] = str(ROOT)
 
 
 class NativeReverseSkillTests(unittest.TestCase):
@@ -53,22 +54,39 @@ class NativeReverseSkillTests(unittest.TestCase):
         assessment = skills.profile("assessment-reverse")
         self.assertEqual(assessment["orchestrator"], "security-orchestrator")
         self.assertNotIn("solve-challenge", assessment["required"])
+        self.assertIn("binary-exploitation", skills.profile("reverse")["optional"])
+        self.assertIn("binary-exploitation", assessment["optional"])
 
         capabilities = CapabilityRegistry(self.paths)
         for profile_name in ("reverse", "analysis-reverse", "assessment-reverse"):
             profile = capabilities.profile(profile_name)
             self.assertIn("native.triage", profile["required"])
             self.assertIn("native.static", profile["required"])
+        self.assertIn("native.exploit", capabilities.profile("reverse")["optional"])
+        self.assertIn(
+            "native.exploit", capabilities.profile("assessment-reverse")["optional"]
+        )
+        self.assertNotIn(
+            "native.exploit", capabilities.profile("analysis-reverse")["optional"]
+        )
+        net_profile = capabilities.profile("assessment-network")
+        self.assertIn("network.ad", net_profile["optional"])
+        self.assertIn("network.pivot", net_profile["optional"])
         registry = capabilities.registry()
         self.assertEqual(registry["capabilities"]["native.triage"]["strategy"], "all")
         self.assertNotIn("jadx", registry["capabilities"]["native.static"]["providers"])
+        roster = AgentRoster(self.paths)
+        self.assertIn("native.exploit", roster.get("native-analyst").capabilities)
+        self.assertIn("network.ad", roster.get("network-scanner").capabilities)
+        self.assertIn("network.pivot", roster.get("network-scanner").capabilities)
 
         tools = RuntimeManager(self.paths).validate_config()["tool_profiles"]
         self.assertIn("assessment-reverse", tools)
 
     @unittest.skipUnless(
-        all(shutil.which(command) for command in ("file", "readelf", "objdump")),
-        "native triage requires file and binutils",
+        Path(sys.executable).resolve().read_bytes()[:4] == b"\x7fELF"
+        and all(shutil.which(command) for command in ("file", "readelf", "objdump")),
+        "ELF native triage requires an ELF binary, file, and binutils",
     )
     def test_real_elf_triage_is_read_only_and_structured(self) -> None:
         source = Path(sys.executable).resolve()
@@ -148,6 +166,38 @@ class NativeReverseSkillTests(unittest.TestCase):
         )
         self.assertEqual(completed.returncode, 0, completed.stderr)
         self.assertFalse(marker.exists())
+
+    @unittest.skipUnless(
+        Path(sys.executable).resolve().read_bytes()[:4]
+        in {b"\xcf\xfa\xed\xfe", b"\xfe\xed\xfa\xcf", b"\xca\xfe\xba\xbe"}
+        and shutil.which("otool") is not None,
+        "Mach-O native triage requires macOS and otool",
+    )
+    def test_real_macho_triage_is_read_only_and_structured(self) -> None:
+        source = Path(sys.executable).resolve()
+        before = hashlib.sha256(source.read_bytes()).hexdigest()
+        output = self.workspace / "macho-triage"
+        completed = subprocess.run(
+            [
+                sys.executable,
+                str(self.script),
+                "--input",
+                str(source),
+                "--output",
+                str(output),
+            ],
+            text=True,
+            capture_output=True,
+            timeout=90,
+            check=False,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        summary = json.loads((output / "summary.json").read_text())
+        self.assertEqual(summary["input"]["sha256"], before)
+        self.assertTrue(summary["input"]["unchanged"])
+        self.assertIn("Mach-O", (output / "file.txt").read_text())
+        self.assertEqual(summary["probes"]["otool-header"]["exit_code"], 0)
+        self.assertIn("Mach header", (output / "otool-header.txt").read_text())
 
 
 if __name__ == "__main__":

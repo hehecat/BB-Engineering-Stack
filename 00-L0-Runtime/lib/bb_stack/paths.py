@@ -203,6 +203,23 @@ class StackPaths:
             key=lambda path: _version_key(path.parent.name),
             reverse=True,
         )
+        fnm_bins = sorted(
+            [
+                path
+                for root in (
+                    self.home / ".local" / "share" / "fnm" / "node-versions",
+                    self.home
+                    / "Library"
+                    / "Application Support"
+                    / "fnm"
+                    / "node-versions",
+                    self.home / ".fnm" / "node-versions",
+                )
+                for path in root.glob("*/installation/bin")
+            ],
+            key=lambda path: _version_key(path.parent.parent.name),
+            reverse=True,
+        )
         entries = [
             self.runtime_bin,
             self.venv / "bin",
@@ -215,6 +232,13 @@ class StackPaths:
             self.home / ".cargo" / "bin",
             self.home / ".bun" / "bin",
             *nvm_bins,
+            *fnm_bins,
+            Path("/opt/homebrew/opt/node@22/bin"),
+            Path("/usr/local/opt/node@22/bin"),
+            Path("/opt/homebrew/opt/openjdk/bin"),
+            Path("/usr/local/opt/openjdk/bin"),
+            Path("/opt/homebrew/sbin"),
+            Path("/opt/homebrew/bin"),
             Path("/usr/local/go/bin"),
             Path("/usr/local/sbin"),
             Path("/usr/local/bin"),
@@ -222,6 +246,8 @@ class StackPaths:
             Path("/usr/bin"),
             Path("/sbin"),
             Path("/bin"),
+            Path("/opt/homebrew/opt/binutils/bin"),
+            Path("/usr/local/opt/binutils/bin"),
         ]
         extra = (
             os.environ.get("BB_EXTRA_PATH", "") if extra_path is None else extra_path

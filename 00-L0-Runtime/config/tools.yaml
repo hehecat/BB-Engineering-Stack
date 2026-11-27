@@ -20,7 +20,7 @@ profiles:
     optional: [native-base, radare2, frida, objection]
   reverse:
     required: [system-base, native-base, radare2]
-    optional: [native-debug, native-emulation, checksec, jadx, apktool]
+    optional: [native-debug, native-emulation, checksec, jadx, apktool, uv, pwntools, ropgadget]
   browser-js:
     required: [system-base, chromium]
     optional: [semgrep]
@@ -35,7 +35,7 @@ profiles:
     optional: [ios-device, frida, objection]
   assessment-network:
     required: [system-base, nmap]
-    optional: [naabu]
+    optional: [naabu, uv, impacket, bloodhound-python, certipy, kerbrute, chisel]
   assessment-cloud:
     required: [system-base]
     optional: []
@@ -47,7 +47,7 @@ profiles:
     optional: [trufflehog]
   assessment-reverse:
     required: [system-base, native-base, radare2]
-    optional: [native-debug, native-emulation, checksec]
+    optional: [native-debug, native-emulation, checksec, uv, pwntools, ropgadget]
   analysis-android:
     required: [system-base, java-runtime, apktool, jadx]
     optional: [native-base, radare2, adb, frida, objection]
@@ -60,6 +60,7 @@ installers:
     kind: apt
     checks: [cc, curl, jq, make, openssl, git, python3]
     packages: [build-essential, ca-certificates, curl, git, jq, openssl, python3, python3-venv, unzip]
+    brew: [curl, git, jq, openssl, python@3.12]
   uv:
     kind: archive-binary
     checks: [uv]
@@ -73,42 +74,63 @@ installers:
         archive: uv-aarch64-unknown-linux-gnu.tar.gz
         url: https://github.com/astral-sh/uv/releases/download/0.12.21/uv-aarch64-unknown-linux-gnu.tar.gz
         sha256: 030b69227b40af8c1981b7301793dc66e71ed3c796ea8688209dd268bd91ec51
+      darwin-x86_64:
+        archive: uv-x86_64-apple-darwin.tar.gz
+        url: https://github.com/astral-sh/uv/releases/download/0.12.21/uv-x86_64-apple-darwin.tar.gz
+        sha256: 2b336763b396ec6afa20c5a8b083538ca7402445b868311979d740a4344c17d8
+      darwin-aarch64:
+        archive: uv-aarch64-apple-darwin.tar.gz
+        url: https://github.com/astral-sh/uv/releases/download/0.12.21/uv-aarch64-apple-darwin.tar.gz
+        sha256: b88bda573e566ef9bced66b155fe0408626fbbc053aee1c30ba686f0728c9447
   native-base:
     kind: apt
     checks: [file, readelf, objdump, nm, strings]
+    darwin_checks: [file, objdump, nm, strings, otool]
     packages: [binutils, file]
+    brew: [binutils]
   native-debug:
     kind: apt
     checks: [gdb]
+    darwin_checks: [lldb]
     packages: [gdb]
+    brew: [lldb]
   native-emulation:
     kind: apt
     checks: [qemu-aarch64, qemu-arm]
+    darwin_checks: [qemu-system-aarch64]
     packages: [qemu-user]
+    brew: [qemu]
   checksec:
     kind: apt
     checks: [checksec]
     packages: [checksec]
+    brew: [checksec]
   chromium:
     kind: apt
     checks: [chromium]
     packages: [chromium]
+    brew_casks: [chromium]
   java-runtime:
     kind: apt
     checks: [java]
+    darwin_probe: [java, -version]
     packages: [default-jre-headless]
+    brew: [openjdk]
   adb:
     kind: apt
     checks: [adb]
     packages: [adb]
+    brew_casks: [android-platform-tools]
   ios-device:
     kind: apt
     checks: [ideviceinstaller, iproxy]
     packages: [ideviceinstaller, libusbmuxd-tools]
+    brew: [ideviceinstaller, libusbmuxd]
   apktool:
     kind: apt
     checks: [apktool]
     packages: [apktool]
+    brew: [apktool]
   jadx:
     kind: archive-tree
     checks: [jadx]
@@ -124,9 +146,18 @@ installers:
         archive: jadx-1.5.6.zip
         url: https://github.com/skylot/jadx/releases/download/v1.5.6/jadx-1.5.6.zip
         sha256: 545ea2be9c242511bc145755cf4bda2485ade42966e096f8b4d3da2a230e8974
+      darwin-x86_64:
+        archive: jadx-1.5.6.zip
+        url: https://github.com/skylot/jadx/releases/download/v1.5.6/jadx-1.5.6.zip
+        sha256: 545ea2be9c242511bc145755cf4bda2485ade42966e096f8b4d3da2a230e8974
+      darwin-aarch64:
+        archive: jadx-1.5.6.zip
+        url: https://github.com/skylot/jadx/releases/download/v1.5.6/jadx-1.5.6.zip
+        sha256: 545ea2be9c242511bc145755cf4bda2485ade42966e096f8b4d3da2a230e8974
   radare2:
     kind: deb
     checks: [r2]
+    brew: [radare2]
     files:
       x86_64:
         archive: radare2_6.2.2_amd64.deb
@@ -140,6 +171,7 @@ installers:
     kind: apt
     checks: [sqlmap]
     packages: [sqlmap]
+    brew: [sqlmap]
   semgrep:
     kind: pipx
     checks: [semgrep]
@@ -187,6 +219,7 @@ installers:
   massdns:
     kind: git-build
     checks: [massdns]
+    brew: [massdns]
     repository: https://github.com/blechschmidt/massdns.git
     revision: ca8114164361f6a296399d8160bb07d55bdc4843
     destination: "${BB_STACK_ROOT}/.runtime/tools/massdns-1.1.0"
@@ -251,6 +284,7 @@ installers:
     kind: apt
     checks: [nmap]
     packages: [nmap]
+    brew: [nmap]
   trufflehog:
     kind: archive-binary
     checks: [trufflehog]
@@ -264,6 +298,44 @@ installers:
         archive: trufflehog_3.97.9_linux_arm64.tar.gz
         url: https://github.com/trufflesecurity/trufflehog/releases/download/v3.97.9/trufflehog_3.97.9_linux_arm64.tar.gz
         sha256: 372c568695d49e53517075b5f74d1ee9a19053f13661d689c7928ee1fc27d705
+      darwin-x86_64:
+        archive: trufflehog_3.97.9_darwin_amd64.tar.gz
+        url: https://github.com/trufflesecurity/trufflehog/releases/download/v3.97.9/trufflehog_3.97.9_darwin_amd64.tar.gz
+        sha256: 4451ba8d17106da0d0a2f1952d3b1c2d20a6e5c97c21ccd1f8fc04ecf2ff77d9
+      darwin-aarch64:
+        archive: trufflehog_3.97.9_darwin_arm64.tar.gz
+        url: https://github.com/trufflesecurity/trufflehog/releases/download/v3.97.9/trufflehog_3.97.9_darwin_arm64.tar.gz
+        sha256: 3d25c178fe1a2563687b22547adcaebcf08cc8a607315c6741fe396c597951f7
+  impacket:
+    kind: pipx
+    checks: [secretsdump.py, GetUserSPNs.py]
+    package: impacket==0.13.1
+  bloodhound-python:
+    kind: pipx
+    checks: [bloodhound-python]
+    package: bloodhound==1.9.0
+  certipy:
+    kind: uv-tool
+    checks: [certipy]
+    package: certipy-ad==5.1.0
+    python: "3.12"
+  kerbrute:
+    kind: go
+    checks: [kerbrute]
+    package: github.com/ropnop/kerbrute@v1.0.3
+  chisel:
+    kind: go
+    checks: [chisel]
+    package: github.com/jpillora/chisel@v1.13.0
+  pwntools:
+    kind: uv-tool
+    checks: [pwn]
+    package: pwntools==4.15.1
+    python: "3.12"
+  ropgadget:
+    kind: pipx
+    checks: [ROPgadget]
+    package: ropgadget==7.7
   mitmproxy:
     kind: uv-tool
     checks: [mitmdump]

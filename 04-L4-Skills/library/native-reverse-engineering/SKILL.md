@@ -31,10 +31,10 @@ python3 "$BB_STACK_ROOT/04-L4-Skills/library/native-reverse-engineering/scripts/
   --output "$PWD/artifacts/native-triage"
 ```
 
-Read `summary.json` first. Use the generated `file`, `readelf`, `objdump`,
-`nm`, `strings`, `rabin2`, and `checksec` outputs only when the corresponding
-probe reports `available=true`. Do not interpret a missing optional tool as an
-artifact property.
+Read `summary.json` first. Use the generated `file`, `readelf`, `otool`,
+`codesign`, `objdump`, `nm`, `strings`, `rabin2`, and `checksec` outputs only when
+the corresponding probe reports `available=true`. Do not interpret a missing
+optional tool as an artifact property.
 
 Record at minimum:
 
@@ -51,9 +51,9 @@ Record at minimum:
 - Use Ghidra headless only when its command is already registered and ready.
 - Use IDA only when the operator has supplied a licensed installation; never
   download, modify, or bypass a commercial license.
-- Use `gdb` only for a trusted local fixture or inside an approved isolated
-  execution environment.
-- Use QEMU user emulation for foreign Linux architectures; record the emulator,
+- Use `gdb` (Linux) or `lldb` (macOS) only for a trusted local fixture or inside
+  an approved isolated execution environment.
+- Use QEMU user/system emulation for foreign architectures; record the emulator,
   sysroot, CPU model, arguments, and input.
 - Route APK/XAPK/JAR/AAR Java or Kotlin code to
   `android-reverse-engineering`. Keep `.so` and JNI work in this Skill.
