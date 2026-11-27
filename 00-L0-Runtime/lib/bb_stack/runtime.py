@@ -114,6 +114,16 @@ class RuntimeManager:
                     include_optional=include_optional,
                     force=False,
                 )
+                active_agent = BackendRegistry(self.paths).selected(None).name
+                if active_agent != "claude":
+                    installed.extend(
+                        SkillRegistry(self.paths).install(
+                            profile,
+                            agent=active_agent,
+                            include_optional=include_optional,
+                            force=False,
+                        )
+                    )
                 actions.append(
                     {
                         "component": "skills",
@@ -1348,6 +1358,7 @@ class RuntimeManager:
         include_high_context_mcp: bool = False,
         backend: str | None = None,
         claude_args: list[str] | None = None,
+        env_out: dict[str, str] | None = None,
     ) -> dict[str, Any]:
         # `claude_args` is the deprecated spelling of `backend_args`: the extra
         # arguments are forwarded verbatim to whichever agent backend runs.
@@ -1428,17 +1439,22 @@ class RuntimeManager:
             artifact_root=artifact_root,
             include_high_context=include_high_context_mcp,
         )
-        binary = agent.binary(self.paths.runtime_path())
+        machine = ConfigurationManager(self.paths).effective()
+        runtime_path = self.paths.runtime_path(machine.get("BB_EXTRA_PATH", ""))
+        binary = agent.binary(runtime_path)
         if not binary:
             raise CommandError(
                 f"{agent.label} CLI was not found "
                 f"(agent backend {agent.name!r}; binary {agent.command!r})"
             )
         env = self.paths.environment(artifact_root)
-        env["PATH"] = self.paths.runtime_path()
+        proxy_apply(env, machine)
+        env["PATH"] = runtime_path
         env["BB_SELECTED_SIDE_EFFECTS"] = ",".join(side_effects)
         if engagement is not None and engagement_state is not None:
+            env["BB_ENGAGEMENT"] = engagement_state["slug"]
             env["BB_ENGAGEMENT_ROOT"] = str(engagement)
+            env["BB_TRAFFIC_DB"] = str(engagement / "traffic" / "flows.db")
             env["BB_ENGAGEMENT_WORKFLOW"] = engagement_state["workflow"]
             env["BB_AUTHORIZATION_STATUS"] = engagement_state["authorization"]["status"]
         command = [binary]
@@ -1457,6 +1473,9 @@ class RuntimeManager:
             work_dir=cwd,
         )
         command.extend(extra_args)
+        if env_out is not None:
+            env_out.clear()
+            env_out.update(env)
         result = {
             "schema_version": 1,
             "profile": profile_name,

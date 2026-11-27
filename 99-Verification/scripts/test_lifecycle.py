@@ -189,12 +189,13 @@ class LifecycleTests(unittest.TestCase):
         self.assertNotIn("Record and verify", state["current"]["next_action"])
 
         runtime = RuntimeManager(self.paths)
-        # Skill installation and the Claude Code binary are environment
-        # prerequisites, not the gate under test: stub them so the
+        # Skill/capability installation and the Claude Code binary are
+        # environment prerequisites, not the gate under test: stub them so the
         # protected-workflow authorization path is what launch evaluates.
         claude = str(self.paths.home / "claude-stub")
         with (
             patch.object(SkillRegistry, "status", return_value=[]),
+            _capabilities_ready(),
             patch.dict(os.environ, {"CLAUDE_BIN": claude}),
         ):
             result = runtime.launch(

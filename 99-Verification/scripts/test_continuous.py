@@ -208,6 +208,73 @@ class ContinuousTests(unittest.TestCase):
                 with self.assertRaises(ValidationError):
                     run(self.paths, self.slug, **kwargs)
 
+    def test_routed_domain_and_continuous_bug_bounty_profiles_are_preserved(
+        self,
+    ) -> None:
+        self.manager.create(
+            "net-cont",
+            "10.20.0.0/24",
+            workflow="assessment",
+            platform="authorized-assessment",
+            mode="continuous",
+            authorization_source="written ROE",
+            authorization_status="verified",
+            route_kind="network-assessment",
+        )
+        net_state = self.manager.validate(self.paths.engagement("net-cont"))
+        self.assertEqual(
+            continuous._profile_for_state(self.paths, net_state), "assessment-network"
+        )
+
+        self.manager.create(
+            "bb-cont",
+            "https://target.example",
+            workflow="bug-bounty",
+            platform="hackerone",
+            mode="continuous",
+            authorization_source="program policy",
+            authorization_status="user-asserted",
+            route_kind="web",
+        )
+        bb_state = self.manager.validate(self.paths.engagement("bb-cont"))
+        self.assertEqual(
+            continuous._profile_for_state(self.paths, bb_state), "bb-continuous"
+        )
+
+    def test_launch_environment_reaches_the_round_subprocess(self) -> None:
+        captured_envs: list[dict[str, str]] = []
+
+        def launch_with_env(profile: str, **kwargs: Any) -> dict[str, Any]:
+            env_out = kwargs.get("env_out")
+            if isinstance(env_out, dict):
+                env_out["OPENCODE_CONFIG_CONTENT"] = '{"agent":{"bb-stack":{}}}'
+                env_out["BB_TRAFFIC_DB"] = str(self.engagement / "traffic" / "flows.db")
+            return {
+                "command": ["opencode"],
+                "cwd": str(self.engagement),
+                "backend": "opencode",
+            }
+
+        def record_env(command: list[str], **kwargs: Any) -> FakeCompleted:
+            self.commands.append(command)
+            captured_envs.append(dict(kwargs.get("env") or {}))
+            return FakeCompleted()
+
+        with patch.object(
+            continuous.RuntimeManager, "launch", side_effect=launch_with_env
+        ):
+            run(self.paths, self.slug, run_command=record_env, max_rounds=1)
+
+        self.assertEqual(len(captured_envs), 1)
+        self.assertEqual(
+            captured_envs[0].get("OPENCODE_CONFIG_CONTENT"),
+            '{"agent":{"bb-stack":{}}}',
+        )
+        self.assertEqual(
+            captured_envs[0].get("BB_TRAFFIC_DB"),
+            str(self.engagement / "traffic" / "flows.db"),
+        )
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

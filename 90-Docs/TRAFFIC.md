@@ -35,11 +35,12 @@ Security boundary. Treat the store as live credentials, not as notes:
 
 ## Record Traffic
 
-Start the recording proxy. It writes flows straight into the store -- there is
-no stdout capture and no separate import step.
+Start the recording proxy directly, or start the managed Chromium runtime with
+`--record-traffic` so browser flows land in the store automatically:
 
 ```bash
-"$BB_STACK_ROOT/00-L0-Runtime/bin/bb-traffic" --engagement SLUG
+bb-traffic --engagement SLUG
+bb-stack browser start --engagement SLUG --record-traffic
 ```
 
 - [ ] Create the Engagement first. The slug resolves through the stack
@@ -68,8 +69,8 @@ no stdout capture and no separate import step.
       verbatim (`bb-traffic --engagement SLUG -p 8899`); `--` ends `bb-traffic`'s
       own flags explicitly.
 
-`bb-traffic` is a launcher inside the runtime tree and is not yet installed as a
-`PATH` wrapper, so call it by its in-tree path as shown above.
+`bb-traffic` is installed into `~/.local/bin` as a `PATH` wrapper during
+bootstrap, and can also be called directly by its in-tree path shown above.
 
 ## Read It Back
 

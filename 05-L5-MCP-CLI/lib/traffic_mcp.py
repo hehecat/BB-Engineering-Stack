@@ -350,7 +350,7 @@ def _augment_read_only(base: ToolPolicy) -> ToolPolicy:
     )
 
 
-def _resolve_policy() -> ToolPolicy:
+def _resolve_policy(db_path: Path | None = None) -> ToolPolicy:
     """The engagement policy, with the failure modes the spec pins down.
 
     * No engagement to resolve (or no ``policy.yaml``) -- the shipped default.
@@ -359,9 +359,17 @@ def _resolve_policy() -> ToolPolicy:
 
     Neither path may take the server down; both log one line to stderr.
     """
-    slug = os.environ.get("BB_ENGAGEMENT", "").strip() or None
+    target = (
+        os.environ.get("BB_ENGAGEMENT", "").strip()
+        or os.environ.get("BB_ENGAGEMENT_ROOT", "").strip()
+        or None
+    )
+    if target is None and db_path is not None:
+        candidate = db_path.parent.parent
+        if (candidate / "engagement.yaml").is_file():
+            target = str(candidate)
     try:
-        base = policy_for(StackPaths.discover(), slug)
+        base = policy_for(StackPaths.discover(), target)
     except ValidationError as error:
         # The file exists but could not be read or parsed. A broken rule set
         # must never silently open the server: deny everything.
@@ -393,9 +401,12 @@ def _resolve_db_path() -> Path:
     slug = os.environ.get("BB_ENGAGEMENT", "").strip()
     if slug:
         return store_for(StackPaths.discover(), slug).path
+    engagement_root = os.environ.get("BB_ENGAGEMENT_ROOT", "").strip()
+    if engagement_root:
+        return store_for(StackPaths.discover(), Path(engagement_root)).path
     print(
         "bb-traffic-mcp: no traffic store configured; set BB_TRAFFIC_DB to the "
-        "sqlite file (or BB_ENGAGEMENT to the engagement slug)",
+        "sqlite file (or BB_ENGAGEMENT / BB_ENGAGEMENT_ROOT to the engagement)",
         file=sys.stderr,
     )
     raise SystemExit(2)
@@ -509,7 +520,7 @@ def _respond(request: dict[str, Any], outcome: dict[str, Any], *, error: bool = 
 
 def main() -> int:
     db_path = _resolve_db_path()
-    server = TrafficServer(db_path, policy=_resolve_policy())
+    server = TrafficServer(db_path, policy=_resolve_policy(db_path))
     try:
         for line in sys.stdin:
             line = line.strip()

@@ -85,6 +85,8 @@ sections:
     entries:
       - when: "Nothing has been recorded yet; start the recording proxy before touching the target."
         command: "bb-traffic --engagement <slug>"
+      - when: "Managed browser work should record every request and response straight into the engagement traffic store."
+        command: "bb-stack browser start --engagement <slug> --record-traffic"
       - when: "You need recorded flows matching a host, path, method, status, or body text."
         command: "bb-stack traffic search <slug> --host <host> --text <query>"
       - when: "You need one recorded request and response in full."
@@ -97,6 +99,11 @@ sections:
         command: "bb-stack traffic diff <slug> <first-id> <second-id>"
       - when: "Every recorded host must exist in the declared inventory."
         command: "bb-stack coverage <slug> --require-no-unmatched"
+
+  - title: "Artifacts -- static binary and container triage"
+    entries:
+      - when: "A supplied binary or packaged container (ELF, PE/.NET, Mach-O, WASM, Electron ASAR, PyInstaller, APK/IPA/ZIP/VSIX) needs zero-execution header facts or safe unpacking to disk."
+        command: "bb-stack artifact inspect <path> --output <dir> --extract"
 
   - title: "Permission -- check what the engagement allows"
     entries:

@@ -11,6 +11,14 @@ import sys
 from pathlib import Path
 from typing import Any
 
+_STACK_ROOT = Path(__file__).resolve().parents[4]
+_L0_LIB = _STACK_ROOT / "00-L0-Runtime" / "lib"
+if _L0_LIB.is_dir() and str(_L0_LIB) not in sys.path:
+    sys.path.insert(0, str(_L0_LIB))
+
+from bb_stack.artifact import inspect_artifact  # noqa: E402
+from bb_stack.errors import ValidationError  # noqa: E402
+
 MAX_OUTPUT_BYTES = 8 * 1024 * 1024
 DEFAULT_TIMEOUT_SECONDS = 60
 VERSION_ARGUMENTS = {
@@ -117,10 +125,15 @@ def run_probe(
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Inventory a native artifact without executing it."
+        description="Inventory a native or packaged artifact without executing it."
     )
     parser.add_argument("--input", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
+    parser.add_argument(
+        "--extract",
+        action="store_true",
+        help="Safely unpack ASAR, PyInstaller, or ZIP/APK/IPA/VSIX containers into <output>/extracted.",
+    )
     parser.add_argument(
         "--timeout",
         type=int,
@@ -144,6 +157,15 @@ def main() -> int:
     output_root.mkdir(parents=True, exist_ok=True)
 
     before = sha256(source)
+    try:
+        artifact = inspect_artifact(
+            source,
+            output_dir=output_root,
+            extract=args.extract,
+        )
+    except ValidationError as error:
+        raise SystemExit(f"triage failed: {error}") from error
+
     probes = {
         "file": ["file", "-b", "--", str(source)],
         "readelf-header": ["readelf", "-hW", str(source)],
@@ -179,6 +201,11 @@ def main() -> int:
             "size": source.stat().st_size,
             "sha256": before,
             "unchanged": before == after,
+        },
+        "artifact": {
+            "primary_format": artifact["primary_format"],
+            "binary": artifact["binary"],
+            "container": artifact["container"],
         },
         "limits": {
             "per_probe_timeout_seconds": args.timeout,

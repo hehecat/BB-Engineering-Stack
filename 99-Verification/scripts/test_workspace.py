@@ -494,6 +494,34 @@ class WorkspaceTests(unittest.TestCase):
         listed = EngagementManager(self.paths).list()
         self.assertEqual([item["slug"] for item in listed], ["legacy-readable"])
 
+    def test_workspace_renders_agents_md_and_routes_non_claude_backends(self) -> None:
+        result = self.manager.initialize()
+        self.assertIn("AGENTS.md", result["managed_files"])
+        self.assertTrue((self.paths.work_root / "AGENTS.md").is_file())
+        self.assertEqual(
+            (self.paths.work_root / "AGENTS.md").read_text(encoding="utf-8"),
+            (self.paths.work_root / "CLAUDE.md").read_text(encoding="utf-8"),
+        )
+
+        routed = self.manager.route(
+            kind="ctf-web",
+            target="https://ctf.example.invalid",
+            slug="codex-ctf",
+            platform=None,
+            mode=None,
+            backend="codex",
+        )
+        engagement = Path(routed["engagement"])
+        self.assertTrue((engagement / "AGENTS.md").is_file())
+        self.assertEqual(routed["backend"], "codex")
+        self.assertIn("--backend codex", routed["strict_launch"])
+        self.assertTrue(
+            any(
+                "bb-stack skills install --profile ctf-web --agent codex" in cmd
+                for cmd in routed["repair_commands"]
+            )
+        )
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

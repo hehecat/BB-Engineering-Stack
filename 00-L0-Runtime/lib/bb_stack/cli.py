@@ -11,8 +11,13 @@ from pathlib import Path
 from typing import Any
 
 from . import __version__
-from .backends import BackendRegistry
 from .agents import AgentRoster
+from .artifact import (
+    DEFAULT_MAX_EXTRACT_BYTES,
+    DEFAULT_MAX_EXTRACT_FILES,
+    inspect_artifact,
+)
+from .backends import BackendRegistry
 from .browser import BrowserRuntimeManager
 from .capabilities import CapabilityRegistry
 from .configuration import ConfigurationManager
@@ -683,6 +688,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--authorization-status",
         choices=["pending", "user-asserted", "verified"],
     )
+    workspace_route.add_argument(
+        "--backend",
+        choices=backend_choices,
+        default=None,
+        help="agent backend whose Skill state and launch plan should be resolved",
+    )
     workspace_route.add_argument("--json", action="store_true")
 
     browser = commands.add_parser(
@@ -691,6 +702,11 @@ def build_parser() -> argparse.ArgumentParser:
     browser_sub = browser.add_subparsers(dest="browser_command", required=True)
     browser_start = browser_sub.add_parser("start")
     browser_start.add_argument("--engagement")
+    browser_start.add_argument(
+        "--record-traffic",
+        action="store_true",
+        help="route managed Chromium through an Engagement-local mitmdump recorder into traffic/flows.db",
+    )
     browser_start.add_argument("--json", action="store_true")
     browser_status = browser_sub.add_parser("status")
     browser_status.add_argument("--engagement")
@@ -698,6 +714,31 @@ def build_parser() -> argparse.ArgumentParser:
     browser_stop = browser_sub.add_parser("stop")
     browser_stop.add_argument("--engagement")
     browser_stop.add_argument("--json", action="store_true")
+
+    artifact = commands.add_parser(
+        "artifact",
+        help="deterministically inspect binary headers and unpack packaged containers without execution",
+    )
+    artifact_sub = artifact.add_subparsers(dest="artifact_command", required=True)
+    artifact_inspect = artifact_sub.add_parser("inspect")
+    artifact_inspect.add_argument("source", type=Path)
+    artifact_inspect.add_argument("--output", type=Path)
+    artifact_inspect.add_argument(
+        "--extract",
+        action="store_true",
+        help="safely unpack ASAR, PyInstaller, or ZIP/APK/IPA/VSIX containers into <output>/extracted",
+    )
+    artifact_inspect.add_argument(
+        "--max-extract-bytes",
+        type=int,
+        default=DEFAULT_MAX_EXTRACT_BYTES,
+    )
+    artifact_inspect.add_argument(
+        "--max-extract-files",
+        type=int,
+        default=DEFAULT_MAX_EXTRACT_FILES,
+    )
+    artifact_inspect.add_argument("--json", action="store_true")
 
     data = commands.add_parser(
         "data", help="inspect or install version-pinned wordlist and payload bundles"
@@ -1350,6 +1391,7 @@ def command(args: argparse.Namespace, paths: StackPaths) -> int:
                 mode=args.mode,
                 authorization_source=args.authorization_source,
                 authorization_status=args.authorization_status,
+                backend=args.backend,
             )
         emit(result, args.json)
         return 0
@@ -1357,13 +1399,31 @@ def command(args: argparse.Namespace, paths: StackPaths) -> int:
         manager = BrowserRuntimeManager(paths)
         if args.browser_command == "start":
             engagement = paths.engagement(args.engagement)
-            emit(manager.start(engagement), args.json)
+            emit(
+                manager.start(
+                    engagement,
+                    record_traffic=bool(getattr(args, "record_traffic", False)),
+                ),
+                args.json,
+            )
         elif args.browser_command == "status":
             engagement = paths.engagement(args.engagement) if args.engagement else None
             emit(manager.status(engagement), args.json)
         else:
             engagement = paths.engagement(args.engagement) if args.engagement else None
             emit(manager.stop(engagement), args.json)
+        return 0
+    if args.command == "artifact":
+        emit(
+            inspect_artifact(
+                args.source,
+                output_dir=args.output,
+                extract=args.extract,
+                max_extract_bytes=args.max_extract_bytes,
+                max_extract_files=args.max_extract_files,
+            ),
+            args.json,
+        )
         return 0
     if args.command == "data":
         manager = DataManager(paths)

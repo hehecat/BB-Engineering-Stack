@@ -24,15 +24,20 @@ Engagement.
 
 ## Run Deterministic Triage
 
-Run the bundled script before selecting a decompiler or debugger:
+Run the bundled script before selecting a decompiler or debugger (add
+`--extract` when the artifact may wrap an ASAR, PyInstaller, or ZIP/APK/IPA/VSIX
+container so members land directly under `extracted/`):
 
 ```bash
 python3 "$BB_STACK_ROOT/04-L4-Skills/library/native-reverse-engineering/scripts/triage_native.py" \
   --input PATH_TO_ARTIFACT \
-  --output "$PWD/artifacts/native-triage"
+  --output "$PWD/artifacts/native-triage" \
+  --extract
 ```
 
-Read `summary.json` first. Use the generated `file`, `readelf`, `objdump`,
+Read `summary.json` first (`artifact` reports ELF, PE/.NET, Mach-O/Universal,
+WASM, ASAR, PyInstaller, and ZIP/APK signing metadata without host binutils).
+Use the generated `file`, `readelf`, `objdump`,
 `nm`, `strings`, `rabin2`, and `checksec` outputs only when the corresponding
 probe reports `available=true`. Do not interpret a missing optional tool as an
 artifact property.
@@ -48,7 +53,9 @@ Record at minimum:
 
 ## Select One Analysis Path
 
-- Use `radare2` or `objdump` for portable CLI-first static analysis.
+- Use `radare2` (`r2_query.py` caches JSON `functions`, `disasm --pseudo`, and
+  `xrefs` under `--cache-dir "$PWD/artifacts/r2-cache"`) or `objdump` for
+  portable CLI-first static analysis.
 - Use Ghidra headless only when its command is already registered and ready.
 - Use IDA only when the operator has supplied a licensed installation; never
   download, modify, or bypass a commercial license.

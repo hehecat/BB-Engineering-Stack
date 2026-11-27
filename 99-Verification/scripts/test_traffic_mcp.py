@@ -15,6 +15,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
 os.environ["BB_STACK_ROOT"] = str(ROOT)
@@ -242,6 +243,7 @@ class TrafficMcpConfigTests(unittest.TestCase):
         env["BB_STACK_ROOT"] = str(ROOT)
         env.pop("BB_TRAFFIC_DB", None)
         env.pop("BB_ENGAGEMENT", None)
+        env.pop("BB_ENGAGEMENT_ROOT", None)
         completed = subprocess.run(
             [sys.executable, str(SERVER)],
             input="",
@@ -268,6 +270,107 @@ class TrafficMcpConfigTests(unittest.TestCase):
                 self.assertEqual(stats["flows"], 0)
             finally:
                 session.close()
+
+    def test_rendered_engagement_mcp_embeds_store_env_and_omits_global_unconfigured(
+        self,
+    ) -> None:
+        from bb_stack.capabilities import CapabilityRegistry
+        from bb_stack.engagement import EngagementManager
+        from bb_stack.paths import StackPaths
+
+        with tempfile.TemporaryDirectory(prefix="bb-traffic-render-") as name:
+            base = Path(name)
+            paths = StackPaths(
+                ROOT, base / "home", base / "work", base / "config", base / ".claude"
+            )
+            engagement = EngagementManager(paths).create(
+                "acme-web", "https://acme.example.com", workflow="bug-bounty"
+            )
+            (engagement / "policy.yaml").write_text(
+                "deny:\n  - tool: read_flow\n    message: blocked-by-engagement\n",
+                encoding="utf-8",
+            )
+            with TrafficStore(engagement / "traffic" / "flows.db") as store:
+                store.record(
+                    _record("alice", "sid=1", "/me", 200, b"profile")
+                )
+
+            registry = CapabilityRegistry(paths)
+            with patch.dict(
+                os.environ,
+                {"BB_TRAFFIC_DB": "", "BB_ENGAGEMENT": "", "BB_ENGAGEMENT_ROOT": ""},
+                clear=False,
+            ):
+                os.environ.pop("BB_TRAFFIC_DB", None)
+                os.environ.pop("BB_ENGAGEMENT", None)
+                os.environ.pop("BB_ENGAGEMENT_ROOT", None)
+                global_mcp = registry.render_mcp(
+                    "web",
+                    base / "global-mcp.json",
+                    artifact_root=base / "generated" / "artifacts",
+                )
+                self.assertNotIn("traffic", global_mcp["mcpServers"])
+
+                engaged_mcp = registry.render_mcp(
+                    "web",
+                    base / "engaged-mcp.json",
+                    artifact_root=engagement / "artifacts",
+                )
+                self.assertIn("traffic", engaged_mcp["mcpServers"])
+                server_cfg = engaged_mcp["mcpServers"]["traffic"]
+                self.assertEqual(
+                    server_cfg["env"]["BB_TRAFFIC_DB"],
+                    str(engagement / "traffic" / "flows.db"),
+                )
+
+                # Drive the server using ONLY the env block rendered into mcp.json:
+                # both the SQLite store and the sibling policy.yaml must resolve.
+                env = dict(os.environ)
+                env["BB_STACK_ROOT"] = str(ROOT)
+                env.update(server_cfg["env"])
+                proc = subprocess.Popen(
+                    [sys.executable, str(SERVER)],
+                    stdin=subprocess.PIPE,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    env=env,
+                )
+                try:
+                    proc.stdin.write(
+                        json.dumps(
+                            {
+                                "jsonrpc": "2.0",
+                                "id": 1,
+                                "method": "initialize",
+                                "params": {"protocolVersion": "2024-11-05"},
+                            }
+                        )
+                        + "\n"
+                    )
+                    proc.stdin.flush()
+                    init_reply = json.loads(proc.stdout.readline())
+                    self.assertEqual(init_reply["result"]["serverInfo"]["name"], "traffic")
+                    proc.stdin.write(
+                        json.dumps(
+                            {
+                                "jsonrpc": "2.0",
+                                "id": 2,
+                                "method": "tools/call",
+                                "params": {"name": "read_flow", "arguments": {"id": 1}},
+                            }
+                        )
+                        + "\n"
+                    )
+                    proc.stdin.flush()
+                    call_reply = json.loads(proc.stdout.readline())
+                    self.assertTrue(call_reply["result"]["isError"])
+                    self.assertIn("blocked-by-engagement", _text(call_reply))
+                finally:
+                    for stream in (proc.stdin, proc.stdout, proc.stderr):
+                        if stream:
+                            stream.close()
+                    proc.wait(timeout=10)
 
 
 class _StubServer:

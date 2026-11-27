@@ -227,6 +227,45 @@ class BrowserRuntimeTests(unittest.TestCase):
             "http://127.0.0.1:7890",
         )
         self.assertIn("--proxy-server=http://127.0.0.1:7890", command)
+        self.assertEqual(
+            BrowserRuntimeManager._configured_proxy(
+                {
+                    "BB_PROXY_MODE": "http",
+                    "BB_HTTP_PROXY": "http://127.0.0.1:8080",
+                    "BB_SOCKS_PROXY": "socks5://127.0.0.1:1080",
+                }
+            ),
+            "http://127.0.0.1:8080",
+        )
+        self.assertEqual(
+            BrowserRuntimeManager._configured_proxy(
+                {
+                    "BB_PROXY_MODE": "socks",
+                    "BB_HTTP_PROXY": "http://127.0.0.1:8080",
+                    "BB_SOCKS_PROXY": "socks5://127.0.0.1:1080",
+                }
+            ),
+            "socks5://127.0.0.1:1080",
+        )
+        self.assertEqual(
+            BrowserRuntimeManager._configured_proxy(
+                {
+                    "BB_PROXY_MODE": "mihomo",
+                    "BB_HTTP_PROXY": "http://127.0.0.1:7890",
+                    "BB_SOCKS_PROXY": "socks5://127.0.0.1:7891",
+                }
+            ),
+            "http://127.0.0.1:7890",
+        )
+        self.assertIsNone(
+            BrowserRuntimeManager._configured_proxy(
+                {
+                    "BB_PROXY_MODE": "direct",
+                    "BB_HTTP_PROXY": "http://127.0.0.1:7890",
+                    "BB_SOCKS_PROXY": "socks5://127.0.0.1:7891",
+                }
+            )
+        )
 
     def test_endpoint_port_and_process_helpers(self) -> None:
         manager = BrowserRuntimeManager(self.paths)
@@ -289,6 +328,87 @@ class BrowserRuntimeTests(unittest.TestCase):
             manager.start(engagement)
         terminate.assert_called_once_with(43210)
         self.assertFalse(manager._state_path(engagement).exists())
+
+    def test_record_traffic_chains_upstream_and_cleans_up_on_stop(self) -> None:
+        engagement = EngagementManager(self.paths).create(
+            "browser-recorded", "https://recorded.invalid", workflow="analysis"
+        )
+        manager = BrowserRuntimeManager(self.paths)
+
+        # SOCKS-only proxy mode fails closed instead of bypassing the proxy.
+        with (
+            patch("bb_stack.browser.shutil.which", return_value="/usr/bin/chromium"),
+            patch(
+                "bb_stack.browser.ConfigurationManager.effective",
+                return_value={
+                    "BB_PROXY_MODE": "socks",
+                    "BB_HTTP_PROXY": "",
+                    "BB_SOCKS_PROXY": "socks5://127.0.0.1:7891",
+                },
+            ),
+            self.assertRaisesRegex(CommandError, "SOCKS-only proxy"),
+        ):
+            manager.start(engagement, record_traffic=True)
+
+        spawned_commands: list[list[str]] = []
+        pids = iter([51001, 51002])
+
+        def fake_popen(command: list[str], **_: object) -> SimpleNamespace:
+            spawned_commands.append(list(command))
+            return SimpleNamespace(pid=next(pids))
+
+        def which(name: str, path: str | None = None) -> str | None:
+            if name == "chromium":
+                return "/usr/bin/chromium"
+            if name == "mitmdump":
+                return "/usr/bin/mitmdump"
+            return None
+
+        ports = iter([48080, 49222])
+        with (
+            patch("bb_stack.browser.shutil.which", side_effect=which),
+            patch(
+                "bb_stack.browser.ConfigurationManager.effective",
+                return_value={
+                    "BB_PROXY_MODE": "mihomo",
+                    "BB_HTTP_PROXY": "http://127.0.0.1:7890",
+                    "BB_SOCKS_PROXY": "socks5://127.0.0.1:7891",
+                },
+            ),
+            patch.object(manager, "_allocate_port", side_effect=lambda: next(ports)),
+            patch("bb_stack.browser.subprocess.Popen", side_effect=fake_popen),
+            patch.object(manager, "_tcp_ready", return_value=True),
+            patch.object(manager, "_endpoint_ready", return_value=True),
+            patch.object(manager, "_process_matches", return_value=True),
+            patch.object(manager, "_traffic_process_matches", return_value=True),
+            patch.object(manager, "_configure_cli"),
+        ):
+            started = manager.start(engagement, record_traffic=True)
+            self.assertTrue(started["ready"])
+            self.assertTrue(started["traffic_recording"])
+            self.assertEqual(started["traffic_port"], 48080)
+            self.assertEqual(
+                started["traffic_db"], str(engagement / "traffic" / "flows.db")
+            )
+
+        self.assertEqual(len(spawned_commands), 2)
+        mitm_cmd, chrome_cmd = spawned_commands
+        self.assertIn("--mode", mitm_cmd)
+        self.assertIn("upstream:http://127.0.0.1:7890", mitm_cmd)
+        self.assertIn("bb_traffic_browser_ports=48080", mitm_cmd)
+        self.assertIn("--proxy-server=http://127.0.0.1:48080", chrome_cmd)
+        self.assertIn("--ignore-certificate-errors", chrome_cmd)
+
+        with (
+            patch.object(manager, "_process_matches", return_value=True),
+            patch.object(manager, "_traffic_process_matches", return_value=True),
+            patch.object(manager, "_terminate") as term_browser,
+            patch.object(manager, "_terminate_owned") as term_recorder,
+            patch.object(manager, "_stop_cli"),
+        ):
+            manager.stop(engagement)
+        term_browser.assert_called_once()
+        term_recorder.assert_called_once_with(51001)
 
     def test_global_status_and_stop_aggregate_managed_instances(self) -> None:
         first = EngagementManager(self.paths).create(
