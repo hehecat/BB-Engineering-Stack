@@ -65,7 +65,7 @@ source "$BB_CONFIG_HOME/env.sh"
 [[ -d "$BB_WORK_ROOT/engagements" ]]
 cat > "$ROOT/.runtime/bin/claude" <<'SH'
 #!/usr/bin/env sh
-printf '%s\n' 'claude-test-fixture 0.0.0'
+printf '%s\n' 'claude-test-fixture 2.1.0'
 SH
 chmod 0755 "$ROOT/.runtime/bin/claude"
 bb-stack validate --json >/dev/null
